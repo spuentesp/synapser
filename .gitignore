@@ -1,0 +1,9 @@
+node_modules/
+evidence/
+.synapser/
+.zoanthrope/
+*.log
+.env
+.env.*
+!.env.example
+.lain/

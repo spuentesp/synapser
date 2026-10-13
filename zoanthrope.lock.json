@@ -1,0 +1,9 @@
+{
+  "version": "0.1.3",
+  "commit": "37ecffae1fd131c4e9ab073bc003e3a453b3ac81",
+  "repo": "https://github.com/spuentesp/zoanthrope",
+  "sha256": {
+    "linux-x86_64": "6755998f81bb2081707fe9eb4c3d2a41a0f73191648958764834d397fad51159"
+  },
+  "note": "sha256 of `cargo build --release` at the pinned commit. Point ZOANTHROPE_BIN at the real binary, never the npm wrapper."
+}
