@@ -22,11 +22,33 @@ interface ProfileCard {
   kinds: ("write" | "advise" | "research" | "review")[];   // lo que puede hacer
   integration: "direct" | "pending";                       // plan 08
   strengths: string[];                                     // etiquetas del perfil
-  costClass: "low" | "mid" | "high" | "unknown";           // desconocido ≠ barato
-  observed: { runs: number; succeeded: number; medianUsd: number | null; medianMs: number } | null;
+  cost: CostEstimate;                                      // ver §2.1
+  observed: { runs: number; succeeded: number; medianMs: number } | null;
   enabled: boolean; disabledReason?: string;
 }
 ```
+
+### 2.1 Costo: conocido, estimado o desconocido (nunca confundidos)
+
+```ts
+type CostEstimate =
+  | { basis: "known";     usdPerRun: number }                         // tarifa publicada o `reported`
+  | { basis: "estimated"; usdPerRun: number; low: number; high: number; n: number }  // aprendido
+  | { basis: "unknown" };
+```
+
+- **estimated** se aprende del propio registro: mediana y cuantiles de `agent_runs` con costo
+  `reported`/`log` del mismo perfil (y, si hay pocas corridas, del mismo *tipo de tarea* y tamaño de
+  prompt). Función pura del ledger: mismo registro ⇒ misma estimación. Requiere `n ≥ nMin`
+  (configurable); por debajo, `unknown`.
+- Una estimación **nunca** se mezcla con costo real en las sumas: los totales muestran
+  `knownUsd`, `estimatedUsd` y `unknownRuns` por separado, y el tope de misión se evalúa sobre
+  `known + estimated(high)`.
+- Un perfil `unknown` **no bloquea**: dispara una alerta (`cost_unknown` en el ledger, visible en la
+  UI) y el enrutador lo penaliza frente a uno con costo conocido o estimado. Tras sus primeras
+  corridas con uso reportado pasa a `estimated` solo.
+- La exactitud de las estimaciones se mide contra lo ocurrido (error relativo mediano por perfil) y
+  se publica en el panel; una estimación sistemáticamente mala se degrada a `unknown`.
 
 `observed` sale de una consulta determinista sobre `agent_runs` (mismo registro, mismas reglas de
 procedencia). Un perfil sin corridas tiene `observed: null` y el supervisor lo ve así.
@@ -78,7 +100,8 @@ del tope de costo. Rechazo ⇒ el agente recibe el código; no hay efecto latera
 | W1 | toda corrida usó un perfil existente, habilitado y con `kind` compatible, en el plan **y** al despachar | `checkDispatch(journal)` |
 | W2 | un paso `advise|review|research` no produjo cambio en el árbol | `checkAdvisorsReadOnly` (traza de escrituras) |
 | W3 | ningún paso con compuerta pasó a RUNNING sin aprobación vigente ligada al digest del plan | `checkGates` |
-| W4 | el gasto conocido nunca superó el tope; el desconocido consta y requirió permiso explícito | `checkBudget` |
+| W4 | el gasto *conocido* nunca superó el tope; todo costo estimado o desconocido consta como tal y el desconocido generó alerta | `checkBudget` |
+| W7 | una estimación nunca se suma como costo real, y es función pura del registro | prueba de propiedad + doble cómputo |
 | W5 | toda tarea con `requested_by` está en una revisión aditiva válida y dentro de profundidad/alcance | `checkDelegation` |
 | W6 | el enrutador es una función: mismas entradas ⇒ misma asignación | prueba de propiedad |
 
@@ -90,8 +113,10 @@ del tope de costo. Rechazo ⇒ el agente recibe el código; no hay efecto latera
 3. Compuerta: cambiar el plan tras aprobar invalida la aprobación; la tarea queda bloqueada.
 4. Delegación: petición fuera de alcance, demasiado profunda, con ciclo o sobre presupuesto ⇒ rechazada
    y el árbol intacto; petición válida ⇒ aparece en el DAG con `requested_by`.
-5. Asesor "malicioso" (devuelve un parche en su texto): no cambia nada (W2).
-6. Determinismo del enrutador (W6).
+5. Costo: sin historial ⇒ `unknown` + alerta; con `n ≥ nMin` ⇒ `estimated` y reproducible; la estimación
+   no entra en `knownUsd`; un perfil con estimación mala se degrada a `unknown`.
+6. Asesor "malicioso" (devuelve un parche en su texto): no cambia nada (W2).
+7. Determinismo del enrutador (W6).
 
 ## 8. Hipótesis y criterio de falsación
 
@@ -104,6 +129,6 @@ del tope de costo. Rechazo ⇒ el agente recibe el código; no hay efecto latera
 
 | # | Decisión | Alternativa |
 |---|---|---|
-| D1 | El enrutador determinista manda; el modelo solo sugiere perfil | dejar elegir al modelo con validación a posteriori |
-| D2 | `maxDepth` por defecto = 2 | 1 (sin subtareas de subtareas) |
-| D3 | Un perfil de costo `unknown` exige permiso por perfil | tratarlo como alto y permitir |
+| D1 ✅ | El enrutador determinista manda; el modelo solo sugiere perfil | — |
+| D2 ✅ | `maxDepth` configurable por workflow (default 2) | — |
+| D3 ✅ | Perfil de costo desconocido: **alerta**, no bloqueo; se aprende y se estima (§2.1) | — |

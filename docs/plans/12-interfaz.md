@@ -17,7 +17,7 @@ muestra es una consulta sobre el ledger y cita los eventos que la sustentan.** N
 
 ## 2. Arquitectura
 
-Aplicación estática servida por un `http` de Node **sin dependencias** (mismo criterio que el resto:
+Aplicación web servida por un `http` de Node **sin dependencias de servidor** (mismo criterio que el resto:
 superficie mínima), más una API JSON delgada que solo proyecta `src/audit/*`. Sin framework de
 estado en el cliente: la fuente es el servidor. SSE para el flujo vivo.
 

@@ -95,12 +95,13 @@ Orden por valor y dependencia; cada entrega deja la suite en verde y sus invaria
 Regla de recorte, en este orden: reproducción por `seq` → vista de coordinación → delegación (W5) →
 L3 (hooks nativos). No se recortan: integridad, aprobaciones, por qué, costo.
 
-### Decisiones que necesitan tu aprobación (fase 2)
+### Decisiones de la fase 2 (aprobadas el 13 oct)
 
 | # | Decisión | Dónde |
 |---|---|---|
-| D1 | El enrutador determinista manda; el modelo solo sugiere perfil | plan 10 §9 |
-| D2 | Profundidad máxima de delegación = 2 | plan 10 §9 |
-| D3 | Perfil de costo desconocido exige permiso explícito | plan 10 §9 |
-| D4 | Interfaz como aplicación estática sin dependencias + API JSON/SSE | plan 12 §2 |
-| D5 | Los resultados medidos NO se documentan en el repo (criterio ya acordado) | memoria |
+| D1 | El enrutador determinista manda; el modelo solo sugiere perfil | plan 10 |
+| D2 | Profundidad de delegación configurable por workflow (default 2) | plan 10 |
+| D3 | Costo desconocido: alerta, no bloqueo; se aprende y se estima con procedencia propia | plan 10 §2.1 |
+| D4 | Interfaz como app web + API JSON/SSE | plan 12 |
+| D5 | Los resultados medidos no se documentan en el repo | memoria |
+| D6 | `design/Synapser_Diseno.docx` se expande y actualiza (alinear con planes 08–12) | docx |
