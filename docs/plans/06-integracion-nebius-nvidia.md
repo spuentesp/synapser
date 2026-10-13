@@ -312,5 +312,16 @@ pedido/servido) y repetir S-A con n = 20 por modelo en el fixture real.
   la key), `test/live/token-factory.test.ts` (`npm run test:live`, contra la API real).
 - Hallazgo durante las pruebas: un 4xx que devolvía la credencial en su cuerpo la filtraba al
   mensaje de error y al registro; ahora se redacta (`#scrub`) y hay prueba que lo cubre.
-- **Pendiente**: bucle de agente (herramientas ↔ ejecutor), supervisor con `responseSchema`,
-  `ResearchPort`/Tavily, `ValidationPort`, n = 20 del spike S-A sobre el fixture.
+- `src/agent/` (bucle de agente): herramientas `read_files`/`propose_patch`/`apply_action`/`finish`,
+  validación de argumentos antes del ejecutor, identidad inyectada por el backend (el modelo nunca ve
+  `task_id`, actor, incarnation, digests ni view ids), contenido de archivos sólo como mensaje `tool`,
+  límites de pasos / reparaciones / sin-progreso / presupuesto. 9 tests con modelo guionizado sobre el
+  ejecutor y Zoanthrope reales (inyección de prompt, STALE_VIEW, espera, tres agentes en un archivo).
+- **Resultado en vivo (13 oct)**: Nemotron-3_5-Lightning (`worker`) completó la misión del fixture
+  como UNA tarea de tres archivos: 8 pasos, ~22 200 tokens, ≈ US$0,0015, ~7,5 s, y el oracle
+  independiente pasó **5 de 5** corridas (`npm run test:live`). Con `temperature=0` el consumo es casi
+  idéntico entre corridas. Salvedades: n = 5; el contrato está dado en detalle; es **una** tarea, no
+  el reparto de tres agentes con colisión; la dificultad del fixture es baja, así que el valor de la
+  demo está en la coordinación y la recuperación, no en la dificultad del código.
+- **Pendiente**: supervisor con `responseSchema` (descomposición), `ValidationPort` (local/Sandboxes),
+  `ResearchPort`/Tavily, scheduler multi-tarea, UI.

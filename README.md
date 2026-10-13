@@ -16,7 +16,8 @@ Design: `design/Synapser_Diseno.docx` (v0.2).
 | Journal SQLite, transitions, artifacts, workspace lock (S17, S17b) | `src/journal/`, `test/journal/` |
 | Action protocol + executor, crash recovery, startup sequence | `src/executor/`, `src/recovery/`, `src/startup.ts` |
 | Model port (Token Factory / Nemotron), budget, call journal | `src/model/`, `test/live` |
-| Agent loop, supervisor, Tavily, validation runner, UI | not started |
+| Agent loop (tools ↔ executor, bounded, injection-safe) | `src/agent/`, `test/agent`, `test/live` |
+| Supervisor/planner, scheduler, validation runner, Tavily, UI | not started |
 
 ## Run
 
