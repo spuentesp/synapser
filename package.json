@@ -4,11 +4,14 @@
   "private": true,
   "description": "Supervised multi-agent execution on top of Zoanthrope",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-reporter=spec \"test/**/*.test.ts\"",
-    "gate:g0": "node scripts/gate-g0.ts"
+    "gate:g0": "node scripts/gate-g0.ts",
+    "test:live": "node --env-file=.env --test --test-reporter=spec \"test/live/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

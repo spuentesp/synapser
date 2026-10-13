@@ -14,8 +14,9 @@ Design: `design/Synapser_Diseno.docx` (v0.2).
 | Mission fixture + independent oracle | `fixtures/billing`, `test/fixture-oracle.test.ts` |
 | Digests (file, request, state, edits) | `src/digest/`, `test/digest/` |
 | Journal SQLite, transitions, artifacts, workspace lock (S17, S17b) | `src/journal/`, `test/journal/` |
-| Action protocol + executor, recovery | planned: `docs/plans/02`, `04` |
-| Scheduler, agents, UI | not started |
+| Action protocol + executor, crash recovery, startup sequence | `src/executor/`, `src/recovery/`, `src/startup.ts` |
+| Model port (Token Factory / Nemotron), budget, call journal | `src/model/`, `test/live` |
+| Agent loop, supervisor, Tavily, validation runner, UI | not started |
 
 ## Run
 

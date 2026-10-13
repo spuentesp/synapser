@@ -66,6 +66,28 @@ export interface ActionFileRow extends NewActionFile {
   progress: "PENDING" | "APPLIED";
   observedDigest: string | null;
 }
+export interface ModelCallInsert {
+  callId: string;
+  runId: string;
+  taskId: string | null;
+  role: string;
+  requestedModel: string;
+  servedModel: string | null;
+  baseUrl: string;
+  startedAt: number;
+  latencyMs: number | null;
+  httpStatus: number | null;
+  retries: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  reasoningTokens: number | null;
+  finishReason: string | null;
+  fallbackUsed: boolean;
+  costUsd: number | null;
+  error: string | null;
+  requestBlob: string | null;
+  responseBlob: string | null;
+}
 export interface ChildRow {
   pid: number;
   kind: string;
@@ -228,6 +250,31 @@ export class Tx {
     const ins = this.#db.prepare("INSERT INTO views(view_id,run_id,task_id,path,digest,mode,blob_ref,taken_at) VALUES(?,?,?,?,?,?,?,?)");
     for (const f of files) ins.run(viewId, runId, taskId, f.path, f.digest, f.mode, f.blobRef, this.#now());
     this.event(runId, "view", viewId, null, "TAKEN", { task_id: taskId, files: files.map((f) => f.path) });
+  }
+
+  insertModelCall(c: ModelCallInsert): void {
+    this.#db
+      .prepare(
+        `INSERT INTO model_calls(call_id,run_id,task_id,role,requested_model,served_model,base_url,started_at,latency_ms,http_status,
+           retries,prompt_tokens,completion_tokens,reasoning_tokens,finish_reason,fallback_used,cost_usd,error,request_blob,response_blob)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        c.callId, c.runId, c.taskId, c.role, c.requestedModel, c.servedModel, c.baseUrl, c.startedAt, c.latencyMs, c.httpStatus,
+        c.retries, c.promptTokens, c.completionTokens, c.reasoningTokens, c.finishReason, c.fallbackUsed ? 1 : 0, c.costUsd, c.error,
+        c.requestBlob, c.responseBlob,
+      );
+    this.event(c.runId, "model_call", c.callId, null, c.error ? "FAILED" : "OK", {
+      role: c.role,
+      requested_model: c.requestedModel,
+      served_model: c.servedModel,
+      latency_ms: c.latencyMs,
+      prompt_tokens: c.promptTokens,
+      completion_tokens: c.completionTokens,
+      cost_usd: c.costUsd,
+      fallback_used: c.fallbackUsed,
+      ...(c.error ? { error: c.error } : {}),
+    });
   }
 
   registerChild(c: ChildRow): void {
@@ -397,6 +444,24 @@ export class Journal {
       })),
     };
   }
+  listModelCalls(): { callId: string; role: string; requestedModel: string; servedModel: string | null; promptTokens: number | null;
+    completionTokens: number | null; costUsd: number | null; error: string | null; requestBlob: string | null; responseBlob: string | null; fallbackUsed: boolean; retries: number }[] {
+    return (this.#db.prepare("SELECT * FROM model_calls WHERE run_id=? ORDER BY started_at, call_id").all(this.runId) as Row[]).map((r) => ({
+      callId: r["call_id"] as string,
+      role: r["role"] as string,
+      requestedModel: r["requested_model"] as string,
+      servedModel: (r["served_model"] as string | null) ?? null,
+      promptTokens: (r["prompt_tokens"] as number | null) ?? null,
+      completionTokens: (r["completion_tokens"] as number | null) ?? null,
+      costUsd: (r["cost_usd"] as number | null) ?? null,
+      error: (r["error"] as string | null) ?? null,
+      requestBlob: (r["request_blob"] as string | null) ?? null,
+      responseBlob: (r["response_blob"] as string | null) ?? null,
+      fallbackUsed: r["fallback_used"] === 1,
+      retries: r["retries"] as number,
+    }));
+  }
+
   listChildren(): ChildRow[] {
     return (this.#db.prepare("SELECT * FROM children ORDER BY pid").all() as Row[]).map((r) => ({
       pid: r["pid"] as number,

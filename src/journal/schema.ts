@@ -73,6 +73,14 @@ CREATE TABLE children(pid INTEGER PRIMARY KEY, kind TEXT NOT NULL, run_id TEXT, 
   proc_start_ticks INTEGER NOT NULL, pgid INTEGER NOT NULL,
   started_at INTEGER NOT NULL, generation INTEGER NOT NULL) STRICT;
 
+CREATE TABLE model_calls(
+  call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT, role TEXT NOT NULL,
+  requested_model TEXT NOT NULL, served_model TEXT, base_url TEXT NOT NULL,
+  started_at INTEGER NOT NULL, latency_ms INTEGER, http_status INTEGER, retries INTEGER NOT NULL DEFAULT 0,
+  prompt_tokens INTEGER, completion_tokens INTEGER, reasoning_tokens INTEGER,
+  finish_reason TEXT, fallback_used INTEGER NOT NULL DEFAULT 0, cost_usd REAL, error TEXT,
+  request_blob TEXT, response_blob TEXT) STRICT;
+
 CREATE TABLE events(
   run_id TEXT NOT NULL, seq INTEGER NOT NULL, ts INTEGER NOT NULL,
   entity TEXT NOT NULL, entity_id TEXT NOT NULL, from_state TEXT, to_state TEXT,

@@ -298,3 +298,19 @@ Hallazgos que cambian el diseño:
 Siguiente paso técnico de este plan: implementar `ModelPort` y `OpenAICompatibleProvider` con
 estas tres reglas (razonamiento aparte, presupuesto con tokens ocultos, registro de modelo
 pedido/servido) y repetir S-A con n = 20 por modelo en el fixture real.
+
+## 15. Estado de implementación (13 oct)
+
+- `src/model/`: `ModelPort` (tipos), `OpenAICompatibleProvider` (enrutado por rol, reintentos que
+  respetan `Retry-After` sin acortarlo, fallback explícito sólo ante `UNAVAILABLE`/modelo inexistente,
+  tope de concurrencia, presupuesto que recorta `max_tokens` y se consulta antes de enviar),
+  `BudgetManager`, `config`, `pricing`, `journalRecorder` (tabla `model_calls` + eventos + cuerpos
+  como artefactos sin credenciales).
+- `src/startup.ts`: lock → journal → reaper → Zoo (G0) → recovery; arranque degradado si Zoanthrope
+  no está.
+- Tests: `test/model/provider.test.ts` (17, servidor HTTP local que emula 429/5xx/timeouts/echo de
+  la key), `test/live/token-factory.test.ts` (`npm run test:live`, contra la API real).
+- Hallazgo durante las pruebas: un 4xx que devolvía la credencial en su cuerpo la filtraba al
+  mensaje de error y al registro; ahora se redacta (`#scrub`) y hay prueba que lo cubre.
+- **Pendiente**: bucle de agente (herramientas ↔ ejecutor), supervisor con `responseSchema`,
+  `ResearchPort`/Tavily, `ValidationPort`, n = 20 del spike S-A sobre el fixture.
