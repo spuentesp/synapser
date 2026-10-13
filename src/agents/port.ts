@@ -98,6 +98,9 @@ export async function runAndIntegrate(registry: AgentRunnerRegistry, req: AgentR
   const run = await runner.run(req);
   if (run.integration.mode === "direct") {
     const bad = run.integration.actions.filter((a) => a.status !== "SETTLED" && a.status !== "APPLIED");
+    req.journal.tx((t) =>
+      t.event(req.runId, "agent_run_integration", run.agentRunId, null, "DIRECT", { task_id: req.task.taskId, files: run.changedPaths, detail: bad.length ? `${bad.length} action(s) not applied` : null, action_id: null }),
+    );
     return {
       run,
       integration: { status: "DIRECT", detail: bad.length ? `${bad.length} action(s) not applied` : null, files: run.changedPaths },
@@ -105,6 +108,9 @@ export async function runAndIntegrate(registry: AgentRunnerRegistry, req: AgentR
   }
   const { incarnation } = req.executor.beginSession({ taskId: req.task.taskId, scope: req.task.scope, planRevision: req.task.planRevision });
   const r = await integrateRun(req.executor, { taskId: req.task.taskId, incarnation }, run.integration.run);
+  req.journal.tx((t) =>
+    t.event(req.runId, "agent_run_integration", run.agentRunId, null, r.status, { task_id: req.task.taskId, files: r.files, detail: r.detail, action_id: r.receipt?.action_id ?? null }),
+  );
   return { run, integration: { status: r.status, detail: r.detail, files: r.files } };
 }
 

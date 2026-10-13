@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Digest } from "../digest/file.ts";
+import { eventHash, genesisHash } from "../audit/chain.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { SCHEMA_SQL, SCHEMA_VERSION, seedTransitionsSql } from "./schema.ts";
 import { type ActionState, isLegalTransition } from "./transitions.ts";
@@ -176,10 +177,15 @@ export class Tx {
   }
 
   event(runId: string, entity: string, entityId: string, from: string | null, to: string | null, data: unknown = {}): number {
-    const seq = (this.#db.prepare("SELECT COALESCE(MAX(seq),0)+1 AS n FROM events WHERE run_id=?").get(runId) as { n: number }).n;
+    const last = this.#db.prepare("SELECT seq, hash FROM events WHERE run_id=? ORDER BY seq DESC LIMIT 1").get(runId) as { seq: number; hash: string } | undefined;
+    const seq = (last?.seq ?? 0) + 1;
+    const prev = last?.hash ?? genesisHash(runId);
+    const ts = this.#now();
+    const dataJson = JSON.stringify(data);
+    const hash = eventHash(prev, { runId, seq, ts, entity, entityId, fromState: from, toState: to, dataJson });
     this.#db
-      .prepare("INSERT INTO events(run_id,seq,ts,entity,entity_id,from_state,to_state,data_json) VALUES(?,?,?,?,?,?,?,?)")
-      .run(runId, seq, this.#now(), entity, entityId, from, to, JSON.stringify(data));
+      .prepare("INSERT INTO events(run_id,seq,ts,entity,entity_id,from_state,to_state,data_json,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?,?,?)")
+      .run(runId, seq, ts, entity, entityId, from, to, dataJson, prev, hash);
     return seq;
   }
 
@@ -560,10 +566,13 @@ export class Journal {
       })),
     };
   }
-  listModelCalls(): { callId: string; role: string; requestedModel: string; servedModel: string | null; promptTokens: number | null;
+  listModelCalls(): { callId: string; taskId: string | null; startedAt: number; latencyMs: number | null; role: string; requestedModel: string; servedModel: string | null; promptTokens: number | null;
     completionTokens: number | null; costUsd: number | null; error: string | null; requestBlob: string | null; responseBlob: string | null; fallbackUsed: boolean; retries: number }[] {
     return (this.#db.prepare("SELECT * FROM model_calls WHERE run_id=? ORDER BY started_at, call_id").all(this.runId) as Row[]).map((r) => ({
       callId: r["call_id"] as string,
+      taskId: (r["task_id"] as string | null) ?? null,
+      startedAt: r["started_at"] as number,
+      latencyMs: (r["latency_ms"] as number | null) ?? null,
       role: r["role"] as string,
       requestedModel: r["requested_model"] as string,
       servedModel: (r["served_model"] as string | null) ?? null,
@@ -576,6 +585,29 @@ export class Journal {
       fallbackUsed: r["fallback_used"] === 1,
       retries: r["retries"] as number,
     }));
+  }
+
+  /** Raw event rows, in order, with their chain fields (for verification and export). */
+  eventChain(): import("../audit/chain.ts").ChainEvent[] {
+    return (this.#db.prepare("SELECT * FROM events WHERE run_id=? ORDER BY seq").all(this.runId) as Row[]).map((r) => ({
+      runId: r["run_id"] as string,
+      seq: r["seq"] as number,
+      ts: r["ts"] as number,
+      entity: r["entity"] as string,
+      entityId: r["entity_id"] as string,
+      fromState: (r["from_state"] as string | null) ?? null,
+      toState: (r["to_state"] as string | null) ?? null,
+      dataJson: r["data_json"] as string,
+      prevHash: r["prev_hash"] as string,
+      hash: r["hash"] as string,
+    }));
+  }
+  getMission(): { objective: string; state: string; planRevision: number } | null {
+    const r = this.#db.prepare("SELECT objective, state, plan_revision FROM missions WHERE run_id=?").get(this.runId) as Row | undefined;
+    return r ? { objective: r["objective"] as string, state: r["state"] as string, planRevision: r["plan_revision"] as number } : null;
+  }
+  listAllActions(): ActionRow[] {
+    return (this.#db.prepare("SELECT * FROM actions WHERE run_id=? ORDER BY prepared_at, action_id").all(this.runId) as Row[]).map(toAction);
   }
 
   getMissionState(): string | null {
@@ -594,7 +626,7 @@ export class Journal {
       deps: deps.filter((d) => d["task_id"] === r["task_id"]).map((d) => d["depends_on"] as string).sort(),
     }));
   }
-  listValidations(): { validationId: string; taskId: string; command: string; snapshotDigest: string; exitCode: number | null; valid: boolean; outputBlob: string | null }[] {
+  listValidations(): { validationId: string; taskId: string; command: string; snapshotDigest: string; exitCode: number | null; valid: boolean; outputBlob: string | null; startedAt: number; finishedAt: number | null }[] {
     return (this.#db.prepare("SELECT * FROM validations WHERE run_id=? ORDER BY started_at, validation_id").all(this.runId) as Row[]).map((r) => ({
       validationId: r["validation_id"] as string,
       taskId: r["task_id"] as string,
@@ -603,6 +635,8 @@ export class Journal {
       exitCode: (r["exit_code"] as number | null) ?? null,
       valid: r["valid"] === 1,
       outputBlob: (r["output_blob"] as string | null) ?? null,
+      startedAt: r["started_at"] as number,
+      finishedAt: (r["finished_at"] as number | null) ?? null,
     }));
   }
 

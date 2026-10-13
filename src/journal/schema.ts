@@ -98,7 +98,9 @@ CREATE TABLE agent_runs(
 CREATE TABLE events(
   run_id TEXT NOT NULL, seq INTEGER NOT NULL, ts INTEGER NOT NULL,
   entity TEXT NOT NULL, entity_id TEXT NOT NULL, from_state TEXT, to_state TEXT,
-  data_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(run_id, seq)) STRICT;
+  data_json TEXT NOT NULL DEFAULT '{}',
+  prev_hash TEXT NOT NULL, hash TEXT NOT NULL,   -- tamper-evident chain (src/audit/chain.ts)
+  PRIMARY KEY(run_id, seq)) STRICT;
 
 -- invariants enforced by the database itself (defense in depth; code uses CAS first)
 CREATE TRIGGER events_no_update BEFORE UPDATE ON events

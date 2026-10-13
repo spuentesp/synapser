@@ -19,8 +19,8 @@ import { LocalRunner } from "../../src/validation/runner.ts";
 import { ZooAdapter } from "../../src/zoo/adapter.ts";
 import { loadPin } from "../../src/zoo/pin.ts";
 
-const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEMOTRON_TOKEN"];
-const skip = KEY ? false : "no NEBIUS_API_KEY / NEMOTRON_TOKEN in the environment";
+const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEBIUS_TOKEN"] ?? process.env["NEMOTRON_TOKEN"];
+const skip = KEY ? false : "no NEBIUS_API_KEY / NEBIUS_TOKEN / NEMOTRON_TOKEN in the environment";
 const FX = resolve("fixtures/billing");
 
 async function mission(label: string, planner: "fixed" | "supervisor") {

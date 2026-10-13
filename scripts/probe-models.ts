@@ -1,13 +1,13 @@
 // Spike S-A (plan 06 §12): what do the Nemotron models on THIS account actually do?
 // Usage: node --env-file=.env scripts/probe-models.ts [model-id ...]
-// The key is read from NEBIUS_API_KEY or NEMOTRON_TOKEN and is never printed or written.
+// The key is read from NEBIUS_API_KEY, NEBIUS_TOKEN or NEMOTRON_TOKEN and is never printed or written.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = process.env["TOKENFACTORY_BASE_URL"] ?? "https://api.tokenfactory.nebius.com/v1/";
-const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEMOTRON_TOKEN"];
+const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEBIUS_TOKEN"] ?? process.env["NEMOTRON_TOKEN"];
 if (!KEY) {
-  console.error("no NEBIUS_API_KEY / NEMOTRON_TOKEN in the environment");
+  console.error("no NEBIUS_API_KEY / NEBIUS_TOKEN / NEMOTRON_TOKEN in the environment");
   process.exit(2);
 }
 

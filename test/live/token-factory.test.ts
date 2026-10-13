@@ -10,8 +10,8 @@ import { test } from "node:test";
 import { Journal } from "../../src/journal/journal.ts";
 import { BudgetManager, defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../../src/model/index.ts";
 
-const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEMOTRON_TOKEN"];
-const skip = KEY ? false : "no NEBIUS_API_KEY / NEMOTRON_TOKEN in the environment";
+const KEY = process.env["NEBIUS_API_KEY"] ?? process.env["NEBIUS_TOKEN"] ?? process.env["NEMOTRON_TOKEN"];
+const skip = KEY ? false : "no NEBIUS_API_KEY / NEBIUS_TOKEN / NEMOTRON_TOKEN in the environment";
 
 const readFiles = {
   type: "function" as const,

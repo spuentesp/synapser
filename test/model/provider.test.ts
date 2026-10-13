@@ -293,7 +293,7 @@ describe("OpenAICompatibleProvider", () => {
       assert.fail("should throw");
     } catch (e) {
       assert.ok(e instanceof ModelError && e.kind === "CONFIG");
-      assert.match(e.message, /NEBIUS_API_KEY, NEMOTRON_TOKEN/);
+      assert.match(e.message, /NEBIUS_API_KEY, NEBIUS_TOKEN, NEMOTRON_TOKEN/);
     }
   });
 });

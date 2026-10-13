@@ -19,7 +19,8 @@ Design: `design/Synapser_Diseno.docx` (v0.2).
 | Agent loop (tools ↔ executor, bounded, injection-safe) | `src/agent/`, `test/agent`, `test/live` |
 | Supervisor/planner, scheduler, local validation runner (no network) | `src/mission/`, `src/validation/` |
 | AgentRunner port + adapters (native Nemotron loop, CLI one-shot), patch broker, usage extractors, `agent_runs` ledger | `src/agents/`, `test/agents` |
-| Tavily research port, Sandboxes runner, audit queries + hash chain, workflow engine, UI, A/B evaluation | not started |
+| Hash-chained ledger, deterministic audit queries + CLI, optional LangSmith exporter (coding-agent-v1, content off by default) | `src/audit/`, `test/audit` |
+| Tavily research port, Sandboxes runner, Zoanthrope hooks/MCP wiring, workflow engine, UI, A/B evaluation | not started |
 
 ## Run
 

@@ -26,7 +26,7 @@ export function defaultModelConfig(): ModelConfig {
     providers: {
       tokenfactory: {
         baseUrl: "https://api.tokenfactory.nebius.com/v1/",
-        apiKeyEnv: ["NEBIUS_API_KEY", "NEMOTRON_TOKEN"],
+        apiKeyEnv: ["NEBIUS_API_KEY", "NEBIUS_TOKEN", "NEMOTRON_TOKEN"],
       },
     },
     // Evidence (scripts/mission-bench.ts, 3-agent discount mission, n=5/model, 13 oct 2026):

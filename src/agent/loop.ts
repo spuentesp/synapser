@@ -68,6 +68,8 @@ export interface StepInfo {
   tool: string | null;
   ok: boolean;
   detail?: string;
+  /** Text the AGENT wrote about its own work (e.g. the finish summary). Recorded, never trusted. */
+  asserted?: string;
 }
 
 export type LoopStatus =
@@ -125,7 +127,14 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
   const observe = (s: StepInfo) => {
     try {
       deps.onStep?.(s);
-      journal.tx((t) => t.event(deps.runId, "agent_step", task.taskId, null, s.ok ? "OK" : "REJECTED", { step: s.step, tool: s.tool, detail: s.detail ?? null }));
+      journal.tx((t) =>
+        t.event(deps.runId, "agent_step", task.taskId, null, s.ok ? "OK" : "REJECTED", {
+          step: s.step,
+          tool: s.tool,
+          detail: s.detail ?? null,
+          ...(s.asserted ? { asserted: s.asserted } : {}),
+        }),
+      );
     } catch {
       /* observation must never break the loop */
     }
@@ -177,7 +186,8 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
     for (const call of res.toolCalls) {
       const out = await handle(call);
       messages.push({ role: "tool", tool_call_id: call.id, name: call.name, content: clip(JSON.stringify(out.payload), L.maxToolResultChars) });
-      observe({ step, tool: call.name, ok: out.ok, ...(out.detail ? { detail: out.detail } : {}) });
+      const asserted = call.name === "finish" && out.ok ? String((call.args as { summary?: string })?.summary ?? "").slice(0, 500) : undefined;
+      observe({ step, tool: call.name, ok: out.ok, ...(out.detail ? { detail: out.detail } : {}), ...(asserted ? { asserted } : {}) });
 
       if (out.stop) {
         result.status = out.stop;

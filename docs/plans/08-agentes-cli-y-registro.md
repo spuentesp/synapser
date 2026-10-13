@@ -58,10 +58,30 @@ Una fila por invocación, con el mismo formato para todo adaptador: perfil, rol,
 modelos, uso con procedencia, uso de herramientas, archivos cambiados (con digests), y blobs de prompt,
 salida y texto final. Cada fila emite un evento `agent_run` por el mismo canal que el resto.
 
-## 5. Pendiente
+## 5. Registro auditable (`src/audit/`)
 
-- Cadena de hashes del registro y verificación (`export --verify`); consultas `why / who-changed /
-  timeline / cost / waste`.
+- **Cadena de hashes** (`chain.ts`): el hash de cada evento cubre el hash anterior y su texto exacto.
+  Detecta edición, borrado, huecos y —contra un `head` anclado fuera del ejecutor— truncamiento de la
+  cola. `export` es verificable sin conexión. Los triggers de SQLite ya impiden UPDATE/DELETE; la
+  cadena detecta a quien edita el archivo sin pasar por el motor.
+- **Consultas deterministas** (`queries.ts`, CLI `src/audit/cli.ts`): `verify`, `export`, `timeline`,
+  `who-changed <ruta>`, `why <acción>`, `cost --by …`, `waste`, `coordination`. Mismas entradas ⇒
+  mismos bytes. `why` devuelve la **cadena declarada** (misión → tarea → corrida → acción → archivos →
+  validación) y, aparte, lo que el agente escribió, etiquetado `asserted`. La atribución acción→corrida
+  es causal (`agent_run_integration.action_id`) y, para el bucle nativo, por su propia ventana de tiempo;
+  nunca "la última corrida iniciada antes" (empata al milisegundo; defecto hallado por el test).
+- **Costo**: lo desconocido es `null` y se cuenta (`usdUnknownRuns`, `tokensUnknownRuns`); nunca 0.
+- **Exportador LangSmith** (`langsmith.ts`): vista opcional del registro con el contrato
+  `coding-agent-v1` (identidad `ls_*`, `thread_id`, llm con `usage_metadata`, tool con `ls_tool_name`,
+  subagent con id/tipo). La raíz lleva `synapser_ledger_head` para contrastar la traza con la cadena.
+  **Por defecto no sale contenido** (ni prompts, ni texto final, ni bytes de archivos); ids
+  deterministas ⇒ reexportar es idempotente. Hallazgo: `POST /runs/multipart` exige `Content-Length`
+  en **cada parte** (422 si falta) y `FormData` de Node no lo añade, así que el cuerpo se arma a mano.
+  Verificado en vivo: 14 runs exportados y leídos de vuelta.
+  **No es fuente de verdad**: retención base de 14 días (180 extendida), servicio de terceros.
+
+## 6. Pendiente
+
 - Enganche a Zoanthrope: identidad por agente, `post_intention` por MCP y volcado de su anillo de
   auditoría (tiene tope de 1 000 eventos) al registro.
 - Workflow declarativo (pasos, perfiles, aprobaciones) con Nemotron eligiendo perfil del catálogo.
