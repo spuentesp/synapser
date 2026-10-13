@@ -81,6 +81,20 @@ CREATE TABLE model_calls(
   finish_reason TEXT, fallback_used INTEGER NOT NULL DEFAULT 0, cost_usd REAL, error TEXT,
   request_blob TEXT, response_blob TEXT) STRICT;
 
+CREATE TABLE agent_runs(
+  agent_run_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT, profile_id TEXT NOT NULL,
+  role TEXT NOT NULL, adapter TEXT NOT NULL,
+  started_at INTEGER NOT NULL, finished_at INTEGER, duration_ms INTEGER,
+  argv_json TEXT NOT NULL, base_digest TEXT NOT NULL,
+  exit_code INTEGER, signal TEXT, timed_out INTEGER NOT NULL DEFAULT 0,
+  outcome TEXT NOT NULL CHECK(outcome IN ('SUCCEEDED','FAILED','UNKNOWN')), reason TEXT,
+  session_id TEXT, models_json TEXT,
+  usage_provenance TEXT, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER,
+  cache_write_tokens INTEGER, reasoning_tokens INTEGER, cost_usd REAL, turns INTEGER, api_ms INTEGER,
+  network_isolated INTEGER NOT NULL DEFAULT 0, permission_denials INTEGER,
+  prompt_blob TEXT, stdout_blob TEXT, stderr_blob TEXT, final_text_blob TEXT,
+  tool_use_json TEXT, changes_json TEXT NOT NULL DEFAULT '[]') STRICT;
+
 CREATE TABLE events(
   run_id TEXT NOT NULL, seq INTEGER NOT NULL, ts INTEGER NOT NULL,
   entity TEXT NOT NULL, entity_id TEXT NOT NULL, from_state TEXT, to_state TEXT,

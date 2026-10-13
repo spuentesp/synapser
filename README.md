@@ -18,7 +18,8 @@ Design: `design/Synapser_Diseno.docx` (v0.2).
 | Model port (Token Factory / Nemotron), budget, call journal | `src/model/`, `test/live` |
 | Agent loop (tools ↔ executor, bounded, injection-safe) | `src/agent/`, `test/agent`, `test/live` |
 | Supervisor/planner, scheduler, local validation runner (no network) | `src/mission/`, `src/validation/` |
-| Tavily research port, Sandboxes runner, UI, A/B evaluation | not started |
+| AgentRunner port + adapters (native Nemotron loop, CLI one-shot), patch broker, usage extractors, `agent_runs` ledger | `src/agents/`, `test/agents` |
+| Tavily research port, Sandboxes runner, audit queries + hash chain, workflow engine, UI, A/B evaluation | not started |
 
 ## Run
 

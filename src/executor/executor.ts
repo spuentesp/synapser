@@ -100,6 +100,15 @@ export class Executor {
     this.#root = realpathSync(deps.workspace);
   }
 
+  /** Read a blob from the run's artifact store (used by the patch broker). */
+  readBlob(ref: string): Buffer | null {
+    try {
+      return this.#d.journal.artifacts.get(ref);
+    } catch {
+      return null;
+    }
+  }
+
   markRecovered(): void {
     this.#recovered = true;
   }
@@ -206,6 +215,35 @@ export class Executor {
         if (!(e instanceof ZooError)) throw e;
       }
     }
+  }
+
+  /**
+   * Record what an EXTERNAL agent saw: the base snapshot it was given, not the live tree. Patch
+   * broker uses this so that anything that changed in the live workspace since is detected as
+   * STALE_VIEW at apply time, exactly like for a native agent that read the file earlier.
+   */
+  registerView(
+    taskId: string,
+    incarnation: number,
+    entries: readonly { path: string; bytes: Buffer | null; mode: number | null }[],
+  ): { kind: "ok"; viewId: string } | { kind: "rejected"; code: string; detail?: string } {
+    if (!this.#recovered) return { kind: "rejected", code: "RECOVERING" };
+    const task = this.#task(taskId, incarnation);
+    if ("reject" in task) return { kind: "rejected", code: task.reject };
+    const rows: { path: string; digest: string; mode: number | null; blobRef: string | null }[] = [];
+    try {
+      for (const e of entries) {
+        const path = resolveInWorkspace(this.#root, e.path, { requireRegularIfExists: false });
+        if (e.bytes === null) rows.push({ path, digest: ABSENT, mode: null, blobRef: null });
+        else rows.push({ path, digest: sha256Bytes(e.bytes), mode: e.mode, blobRef: this.#d.journal.artifacts.put(e.bytes) });
+      }
+    } catch (e) {
+      if (e instanceof PathRejected) return { kind: "rejected", code: `PATH_${e.code}`, detail: e.input };
+      throw e;
+    }
+    const viewId = `view-${randomUUID()}`;
+    this.#d.journal.tx((t) => t.insertView(this.#d.runId, viewId, taskId, rows));
+    return { kind: "ok", viewId };
   }
 
   // ---- propose_patch (PREPARE) -------------------------------------------------------------

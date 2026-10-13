@@ -66,6 +66,43 @@ export interface ActionFileRow extends NewActionFile {
   progress: "PENDING" | "APPLIED";
   observedDigest: string | null;
 }
+export interface AgentRunInsert {
+  agentRunId: string;
+  runId: string;
+  taskId: string | null;
+  profileId: string;
+  role: string;
+  adapter: string;
+  startedAt: number;
+  finishedAt: number;
+  durationMs: number;
+  argv: string[];
+  baseDigest: string;
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  outcome: "SUCCEEDED" | "FAILED" | "UNKNOWN";
+  reason: string | null;
+  sessionId: string | null;
+  models: string[];
+  usageProvenance: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  reasoningTokens: number | null;
+  costUsd: number | null;
+  turns: number | null;
+  apiMs: number | null;
+  networkIsolated: boolean;
+  permissionDenials: number | null;
+  promptBlob: string | null;
+  stdoutBlob: string | null;
+  stderrBlob: string | null;
+  finalTextBlob: string | null;
+  toolUse: Record<string, number> | null;
+  changes: { path: string; op: string; beforeDigest: string | null; afterDigest: string | null }[];
+}
 export interface ModelCallInsert {
   callId: string;
   runId: string;
@@ -298,6 +335,36 @@ export class Tx {
       exit_code: r.exitCode,
       valid: r.valid,
       ...(r.note ? { note: r.note } : {}),
+    });
+  }
+
+  insertAgentRun(r: AgentRunInsert): void {
+    this.#db
+      .prepare(
+        `INSERT INTO agent_runs(agent_run_id,run_id,task_id,profile_id,role,adapter,started_at,finished_at,duration_ms,argv_json,base_digest,
+           exit_code,signal,timed_out,outcome,reason,session_id,models_json,usage_provenance,input_tokens,output_tokens,cache_read_tokens,
+           cache_write_tokens,reasoning_tokens,cost_usd,turns,api_ms,network_isolated,permission_denials,prompt_blob,stdout_blob,stderr_blob,
+           final_text_blob,tool_use_json,changes_json)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        r.agentRunId, r.runId, r.taskId, r.profileId, r.role, r.adapter, r.startedAt, r.finishedAt, r.durationMs, JSON.stringify(r.argv), r.baseDigest,
+        r.exitCode, r.signal, r.timedOut ? 1 : 0, r.outcome, r.reason, r.sessionId, JSON.stringify(r.models), r.usageProvenance, r.inputTokens,
+        r.outputTokens, r.cacheReadTokens, r.cacheWriteTokens, r.reasoningTokens, r.costUsd, r.turns, r.apiMs, r.networkIsolated ? 1 : 0,
+        r.permissionDenials, r.promptBlob, r.stdoutBlob, r.stderrBlob, r.finalTextBlob, r.toolUse === null ? null : JSON.stringify(r.toolUse), JSON.stringify(r.changes),
+      );
+    this.event(r.runId, "agent_run", r.agentRunId, null, r.outcome, {
+      profile: r.profileId,
+      role: r.role,
+      task_id: r.taskId,
+      duration_ms: r.durationMs,
+      usage_provenance: r.usageProvenance,
+      input_tokens: r.inputTokens,
+      output_tokens: r.outputTokens,
+      cost_usd: r.costUsd,
+      changed_files: r.changes.map((c) => c.path),
+      tool_use: r.toolUse,
+      ...(r.reason ? { reason: r.reason } : {}),
     });
   }
 
@@ -536,6 +603,46 @@ export class Journal {
       exitCode: (r["exit_code"] as number | null) ?? null,
       valid: r["valid"] === 1,
       outputBlob: (r["output_blob"] as string | null) ?? null,
+    }));
+  }
+
+  listAgentRuns(): (AgentRunInsert & { outcome: string })[] {
+    return (this.#db.prepare("SELECT * FROM agent_runs WHERE run_id=? ORDER BY started_at, agent_run_id").all(this.runId) as Row[]).map((r) => ({
+      agentRunId: r["agent_run_id"] as string,
+      runId: r["run_id"] as string,
+      taskId: (r["task_id"] as string | null) ?? null,
+      profileId: r["profile_id"] as string,
+      role: r["role"] as string,
+      adapter: r["adapter"] as string,
+      startedAt: r["started_at"] as number,
+      finishedAt: r["finished_at"] as number,
+      durationMs: r["duration_ms"] as number,
+      argv: JSON.parse(r["argv_json"] as string),
+      baseDigest: r["base_digest"] as string,
+      exitCode: (r["exit_code"] as number | null) ?? null,
+      signal: (r["signal"] as string | null) ?? null,
+      timedOut: r["timed_out"] === 1,
+      outcome: r["outcome"] as "SUCCEEDED" | "FAILED" | "UNKNOWN",
+      reason: (r["reason"] as string | null) ?? null,
+      sessionId: (r["session_id"] as string | null) ?? null,
+      models: JSON.parse((r["models_json"] as string | null) ?? "[]"),
+      usageProvenance: (r["usage_provenance"] as string | null) ?? "unknown",
+      inputTokens: (r["input_tokens"] as number | null) ?? null,
+      outputTokens: (r["output_tokens"] as number | null) ?? null,
+      cacheReadTokens: (r["cache_read_tokens"] as number | null) ?? null,
+      cacheWriteTokens: (r["cache_write_tokens"] as number | null) ?? null,
+      reasoningTokens: (r["reasoning_tokens"] as number | null) ?? null,
+      costUsd: (r["cost_usd"] as number | null) ?? null,
+      turns: (r["turns"] as number | null) ?? null,
+      apiMs: (r["api_ms"] as number | null) ?? null,
+      networkIsolated: r["network_isolated"] === 1,
+      permissionDenials: (r["permission_denials"] as number | null) ?? null,
+      promptBlob: (r["prompt_blob"] as string | null) ?? null,
+      stdoutBlob: (r["stdout_blob"] as string | null) ?? null,
+      stderrBlob: (r["stderr_blob"] as string | null) ?? null,
+      finalTextBlob: (r["final_text_blob"] as string | null) ?? null,
+      toolUse: r["tool_use_json"] ? JSON.parse(r["tool_use_json"] as string) : null,
+      changes: JSON.parse(r["changes_json"] as string),
     }));
   }
 
