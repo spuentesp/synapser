@@ -17,9 +17,10 @@ export type Decision = { calls?: ParsedToolCall[]; content?: string; throws?: Mo
 
 export class ScriptedModel implements ModelPort {
   readonly seen: ChatMessage[][] = [];
+  readonly requests: { role: string; hasSchema: boolean; hasTools: boolean }[] = [];
   #n = 0;
-  readonly #decide: (messages: ChatMessage[], n: number) => Decision | Promise<Decision>;
-  constructor(decide: (messages: ChatMessage[], n: number) => Decision | Promise<Decision>) {
+  readonly #decide: (messages: ChatMessage[], n: number, info: { role: string }) => Decision | Promise<Decision>;
+  constructor(decide: (messages: ChatMessage[], n: number, info: { role: string }) => Decision | Promise<Decision>) {
     this.#decide = decide;
   }
   get calls(): number {
@@ -30,7 +31,8 @@ export class ScriptedModel implements ModelPort {
     ctx.budget?.reserve(req.maxTokens);
     this.seen.push(JSON.parse(JSON.stringify(req.messages)));
     const n = ++this.#n;
-    const d = await this.#decide(req.messages, n);
+    this.requests.push({ role: req.role, hasSchema: !!req.responseSchema, hasTools: !!req.tools?.length });
+    const d = await this.#decide(req.messages, n, { role: req.role });
     if (d.throws) throw d.throws;
     ctx.budget?.record({ promptTokens: 10, completionTokens: 10 });
     const calls = d.calls ?? [];

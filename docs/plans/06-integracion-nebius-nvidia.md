@@ -312,16 +312,42 @@ pedido/servido) y repetir S-A con n = 20 por modelo en el fixture real.
   la key), `test/live/token-factory.test.ts` (`npm run test:live`, contra la API real).
 - Hallazgo durante las pruebas: un 4xx que devolvía la credencial en su cuerpo la filtraba al
   mensaje de error y al registro; ahora se redacta (`#scrub`) y hay prueba que lo cubre.
-- `src/agent/` (bucle de agente): herramientas `read_files`/`propose_patch`/`apply_action`/`finish`,
-  validación de argumentos antes del ejecutor, identidad inyectada por el backend (el modelo nunca ve
-  `task_id`, actor, incarnation, digests ni view ids), contenido de archivos sólo como mensaje `tool`,
-  límites de pasos / reparaciones / sin-progreso / presupuesto. 9 tests con modelo guionizado sobre el
-  ejecutor y Zoanthrope reales (inyección de prompt, STALE_VIEW, espera, tres agentes en un archivo).
-- **Resultado en vivo (13 oct)**: Nemotron-3_5-Lightning (`worker`) completó la misión del fixture
-  como UNA tarea de tres archivos: 8 pasos, ~22 200 tokens, ≈ US$0,0015, ~7,5 s, y el oracle
-  independiente pasó **5 de 5** corridas (`npm run test:live`). Con `temperature=0` el consumo es casi
-  idéntico entre corridas. Salvedades: n = 5; el contrato está dado en detalle; es **una** tarea, no
-  el reparto de tres agentes con colisión; la dificultad del fixture es baja, así que el valor de la
-  demo está en la coordinación y la recuperación, no en la dificultad del código.
-- **Pendiente**: supervisor con `responseSchema` (descomposición), `ValidationPort` (local/Sandboxes),
-  `ResearchPort`/Tavily, scheduler multi-tarea, UI.
+- `src/agent/` (bucle de agente): herramientas **planas** `read_files` / `write_file` /
+  `replace_in_file` / `delete_file` / `apply_changes` / `finish` (los cambios se *preparan* y se
+  confirman con un único `apply_changes` = una acción atómica); argumentos validados antes del
+  ejecutor, con normalización de variantes inequívocas y un ejemplo copiable en cada error; identidad
+  inyectada por el backend (el modelo nunca ve `task_id`, actor, incarnation, digests ni view ids);
+  contenido de archivos sólo como mensaje `tool`; límites de pasos / reparaciones / sin-progreso /
+  presupuesto / plazo de la misión.
+- `src/mission/` (supervisor, plan validado como DAG, scheduler con concurrencia acotada, tareas
+  `VALIDATING → DONE` sólo por evidencia de aceptación, rondas de reparación acotadas) y
+  `src/validation/` (runner local: copia consistente, allowlist, sin red vía `unshare -rn`, hijos
+  registrados para el reaper, resultado válido sólo para el digest probado).
+- **Qué mostraron las corridas reales** (`scripts/mission-bench.ts`, misión de descuentos con tres
+  agentes concurrentes y un archivo compartido, aceptación = tests unitarios + oracle independiente):
+
+  | Diseño de herramientas / prompt | Lightning | Super 120B |
+  |---|---|---|
+  | `edits` anidados, contrato dentro de los criterios | 0/3 | 3/3 (1 sin reparación) |
+  | herramientas planas, contrato dentro de los criterios | 0/3 | 3/3 (1 sin reparación) |
+  | planas + contrato como `context` separado | 2/3 | 2/3 |
+  | ídem + `apply_changes` repetido inocuo (n = 5) | **1/5** | **4/5** (3 sin reparación) |
+
+  Super: ≈ US$0,035 y ≈ 30 s por misión; Lightning ≈ US$0,012. Con un plan fijo y Super como
+  `worker` por defecto, la misión completa terminó `DONE` en 22,7 s (≈ US$0,025, una `STALE_VIEW`
+  resuelta). Con el supervisor planificando: `DONE` en 49,7 s (≈ US$0,028, sin llamadas rechazadas;
+  el plan salió como cadena, así que no hubo colisión). **Muestras pequeñas (n = 3–5)**: indican
+  tendencia, no una tasa.
+- **Decisión**: `worker`, `repair` y `supervisor` usan Super por defecto; Lightning queda como
+  respaldo. Lightning funciona bien solo (5/5 en una tarea de tres archivos) pero con tres agentes
+  concurrentes insiste en editar archivos de otros y cita texto desactualizado.
+- **Defectos propios que las corridas en vivo destaparon** (los tests con modelo guionizado no los
+  veían): contrato completo en los criterios de cada tarea (el agente intentaba implementarlo todo);
+  `OUT_OF_SCOPE` sin pista accionable; `edits` anidados mal formados por el modelo; límite de 600
+  caracteres que rechazaba un contexto legítimo; `apply_changes` repetido tras un éxito contado como
+  fallo. Todos corregidos y con test.
+- **Fallo de aceptación observado (1 de 5 con Super)**: los tests escritos por el agente `tests`
+  esperaban `TypeError` donde la implementación lanzaba `ValueError`; la ronda de reparación no lo
+  corrigió. Es una falla real de coordinación entre agentes, no del oracle.
+- **Pendiente**: `ValidationPort` sobre Sandboxes, `ResearchPort`/Tavily, interfaz, diff/trazas
+  exportables, A/B (serial / concurrente sin coordinación / con Synapser), n mayor.

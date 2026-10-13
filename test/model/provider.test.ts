@@ -13,7 +13,6 @@ import type { ModelCallRecord, ModelRequest } from "../../src/model/index.ts";
 
 const SECRET = "sk-test-DO-NOT-LEAK-0123456789";
 const LIGHTNING = "nvidia/Nemotron-3_5-Lightning";
-const NANO = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 const SUPER = "nvidia/nemotron-3-super-120b-a12b";
 
 interface Reply {
@@ -122,7 +121,7 @@ describe("OpenAICompatibleProvider", () => {
     assert.equal(JSON.stringify(r.assistantMessage).includes("chain of thought"), false, "reasoning must not be replayable");
     assert.equal(r.assistantMessage.tool_calls?.[0]?.function.arguments, '{"paths":["a.py"]}');
     assert.deepEqual(r.usage, { promptTokens: 100, completionTokens: 40, reasoningTokens: 30 });
-    assert.equal(r.requestedModel, LIGHTNING);
+    assert.equal(r.requestedModel, SUPER);
     assert.equal(r.servedModel, "served-model");
     assert.equal(r.fallbackUsed, false);
     assert.equal(r.rateLimit.remainingRequests, 99);
@@ -140,7 +139,7 @@ describe("OpenAICompatibleProvider", () => {
     assert.equal(sup?.model, SUPER);
     assert.equal(sup?.body.temperature, 0.2);
     assert.deepEqual(sup?.body.response_format, { type: "json_schema", json_schema: { name: "plan", schema: { type: "object" } } });
-    assert.equal(wrk?.model, LIGHTNING);
+    assert.equal(wrk?.model, SUPER);
     assert.equal(wrk?.body.temperature, 0);
     assert.deepEqual(wrk?.body.tool_choice, { type: "function", function: { name: "propose_patch" } });
     assert.equal(sup?.auth, `Bearer ${SECRET}`);
@@ -179,22 +178,22 @@ describe("OpenAICompatibleProvider", () => {
   });
 
   test("worker falls back to the NEXT model only on UNAVAILABLE, and says so", async () => {
-    const m = await mock((s) => (s.model === LIGHTNING ? { status: 503, body: {} } : ok()));
+    const m = await mock((s) => (s.model === SUPER ? { status: 503, body: {} } : ok()));
     const { p, records } = make(m.url);
     const r = await p.complete(req(), ctx);
     assert.equal(r.fallbackUsed, true);
-    assert.equal(r.requestedModel, LIGHTNING, "what was asked for stays on record");
-    assert.deepEqual(m.stats.seen.map((s) => s.model), [LIGHTNING, LIGHTNING, LIGHTNING, NANO]);
+    assert.equal(r.requestedModel, SUPER, "what was asked for stays on record");
+    assert.deepEqual(m.stats.seen.map((s) => s.model), [SUPER, SUPER, SUPER, LIGHTNING]);
     assert.equal(records.length, 1);
     assert.equal(records[0]?.fallbackUsed, true);
   });
 
   test("model-not-found falls back immediately, without retrying the missing model", async () => {
-    const m = await mock((s) => (s.model === LIGHTNING ? { status: 404, body: { error: { message: "model not found" } } } : ok()));
+    const m = await mock((s) => (s.model === SUPER ? { status: 404, body: { error: { message: "model not found" } } } : ok()));
     const { p } = make(m.url);
     const r = await p.complete(req(), ctx);
     assert.equal(r.fallbackUsed, true);
-    assert.deepEqual(m.stats.seen.map((s) => s.model), [LIGHTNING, NANO]);
+    assert.deepEqual(m.stats.seen.map((s) => s.model), [SUPER, LIGHTNING]);
   });
 
   test("400 and 401 are not retried and never fall back; context overflow is classified", async () => {

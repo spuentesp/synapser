@@ -252,6 +252,55 @@ export class Tx {
     this.event(runId, "view", viewId, null, "TAKEN", { task_id: taskId, files: files.map((f) => f.path) });
   }
 
+  insertMission(m: { runId: string; objective: string; repo: string; baseSha: string; planRevision: number; limits: unknown }): void {
+    this.#db
+      .prepare("INSERT INTO missions(run_id,objective,repo,base_sha,plan_revision,limits_json,state,created_at) VALUES(?,?,?,?,?,?,'DRAFT',?)")
+      .run(m.runId, m.objective, m.repo, m.baseSha, m.planRevision, JSON.stringify(m.limits), this.#now());
+    this.event(m.runId, "mission", m.runId, null, "DRAFT", { objective: m.objective });
+  }
+  insertPlanRevision(runId: string, revision: number, plan: unknown, accepted: boolean): void {
+    this.#db
+      .prepare("INSERT INTO plan_revisions(run_id,revision,plan_json,accepted_at) VALUES(?,?,?,?)")
+      .run(runId, revision, JSON.stringify(plan), accepted ? this.#now() : null);
+    this.event(runId, "plan", String(revision), null, accepted ? "ACCEPTED" : "PROPOSED", {});
+  }
+  insertTask(t: { runId: string; taskId: string; actorOwner: string; priority: number; scope: string[]; spec: unknown; planRevision: number; deps: string[] }): void {
+    this.#db
+      .prepare("INSERT INTO tasks(run_id,task_id,actor_owner,state,priority,scope_json,criteria_json,plan_revision) VALUES(?,?,?,?,?,?,?,?)")
+      .run(t.runId, t.taskId, t.actorOwner, "PENDING", t.priority, JSON.stringify(t.scope), JSON.stringify(t.spec), t.planRevision);
+    const dep = this.#db.prepare("INSERT INTO task_deps(run_id,task_id,depends_on) VALUES(?,?,?)");
+    for (const d of t.deps) dep.run(t.runId, t.taskId, d);
+    this.event(t.runId, "task", t.taskId, null, "PENDING", { deps: t.deps, scope: t.scope });
+  }
+  setTaskState(runId: string, taskId: string, from: string, to: string, data: Record<string, unknown> = {}): void {
+    const r = this.#db.prepare("UPDATE tasks SET state=? WHERE run_id=? AND task_id=? AND state=?").run(to, runId, taskId, from);
+    if (Number(r.changes) !== 1) {
+      const cur = this.#db.prepare("SELECT state FROM tasks WHERE run_id=? AND task_id=?").get(runId, taskId) as Row | undefined;
+      throw new JournalError(`task ${taskId}: expected ${from}, found ${String(cur?.["state"] ?? "<missing>")}`);
+    }
+    this.event(runId, "task", taskId, from, to, data);
+  }
+  setMissionState(runId: string, from: string, to: string, data: Record<string, unknown> = {}): void {
+    const r = this.#db.prepare("UPDATE missions SET state=? WHERE run_id=? AND state=?").run(to, runId, from);
+    if (Number(r.changes) !== 1) throw new JournalError(`mission ${runId}: expected ${from}`);
+    this.event(runId, "mission", runId, from, to, data);
+  }
+  insertValidation(v: { validationId: string; runId: string; taskId: string; command: string; snapshotDigest: string; scopeDigest: string }): void {
+    this.#db
+      .prepare("INSERT INTO validations(validation_id,run_id,task_id,command,snapshot_digest,scope_digest,started_at) VALUES(?,?,?,?,?,?,?)")
+      .run(v.validationId, v.runId, v.taskId, v.command, v.snapshotDigest, v.scopeDigest, this.#now());
+  }
+  finishValidation(validationId: string, runId: string, r: { exitCode: number | null; outputBlob: string | null; valid: boolean; note?: string }): void {
+    this.#db
+      .prepare("UPDATE validations SET exit_code=?, output_blob=?, valid=?, finished_at=? WHERE validation_id=?")
+      .run(r.exitCode, r.outputBlob, r.valid ? 1 : 0, this.#now(), validationId);
+    this.event(runId, "validation", validationId, "RUNNING", r.valid && r.exitCode === 0 ? "PASSED" : "FAILED", {
+      exit_code: r.exitCode,
+      valid: r.valid,
+      ...(r.note ? { note: r.note } : {}),
+    });
+  }
+
   insertModelCall(c: ModelCallInsert): void {
     this.#db
       .prepare(
@@ -459,6 +508,34 @@ export class Journal {
       responseBlob: (r["response_blob"] as string | null) ?? null,
       fallbackUsed: r["fallback_used"] === 1,
       retries: r["retries"] as number,
+    }));
+  }
+
+  getMissionState(): string | null {
+    const r = this.#db.prepare("SELECT state FROM missions WHERE run_id=?").get(this.runId) as Row | undefined;
+    return r ? (r["state"] as string) : null;
+  }
+  listTasks(): { taskId: string; actorOwner: string; state: string; priority: number; scope: string[]; spec: any; deps: string[] }[] {
+    const deps = this.#db.prepare("SELECT task_id, depends_on FROM task_deps WHERE run_id=?").all(this.runId) as Row[];
+    return (this.#db.prepare("SELECT * FROM tasks WHERE run_id=? ORDER BY priority DESC, task_id").all(this.runId) as Row[]).map((r) => ({
+      taskId: r["task_id"] as string,
+      actorOwner: r["actor_owner"] as string,
+      state: r["state"] as string,
+      priority: r["priority"] as number,
+      scope: JSON.parse(r["scope_json"] as string),
+      spec: JSON.parse(r["criteria_json"] as string),
+      deps: deps.filter((d) => d["task_id"] === r["task_id"]).map((d) => d["depends_on"] as string).sort(),
+    }));
+  }
+  listValidations(): { validationId: string; taskId: string; command: string; snapshotDigest: string; exitCode: number | null; valid: boolean; outputBlob: string | null }[] {
+    return (this.#db.prepare("SELECT * FROM validations WHERE run_id=? ORDER BY started_at, validation_id").all(this.runId) as Row[]).map((r) => ({
+      validationId: r["validation_id"] as string,
+      taskId: r["task_id"] as string,
+      command: r["command"] as string,
+      snapshotDigest: r["snapshot_digest"] as string,
+      exitCode: (r["exit_code"] as number | null) ?? null,
+      valid: r["valid"] === 1,
+      outputBlob: (r["output_blob"] as string | null) ?? null,
     }));
   }
 

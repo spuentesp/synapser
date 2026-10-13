@@ -29,15 +29,24 @@ export function defaultModelConfig(): ModelConfig {
         apiKeyEnv: ["NEBIUS_API_KEY", "NEMOTRON_TOKEN"],
       },
     },
+    // Evidence (scripts/mission-bench.ts, 3-agent discount mission, n=5/model, 13 oct 2026):
+    //   Super 120B: 4/5 accepted (3 without repair), ~$0.035, ~30 s
+    //   Lightning:  1/5 accepted, ~$0.012 — fine alone (5/5 single task), unreliable with 3 concurrent agents
+    // so Super is the default for every role and Lightning is the cheap fallback.
     roles: {
       supervisor: { provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b", temperature: 0.2 },
       worker: {
         provider: "tokenfactory",
-        model: "nvidia/Nemotron-3_5-Lightning",
+        model: "nvidia/nemotron-3-super-120b-a12b",
         temperature: 0,
-        fallbacks: ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "nvidia/nemotron-3-super-120b-a12b"],
+        fallbacks: ["nvidia/Nemotron-3_5-Lightning", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"],
       },
-      repair: { provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b", temperature: 0 },
+      repair: {
+        provider: "tokenfactory",
+        model: "nvidia/nemotron-3-super-120b-a12b",
+        temperature: 0,
+        fallbacks: ["nvidia/Nemotron-3_5-Lightning"],
+      },
     },
     timeoutMs: 60_000,
     maxRetries: 2,

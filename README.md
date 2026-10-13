@@ -17,7 +17,8 @@ Design: `design/Synapser_Diseno.docx` (v0.2).
 | Action protocol + executor, crash recovery, startup sequence | `src/executor/`, `src/recovery/`, `src/startup.ts` |
 | Model port (Token Factory / Nemotron), budget, call journal | `src/model/`, `test/live` |
 | Agent loop (tools ↔ executor, bounded, injection-safe) | `src/agent/`, `test/agent`, `test/live` |
-| Supervisor/planner, scheduler, validation runner, Tavily, UI | not started |
+| Supervisor/planner, scheduler, local validation runner (no network) | `src/mission/`, `src/validation/` |
+| Tavily research port, Sandboxes runner, UI, A/B evaluation | not started |
 
 ## Run
 
@@ -28,6 +29,12 @@ $ npm run typecheck && npm test
 ```
 
 Node ≥ 24 (TypeScript runs via native type stripping; no build step, no runtime deps).
+
+## Live results (13 Oct 2026, small n)
+
+Discount mission, 3 concurrent agents sharing one file, accepted only by unit tests + an independent oracle:
+Super 120B as worker completed 4/5 runs (~$0.035, ~30 s); a supervisor-planned run completed in 49.7 s (~$0.028).
+Details and failure modes: `docs/plans/06-integracion-nebius-nvidia.md` §15. Reproduce: `node --env-file=.env scripts/mission-bench.ts --runs 5`.
 
 ## Layout
 

@@ -213,15 +213,22 @@ export class Executor {
   async proposePatch(
     taskId: string,
     incarnation: number,
-    viewId: string,
+    viewId: string | readonly string[],
     edits: readonly Edit[],
     declaredOutputs: readonly string[] = [],
   ): Promise<ProposeOutcome> {
     if (!this.#recovered) return { kind: "rejected", code: "RECOVERING" };
     const task = this.#task(taskId, incarnation);
     if ("reject" in task) return { kind: "rejected", code: task.reject };
-    const view = this.#d.journal.getView(viewId);
-    if (!view || view.taskId !== taskId) return { kind: "rejected", code: "UNKNOWN_VIEW" };
+    // Several reads may be involved; each path keeps the digest of the view the agent actually saw
+    // (the most recent one if it was read twice), so STALE_VIEW still works per file.
+    const merged = new Map<string, { path: string; digest: string; mode: number | null; blobRef: string | null }>();
+    for (const id of typeof viewId === "string" ? [viewId] : viewId) {
+      const v = this.#d.journal.getView(id);
+      if (!v || v.taskId !== taskId) return { kind: "rejected", code: "UNKNOWN_VIEW" };
+      for (const f of v.files) merged.set(f.path, f);
+    }
+    const view = { taskId, files: [...merged.values()] };
     if (edits.length === 0) return { kind: "rejected", code: "EMPTY_PATCH" };
 
     // 1. containment + scope BEFORE anything touches Zoanthrope (S10/S15)
