@@ -42,13 +42,15 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
   afterEach(async () => env.close());
 
   /** A reads → B reads → A applies → B applies → (B reacts) → both finish. Deterministic. */
-  async function interleave(gw: WriteGateway) {
+  type Opts = { aEdit?: { old: string; new: string }; bFirst?: unknown[] };
+  async function interleave(gw: WriteGateway, o: Opts = {}) {
+    const aEdit = o.aEdit ?? { old: A_OLD, new: A_NEW };
     const bRead = latch();
     const aDone = latch();
     const modelA = new ScriptedModel((_m, n) => {
       if (n === 1) return { calls: [call("read_files", { paths: [SCHEMA] })] };
       if (n === 2) {
-        return bRead.p.then(() => ({ calls: [call("replace_in_file", { path: SCHEMA, old: A_OLD, new: A_NEW }), call("apply_changes", {})] }));
+        return bRead.p.then(() => ({ calls: [call("replace_in_file", { path: SCHEMA, ...aEdit }), call("apply_changes", {})] }));
       }
       aDone.open();
       return { calls: [call("finish", { summary: "A done" })] };
@@ -59,7 +61,7 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
         return { calls: [call("read_files", { paths: [SCHEMA] })] };
       }
       if (n === 2) {
-        return aDone.p.then(() => ({ calls: [call("replace_in_file", { path: SCHEMA, old: B_OLD, new: B_NEW }), call("apply_changes", {})] }));
+        return aDone.p.then(() => ({ calls: (o.bFirst as never) ?? [call("replace_in_file", { path: SCHEMA, old: B_OLD, new: B_NEW }), call("apply_changes", {})] }));
       }
       const last = lastTool(m);
       if (last?.status === "STALE_VIEW") return { calls: [call("read_files", { paths: [SCHEMA] })] };
@@ -68,7 +70,7 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
     });
     const mk = (model: ScriptedModel) => ({ model, executor: gw, journal: env.journal, runId: RUN });
     const [ra, rb] = await Promise.all([runTask(mk(modelA), A), runTask(mk(modelB), B)]);
-    return { ra, rb };
+    return { ra, rb, modelB };
   }
 
   const initial = (): Map<string, DigestOrAbsent> => new Map([[SCHEMA, digestOnDisk(env.ws, SCHEMA) as DigestOrAbsent]]);
@@ -92,10 +94,12 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
 
   test("SYNAPSER (executor): one STALE_VIEW, a re-read, both edits land; I1–I5 hold", async () => {
     const base = initial();
-    const { ra, rb } = await interleave(env.exec);
+    const { ra, rb, modelB } = await interleave(env.exec);
     assert.equal(ra.status, "FINISHED");
     assert.equal(rb.status, "FINISHED");
     assert.deepEqual(rb.actions.map((a) => a.status), ["STALE_VIEW", "SETTLED"]);
+    assert.equal(modelB.calls, 3, "B never saw the stale view: the loop re-anchored its replacement itself");
+    assert.equal(env.journal.listEvents().filter((e) => e.entity === "agent_step" && (e.data as { tool?: string }).tool === "rebase").length, 1, "and the re-anchor is on the ledger");
 
     assert.match(schema(), /discount_bps/);
     assert.match(schema(), /discount_cents/);
@@ -103,6 +107,32 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
     const v = [...checkLineage(exTrace.trace, base), ...checkGrantBeforeWrite(env.journal), ...checkAcceptance(env.journal), ...checkChain(env.journal)];
     assert.deepEqual(v, []);
     assert.equal(exTrace.trace.flatMap((w) => lostLines(w)).length, 0);
+  });
+
+  const sawStale = (m: ScriptedModel) => m.seen.some((msgs) => msgs.some((x) => x.role === "tool" && /STALE_VIEW/.test(x.content ?? "")));
+  const rebased = () => env.journal.listEvents().filter((e) => e.entity === "agent_step" && (e.data as { tool?: string }).tool === "rebase").length;
+
+  test("re-anchor is NOT used for a whole-file write: the model is told, and A's edit survives", async () => {
+    const base = initial();
+    const whole = readFileSync(join(env.ws, SCHEMA), "utf8").replace(B_OLD, B_NEW);
+    const { rb, modelB } = await interleave(env.exec, { bFirst: [call("write_file", { path: SCHEMA, content: whole }), call("apply_changes", {})] });
+    assert.equal(rebased(), 0);
+    assert.ok(sawStale(modelB), "the model was shown STALE_VIEW");
+    assert.equal(rb.status, "FINISHED");
+    assert.match(schema(), /discount_bps/);
+    assert.match(schema(), /discount_cents/);
+    assert.deepEqual(checkLineage(exTrace.trace, base), []);
+  });
+
+  test("re-anchor is NOT used when the replaced text changed under it: the model is told instead", async () => {
+    const base = initial();
+    // A rewrites exactly the region B wants to replace, so B's `old` no longer matches
+    const aEdit = { old: B_OLD, new: "    subtotal_cents: int\n    fee_cents: int\n    total_cents: int" };
+    const { rb, modelB } = await interleave(env.exec, { aEdit });
+    assert.equal(rebased(), 0, "nothing to re-anchor: old text is gone");
+    assert.ok(sawStale(modelB));
+    assert.equal(rb.actions[0]!.status, "STALE_VIEW");
+    assert.deepEqual(checkLineage(exTrace.trace, base), []);
   });
 
   test("the checker is not vacuous: it flags a hand-made lost update and a hand-made foreign overwrite", () => {

@@ -35,6 +35,8 @@ export interface LoopLimits {
   /** Per-tool-result cap fed back to the model. */
   maxToolResultChars: number;
   applyMaxAttempts: number;
+  /** Automatic re-anchors of a replace-only batch after STALE_VIEW before the model must decide. */
+  maxRebases: number;
   applyBackoffMs: number;
 }
 
@@ -46,6 +48,7 @@ export const DEFAULT_LIMITS: LoopLimits = {
   maxTokensPerCall: 4000,
   maxToolResultChars: 20_000,
   applyMaxAttempts: 4,
+  maxRebases: 4,
   applyBackoffMs: 100,
 };
 
@@ -370,6 +373,7 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
         acknowledgedPartial = false;
         let actionId: string;
         let requestDigest: string;
+        let batch: Edit[] | null = null; // what this apply is made of (null when retrying a waiting action)
         if (staged.length === 0) {
           if (!pending) {
             // Calling apply_changes again after a successful apply is harmless: say so, nudge to finish.
@@ -380,6 +384,7 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
           }
           ({ actionId, requestDigest } = pending); // retry the waiting action
         } else {
+          batch = staged;
           const viewIds = [...new Set(staged.map((e) => viewOf.get(e.path) as string))];
           const p = await executor.proposePatch(task.taskId, incarnation, viewIds, staged);
           if (p.kind === "rejected") {
@@ -391,11 +396,38 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
           staged = [];
           pending = { actionId, requestDigest };
         }
-        const r: ActionReceipt = await executor.applyAction(
-          { actionId, requestDigest: requestDigest as never, incarnation },
-          { maxAttempts: L.applyMaxAttempts, backoffMs: L.applyBackoffMs },
-        );
+        const apply = () =>
+          executor.applyAction({ actionId, requestDigest: requestDigest as never, incarnation }, { maxAttempts: L.applyMaxAttempts, backoffMs: L.applyBackoffMs });
+        let r: ActionReceipt = await apply();
         result.actions.push({ actionId, status: r.status, error: r.error_code });
+        // Re-anchor (docs/plans/09): a batch made ONLY of exact replacements encodes a local intent,
+        // not a whole-file one. When the file moved because someone else changed another part of it,
+        // re-read and re-resolve the SAME replacements against the fresh bytes. The new action is
+        // based on the digest actually on disk, so I1 holds; if `old` no longer matches exactly once,
+        // propose is rejected and the model decides, as before. write_file / delete are never re-anchored.
+        let rebases = 0;
+        while (r.status === "STALE_VIEW" && batch !== null && batch.length > 0 && batch.every((e) => e.op === "replace_exact") && rebases < L.maxRebases) {
+          const paths = [...new Set(batch.map((e) => e.path))];
+          const rd = await executor.readFiles(task.taskId, incarnation, paths);
+          if (rd.kind !== "ok") break;
+          for (const f of rd.files) {
+            viewOf.set(f.path, rd.viewId);
+            contentOf.set(f.path, f.digest === "absent" ? null : f.content);
+          }
+          const p2 = await executor.proposePatch(task.taskId, incarnation, [rd.viewId], batch);
+          if (p2.kind !== "ok") break;
+          rebases++;
+          actionId = p2.actionId;
+          requestDigest = p2.requestDigest;
+          pending = { actionId, requestDigest };
+          try {
+            journal.tx((t) => t.event(deps.runId, "agent_step", task.taskId, null, "OK", { step: null, tool: "rebase", detail: `REBASED ${paths.join(",")} (attempt ${rebases})` }));
+          } catch {
+            /* observation must never break the loop */
+          }
+          r = await apply();
+          result.actions.push({ actionId, status: r.status, error: r.error_code });
+        }
         const payload = {
           status: r.status,
           ...(r.error_code ? { error: r.error_code } : {}),
