@@ -16,6 +16,7 @@ import { readdirSync, statSync } from "node:fs";
 import { Journal } from "../src/journal/journal.ts";
 import { acquireWorkspaceLock } from "../src/journal/lock.ts";
 import { BILLING_CONTRACT, BILLING_OBJECTIVE, billingAcceptance, billingPlan } from "../src/mission/billing-fixture.ts";
+import { REGISTRY_OBJECTIVE, registryAcceptance, registryPlan } from "../src/mission/registry-fixture.ts";
 import { runMission } from "../src/mission/runner.ts";
 import { planMission } from "../src/mission/supervisor.ts";
 import { BudgetManager, defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../src/model/index.ts";
@@ -34,7 +35,11 @@ const CONC = Number(arg("concurrency", "3"));
 const REPAIR = Number(arg("repair", "1"));
 const ARM = arg("arm", "synapser") as "synapser" | "naive" | "both";
 const ARMS = ARM === "both" ? (["naive", "synapser"] as const) : ([ARM] as const);
-const FX = resolve("fixtures/billing");
+const FIXTURE = arg("fixture", "billing") as "billing" | "registry";
+const FX = resolve(`fixtures/${FIXTURE}`);
+const OBJECTIVE = FIXTURE === "registry" ? REGISTRY_OBJECTIVE : BILLING_OBJECTIVE;
+const CONTRACT = FIXTURE === "registry" ? [] : BILLING_CONTRACT;
+const ACCEPT = FIXTURE === "registry" ? ["oracle"] : ["unit", "oracle"];
 
 const walk = (root: string, dir = ""): string[] =>
   readdirSync(join(root, dir)).flatMap((n) => {
@@ -90,11 +95,11 @@ for (const worker of WORKERS) {
     const t0 = Date.now();
     let row: Row;
     try {
-      const plan = PLAN === "supervisor" ? (await planMission(model, { runId, objective: BILLING_OBJECTIVE, contract: BILLING_CONTRACT, workspaceRoot: ws, maxTasks: 5 }, { budget })).plan : billingPlan();
-      const validation = new LocalRunner({ journal, runId, workspaceRoot: ws, commands: billingAcceptance(FX), generation: lock.generation });
+      const plan = PLAN === "supervisor" ? (await planMission(model, { runId, objective: OBJECTIVE, contract: CONTRACT, workspaceRoot: ws, maxTasks: 8 }, { budget })).plan : FIXTURE === "registry" ? registryPlan() : billingPlan();
+      const validation = new LocalRunner({ journal, runId, workspaceRoot: ws, commands: FIXTURE === "registry" ? registryAcceptance(FX) : billingAcceptance(FX), generation: lock.generation });
       const r = await runMission(
         { executor, journal, model, validation, budget },
-        { runId, objective: BILLING_OBJECTIVE, plan, acceptance: ["unit", "oracle"], limits: { concurrency: CONC, maxRepairRounds: REPAIR, missionMs: 8 * 60_000, loop: { maxSteps: 25, maxTokensPerCall: 6000 } } },
+        { runId, objective: OBJECTIVE, plan, acceptance: ACCEPT, limits: { concurrency: CONC, maxRepairRounds: REPAIR, missionMs: 8 * 60_000, loop: { maxSteps: 25, maxTokensPerCall: 6000 } } },
       );
       const calls = journal.listModelCalls();
       const rejected: Record<string, number> = {};
@@ -158,4 +163,4 @@ for (const w of WORKERS) {
   }
 }
 mkdirSync("evidence", { recursive: true });
-writeFileSync(`evidence/mission-bench-${ARM}.json`, JSON.stringify({ at: new Date().toISOString(), arm: ARM, plan: PLAN, concurrency: CONC, rows }, null, 2) + "\n");
+writeFileSync(`evidence/mission-bench-${FIXTURE}-${ARM}.json`, JSON.stringify({ at: new Date().toISOString(), arm: ARM, fixture: FIXTURE, plan: PLAN, concurrency: CONC, rows }, null, 2) + "\n");

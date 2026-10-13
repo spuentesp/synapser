@@ -7,3 +7,4 @@ evidence/
 .env.*
 !.env.example
 .lain/
+__pycache__/
