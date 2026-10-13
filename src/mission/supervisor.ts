@@ -6,6 +6,7 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import { listTree } from "../validation/snapshot.ts";
 import type { ChatMessage, ModelPort } from "../model/types.ts";
+import type { ProfileCard } from "../orchestration/catalog.ts";
 import { type Plan, validatePlan } from "./plan.ts";
 
 export const PLAN_SCHEMA = {
@@ -23,6 +24,10 @@ export const PLAN_SCHEMA = {
           context: { type: "array", items: { type: "string" } },
           deps: { type: "array", items: { type: "string" } },
           priority: { type: "integer" },
+          kind: { type: "string", enum: ["write", "advise", "research", "review"] },
+          profile: { type: "string" },
+          tags: { type: "array", items: { type: "string" } },
+          gates: { type: "array", items: { type: "string", enum: ["approval"] } },
         },
         required: ["id", "objective", "scope", "criteria", "deps"],
       },
@@ -40,6 +45,21 @@ Rules:
 - Do not create a validation task: the system always adds a final acceptance run.
 - Keep every task's scope inside the repository. Never include secrets, .git, or state directories.
 - Put the shared contract (names, signatures, formats) into the \`context\` of EVERY task that depends on it, verbatim, so agents agree without talking to each other. Keep each task's \`criteria\` limited to what must be true of the files in ITS scope: agents are told to implement only their own files.`;
+
+/** What the planner may suggest. It sees capabilities and cost BASIS, not secrets or commands. */
+export function catalogBlock(catalog: readonly ProfileCard[]): string {
+  const rows = catalog
+    .filter((c) => c.enabled)
+    .map((c) => {
+      const cost = c.cost.basis === "unknown" ? "cost unknown" : `${c.cost.basis} ~$${c.cost.usdPerRun.toFixed(3)}/run`;
+      return `- ${c.id}: can ${c.kinds.join("/")}; strengths ${c.strengths.join(", ") || "-"}; ${cost}`;
+    });
+  return [
+    "AVAILABLE AGENT PROFILES (you may SUGGEST one per task in `profile`, and tag the task in `tags`; the system makes the final assignment):",
+    ...rows,
+    "Use kind \"advise\" or \"review\" for steps that only inspect (they cannot change files). Add gates [\"approval\"] only to risky or irreversible steps.",
+  ].join("\n");
+}
 
 export class PlanError extends Error {
   readonly errors: string[];
@@ -63,13 +83,14 @@ function extractJson(text: string): unknown {
 
 export async function planMission(
   model: ModelPort,
-  input: { runId: string; objective: string; contract: string[]; workspaceRoot: string; maxTasks?: number },
+  input: { runId: string; objective: string; contract: string[]; workspaceRoot: string; maxTasks?: number; catalog?: readonly ProfileCard[]; budgetUsd?: number },
   ctxExtra: { budget?: import("../model/budget.ts").BudgetManager } = {},
 ): Promise<{ plan: Plan; attempts: number }> {
   const user = [
     `MISSION: ${input.objective}`,
     `CONTRACT (copy it into every task that needs it):\n${input.contract.map((c) => `- ${c}`).join("\n")}`,
     `REPOSITORY FILES:\n${repoSummary(input.workspaceRoot)}`,
+    ...(input.catalog ? [catalogBlock(input.catalog)] : []),
     `Produce at most ${input.maxTasks ?? 5} tasks.`,
   ].join("\n\n");
   const messages: ChatMessage[] = [
@@ -90,7 +111,12 @@ export async function planMission(
       messages.push(res.assistantMessage, { role: "user", content: `That was not valid JSON. Output ONLY the JSON object.` });
       continue;
     }
-    const check = validatePlan(parsed, { workspaceRoot: input.workspaceRoot, ...(input.maxTasks ? { maxTasks: input.maxTasks } : {}) });
+    const check = validatePlan(parsed, {
+      workspaceRoot: input.workspaceRoot,
+      ...(input.maxTasks ? { maxTasks: input.maxTasks } : {}),
+      ...(input.catalog ? { catalog: input.catalog } : {}),
+      ...(input.budgetUsd !== undefined ? { budgetUsd: input.budgetUsd } : {}),
+    });
     if (check.ok) return { plan: check.plan, attempts: attempt };
     errors = check.errors;
     messages.push(res.assistantMessage, { role: "user", content: `The plan was rejected by the validator:\n${check.errors.map((e) => `- ${e}`).join("\n")}\nFix these problems and output ONLY the corrected JSON.` });

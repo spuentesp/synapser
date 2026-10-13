@@ -62,7 +62,7 @@ procedencia). Un perfil sin corridas tiene `observed: null` y el supervisor lo v
 |---|---|
 | el perfil existe y está habilitado | `PROFILE_UNKNOWN` / `PROFILE_DISABLED` |
 | `kind` ∈ `kinds` del perfil | `PROFILE_KIND_MISMATCH` (un asesor nunca recibe `write`) |
-| `kind: advise|review` no declara `scope` de escritura | `ADVISOR_WITH_WRITE_SCOPE` |
+| un paso `advise|review|research` se ejecuta con alcance de escritura **vacío** (se impone al despachar, no se le pide al modelo) | W2 lo verifica sobre el ledger |
 | todo `write` tiene criterio de aceptación verificable | `NO_ACCEPTANCE` |
 | el costo máximo estimado cabe en el tope de la misión | `OVER_BUDGET` |
 
@@ -132,3 +132,11 @@ del tope de costo. Rechazo ⇒ el agente recibe el código; no hay efecto latera
 | D1 ✅ | El enrutador determinista manda; el modelo solo sugiere perfil | — |
 | D2 ✅ | `maxDepth` configurable por workflow (default 2) | — |
 | D3 ✅ | Perfil de costo desconocido: **alerta**, no bloqueo; se aprende y se estima (§2.1) | — |
+
+## 10. Estado de implementación (tramo A)
+
+Implementado en `src/orchestration/` y cubierto por `test/orchestration/`: catálogo con costo
+`known | estimated | unknown`, estimación determinista con retroprueba, enrutador total y
+determinista, validación de plan contra el catálogo, compuertas ligadas al digest, despacho por el
+puerto `AgentRunner`, verificadores W1–W4, y supervisor que ve el catálogo. Pendiente: subtareas
+pedidas por agentes (W5) y su revisión aditiva.

@@ -2,6 +2,8 @@
 // A plan is PROPOSED by a model and ACCEPTED by control: nothing here trusts model output.
 
 import { PathRejected, resolveInWorkspace } from "../workspace/paths.ts";
+import { type ProfileCard, STEP_KINDS, type StepKind } from "../orchestration/catalog.ts";
+import { planCost, route } from "../orchestration/router.ts";
 
 export interface PlanTask {
   id: string;
@@ -12,6 +14,14 @@ export interface PlanTask {
   context?: string[];
   deps: string[];
   priority?: number;
+  /** What the step does. Default "write". Non-write steps run with an EMPTY write scope. */
+  kind?: StepKind;
+  /** The model's SUGGESTION of a profile; the router decides (plan 10 D1). */
+  profile?: string;
+  /** Gates that must pass before the step starts. Only "approval" exists. */
+  gates?: "approval"[];
+  /** Capability tags the step asks for (matched against profile strengths). */
+  tags?: string[];
 }
 export interface Plan {
   tasks: PlanTask[];
@@ -22,7 +32,16 @@ const ID = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 
 export type PlanCheck = { ok: true; plan: Plan } | { ok: false; errors: string[] };
 
-export function validatePlan(raw: unknown, opts: { workspaceRoot: string; maxTasks?: number }): PlanCheck {
+export interface ValidateOptions {
+  workspaceRoot: string;
+  maxTasks?: number;
+  /** When given, profile suggestions and routability are validated against it. */
+  catalog?: readonly ProfileCard[];
+  /** When given with a catalog: known + estimated(high) cost may not exceed it. */
+  budgetUsd?: number;
+}
+
+export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
   const errors: string[] = [];
   const max = opts.maxTasks ?? 8;
   const tasksRaw = (raw as { tasks?: unknown })?.tasks;
@@ -67,13 +86,50 @@ export function validatePlan(raw: unknown, opts: { workspaceRoot: string; maxTas
       }
     }
     const priority = typeof o["priority"] === "number" && Number.isInteger(o["priority"]) ? (o["priority"] as number) : 0;
-    tasks.push({ id, objective: String(objective ?? ""), scope, criteria, context, deps, priority });
+
+    // orchestration fields (plan 10 §3); all optional, all validated when present
+    const task: PlanTask = { id, objective: String(objective ?? ""), scope, criteria, context, deps, priority };
+    if (o["kind"] !== undefined) {
+      if (typeof o["kind"] === "string" && (STEP_KINDS as readonly string[]).includes(o["kind"])) task.kind = o["kind"] as StepKind;
+      else errors.push(`${at}.kind INVALID_KIND: must be one of ${STEP_KINDS.join(", ")}`);
+    }
+    if (o["profile"] !== undefined) {
+      if (typeof o["profile"] === "string" && o["profile"].length > 0 && o["profile"].length <= 80) task.profile = o["profile"];
+      else errors.push(`${at}.profile must be a non-empty string`);
+    }
+    if (o["tags"] !== undefined) {
+      if (Array.isArray(o["tags"]) && o["tags"].every((x) => typeof x === "string" && x.length <= 40)) task.tags = o["tags"] as string[];
+      else errors.push(`${at}.tags must be an array of short strings`);
+    }
+    if (o["gates"] !== undefined) {
+      if (Array.isArray(o["gates"]) && o["gates"].every((g) => g === "approval")) task.gates = o["gates"] as "approval"[];
+      else errors.push(`${at}.gates INVALID_GATE: only "approval" is supported`);
+    }
+    if (opts.catalog && task.profile) {
+      const card = opts.catalog.find((c) => c.id === task.profile);
+      const kind = task.kind ?? "write";
+      if (!card) errors.push(`${at}.profile "${task.profile}": PROFILE_UNKNOWN`);
+      else if (!card.enabled) errors.push(`${at}.profile "${task.profile}": PROFILE_DISABLED`);
+      else if (!card.kinds.includes(kind)) errors.push(`${at}.profile "${task.profile}": PROFILE_KIND_MISMATCH (a ${kind} step needs a profile that can ${kind})`);
+    }
+    tasks.push(task);
   });
 
   for (const t of tasks) {
     for (const d of t.deps) {
       if (!ids.has(d)) errors.push(`task "${t.id}" depends on unknown task "${d}"`);
       if (d === t.id) errors.push(`task "${t.id}" depends on itself`);
+    }
+  }
+  if (opts.catalog) {
+    for (const t of tasks) {
+      const d = route({ kind: t.kind ?? "write", suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}) }, opts.catalog);
+      if (!d.ok) errors.push(`task "${t.id}": NO_ROUTE (no enabled profile can do a ${t.kind ?? "write"} step)`);
+    }
+    if (opts.budgetUsd !== undefined && errors.length === 0) {
+      const c = planCost(tasks.map((t) => ({ id: t.id, kind: t.kind ?? "write", profile: t.profile, ...(t.tags ? { tags: t.tags } : {}) })), opts.catalog);
+      const upper = c.knownUsd + c.estimatedHighUsd;
+      if (upper > opts.budgetUsd) errors.push(`OVER_BUDGET: known+estimated upper bound $${upper.toFixed(4)} exceeds the $${opts.budgetUsd.toFixed(4)} limit`);
     }
   }
   if (errors.length === 0) {

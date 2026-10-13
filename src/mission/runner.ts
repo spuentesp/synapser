@@ -9,6 +9,8 @@ import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ValidationPort, ValidationResult } from "../validation/runner.ts";
+import { approvalStatus, decideApproval, planDigest, requestApproval } from "../orchestration/gates.ts";
+import { dispatchStep, type OrchestrationDeps, type StepRow } from "../orchestration/dispatch.ts";
 import type { Plan, PlanTask } from "./plan.ts";
 
 export interface MissionSpec {
@@ -26,6 +28,8 @@ export interface MissionDeps {
   model: ModelPort;
   validation: ValidationPort;
   budget?: BudgetManager;
+  /** When present, steps are routed to profiles and run through the AgentRunner port (plan 10). */
+  orchestration?: OrchestrationDeps;
   onEvent?: (e: { kind: string; taskId?: string; detail?: unknown }) => void;
 }
 
@@ -58,6 +62,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   };
   const runId = spec.runId;
   const agentIds = spec.plan.tasks.map((t) => t.id);
+  const digest = planDigest(spec.plan);
   const outcomes = new Map<string, string>();
   const validations: ValidationResult[] = [];
   const validationTaskOf = new Map<string, string>();
@@ -76,7 +81,16 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         actorOwner: `${runId}:${pt.id}`,
         priority: pt.priority ?? 0,
         scope: pt.scope,
-        spec: { kind: "agent", objective: pt.objective, criteria: pt.criteria, context: pt.context ?? [] },
+        spec: {
+          kind: "agent",
+          objective: pt.objective,
+          criteria: pt.criteria,
+          context: pt.context ?? [],
+          ...(pt.kind ? { step: pt.kind } : {}),
+          ...(pt.profile ? { profile: pt.profile } : {}),
+          ...(pt.tags ? { tags: pt.tags } : {}),
+          ...(pt.gates ? { gates: pt.gates } : {}),
+        },
         planRevision: 1,
         deps: pt.deps,
       });
@@ -104,6 +118,14 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   const runAgent = async (id: string): Promise<Outcome> => {
     const row = specOf(id)!;
     const isRepair = row.spec.kind === "repair";
+    if (deps.orchestration) {
+      const o = await dispatchStep(
+        deps.orchestration,
+        { journal, runId, planDigest: digest, deadlineMs: deadline, ...(deps.budget ? { budget: deps.budget } : {}) },
+        { taskId: id, scope: row.scope, spec: row.spec } as StepRow,
+      );
+      return { taskId: id, ok: o.ok, label: o.label, ...(o.detail ? { detail: o.detail } : {}) };
+    }
     const r: TaskRunResult = await runTask(
       {
         model: deps.model,
@@ -153,11 +175,37 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         if (t.state === "PENDING" || t.state === "READY") setState(t.taskId, t.state, "CANCELLED", { reason: failure });
       }
     } else {
+      const gateOpen = (t: (typeof tasks)[number]): boolean => {
+        if (!(t.spec.gates as string[] | undefined)?.includes("approval")) return true;
+        let st = approvalStatus(journal, t.taskId, digest);
+        if (st === "NONE") {
+          requestApproval(journal, runId, t.taskId, digest, String(t.spec.objective ?? ""));
+          emit("approval.requested", t.taskId);
+          st = "PENDING";
+        }
+        if (st === "PENDING") {
+          const auto = deps.orchestration?.approval?.auto?.({ taskId: t.taskId, objective: String(t.spec.objective ?? "") });
+          if (auto) {
+            decideApproval(journal, runId, {
+              taskId: t.taskId,
+              planDigest: digest,
+              currentDigest: digest,
+              decision: auto.approve ? "APPROVED" : "REJECTED",
+              actor: auto.actor,
+              ...(auto.reason ? { reason: auto.reason } : {}),
+            });
+            st = approvalStatus(journal, t.taskId, digest);
+          }
+        }
+        if (st === "REJECTED") failure ??= `approval rejected for ${t.taskId}`;
+        return st === "APPROVED";
+      };
       const ready = tasks
         .filter((t) => t.state === "PENDING" && t.deps.every((d) => ["DONE", "VALIDATING"].includes(tasks.find((x) => x.taskId === d)?.state ?? "")))
+        .filter((t) => gateOpen(t))
         .sort((a, b) => b.priority - a.priority || a.taskId.localeCompare(b.taskId));
       for (const t of ready) {
-        if (running.size >= L.concurrency) break;
+        if (running.size >= L.concurrency || failure) break;
         setState(t.taskId, "PENDING", "READY");
         setState(t.taskId, "READY", "RUNNING");
         emit("task.started", t.taskId);
@@ -167,7 +215,13 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         running.set(t.taskId, p);
       }
     }
-    if (running.size === 0) break;
+    if (running.size === 0) {
+      // nothing runs: either we are done, or steps are waiting for a human decision
+      const waiting = !failure && !timedOut && journal.listTasks().some((t) => t.state === "PENDING" && (t.spec.gates as string[] | undefined)?.includes("approval") && approvalStatus(journal, t.taskId, digest) === "PENDING");
+      if (!waiting) break;
+      await new Promise((r) => setTimeout(r, deps.orchestration?.approval?.pollMs ?? 250));
+      continue;
+    }
 
     const done = await Promise.race(running.values());
     running.delete(done.taskId);

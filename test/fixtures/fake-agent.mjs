@@ -26,6 +26,13 @@ switch (mode) {
     appendFileSync("app/schema.py", "\n# edited by the agent\n");
     ok();
     break;
+  case "noop":
+    ok("reviewed; nothing to change");
+    break;
+  case "edit-readme":
+    appendFileSync("README.md", "\nrelease notes\n");
+    ok();
+    break;
   case "edit-client":
     appendFileSync("app/client.py", "\n# client edit\n");
     ok();
