@@ -98,6 +98,20 @@ export interface TaskRunResult {
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n…[truncated ${s.length - n} chars]` : s);
 
+/**
+ * Why an `old` snippet does not match: the first of its lines that is absent from the file, and the
+ * two mistakes models actually make (escaping quotes themselves; copying far more than needed).
+ */
+function mismatchHint(cur: string, old: string): string {
+  const lines = old.split("\n");
+  const bad = lines.findIndex((l) => l.trim().length > 0 && !cur.includes(l));
+  const parts: string[] = [];
+  if (bad >= 0) parts.push(`Line ${bad + 1} of your \`old\` is not in the file: ${JSON.stringify(lines[bad]!.slice(0, 100))}.`);
+  if (old.includes('\\"') && !cur.includes('\\"')) parts.push("You wrote a backslash before a quote: write quotes literally, the tool call already escapes them.");
+  parts.push("Use the SHORTEST snippet that is unique, usually one line; do not copy whole functions or docstrings.");
+  return parts.join(" ");
+}
+
 export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunResult> {
   const L: LoopLimits = { ...DEFAULT_LIMITS, ...(deps.limits ?? {}) };
   const { executor, journal, model } = deps;
@@ -341,7 +355,13 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
         if (count !== 1) {
           return {
             ok: false,
-            payload: { error: count === 0 ? "PATCH_DOES_NOT_APPLY" : "PATCH_AMBIGUOUS", detail: `\`old\` appears ${count} times in ${g.path}; it must appear exactly once. Copy a longer, unique snippet from the file as you read it.` },
+            payload: {
+              error: count === 0 ? "PATCH_DOES_NOT_APPLY" : "PATCH_AMBIGUOUS",
+              detail:
+                count === 0
+                  ? `\`old\` does not appear in ${g.path}. ${mismatchHint(cur, old)}`
+                  : `\`old\` appears ${count} times in ${g.path}; it must appear exactly once. Add one neighbouring line to make it unique.`,
+            },
             detail: count === 0 ? "old not found" : "old ambiguous",
             noProgressKey: `patch:${g.path}`,
           };

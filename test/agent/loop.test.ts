@@ -390,3 +390,25 @@ describe("agent loop", () => {
     assert.deepEqual(await checkInvariants(env, { expectNoClaims: true }), []);
   });
 });
+
+describe("replace_in_file feedback", () => {
+  test("a missing `old` names the first mismatching line and the usual mistakes, and does not tell the model to copy MORE text", async () => {
+    const env = await makeEnv();
+    try {
+      let seen = "";
+      const model = new ScriptedModel((m, n) => {
+        if (n === 1) return { calls: [call("read_files", { paths: ["app/schema.py"] })] };
+        if (n === 2) return { calls: [call("replace_in_file", { path: "app/schema.py", old: 'class Invoice:\n    """\\"doc\\""""\n    customer_id: str\n', new: "x" })] };
+        seen = JSON.stringify(lastTool(m));
+        return { calls: [call("finish", { summary: "x" })] };
+      });
+      const res = await runTask({ model, executor: env.exec, journal: env.journal, runId: RUN }, { taskId: "t1", objective: "o", scope: ["app/schema.py"], criteria: ["c"], planRevision: 1 });
+      assert.equal(res.status, "FINISHED", JSON.stringify(res));
+      assert.match(seen, /Line 2 of your .old. is not in the file/);
+      assert.match(seen, /SHORTEST snippet that is unique/);
+      assert.doesNotMatch(seen, /Copy a longer/);
+    } finally {
+      await env.close();
+    }
+  });
+});
