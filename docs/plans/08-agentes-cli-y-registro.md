@@ -84,7 +84,7 @@ salida y texto final. Cada fila emite un evento `agent_run` por el mismo canal q
 
 - Enganche a Zoanthrope: identidad por agente, `post_intention` por MCP y volcado de su anillo de
   auditoría (tiene tope de 1 000 eventos) al registro.
-- Workflow declarativo (pasos, perfiles, aprobaciones) con Nemotron eligiendo perfil del catálogo.
-- Rebase de un `STALE_VIEW` (hoy se informa; no se reintenta).
+- Workflow declarativo, catálogo y aprobaciones: plan 10. Enganche a Zoanthrope y estado vivo: plan 11.
+- Re-anclaje de `STALE_VIEW`: hecho en el bucle para lotes de reemplazos exactos (plan 09); `write_file` y borrados nunca se re-anclan.
 - Adaptador `orca`.
 - Aislamiento de capacidades: `kimi -p` y `mimo` ejecutan shell; la copia aísla el repo, no el HOME.

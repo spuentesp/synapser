@@ -13,6 +13,11 @@ Objetivo de salida de la ventana (diseño §11): **S01–S07 pasan sin depender 
 | [05 Requisitos de las bases](05-requisitos-hackathon.md) | qué exigen las reglas, cómo se puntúa, brechas del diseño | — |
 | [06 Integración Nebius/NVIDIA](06-integracion-nebius-nvidia.md) | modelos por rol, puertos intercambiables, validación aislada, despliegue | 05 |
 | [07 Tavily](07-tavily-investigacion-web.md) | puerto de investigación web, procedencia de citas, tarea T0 | 06 |
+| [08 Agentes CLI y registro](08-agentes-cli-y-registro.md) | puerto `AgentRunner`, broker, ledger encadenado, consultas, LangSmith | 02, 06 |
+| [09 A/B de coordinación](09-ab-coordinacion.md) | hipótesis, control, invariantes I1–I5, falsación | 08 |
+| [10 Orquestación y workflow](10-orquestacion-catalogo-y-workflow.md) | catálogo, enrutador, pasos, aprobaciones, subtareas | 07, 08 |
+| [11 Zoanthrope y estado vivo](11-enganche-zoanthrope-y-estado-vivo.md) | identidad/intención, colector, proyección determinista | 08 |
+| [12 Interfaz](12-interfaz.md) | vistas, API, invariantes U1–U5, guion de demo | 10, 11 |
 
 ## Decisiones tomadas en estos planes (para aprobar)
 
@@ -74,3 +79,28 @@ Cada una se aparta o precisa el diseño v0.2; ninguna lo contradice.
 | 21 | Verificador de invariantes + corridas aleatorias de crash; limpieza y evidencia G2/G3 | todo S01–S07 verde 20 corridas seguidas |
 
 Si el día 19 se retrasa, se recorta la corrida aleatoria del día 21, no los failpoints.
+
+## Fase 2 — del motor al producto (hasta el 30 oct, 10:00 PT = 14:00 Santiago)
+
+Orden por valor y dependencia; cada entrega deja la suite en verde y sus invariantes con verificador.
+
+| Tramo | Entrega | Salida verificable |
+|---|---|---|
+| A (14–17) | Plan 10 núcleo: catálogo, validador, enrutador, compuertas, W1–W4; Tavily U1/U2 (plan 07) | pruebas de §7 del plan 10 sin modelo; una misión con perfil elegido y una aprobación |
+| B (18–21) | Plan 11: spike S-Z, colector, `state`, SSE; `request_subtask` (W5) | Z1–Z4, L1–L2; reproducción por `seq` |
+| C (22–26) | Plan 12: API y vistas 1, 3, 4, 5, 7 primero; luego 2 y 6 | U1–U5; capturas por vista |
+| D (27–29) | A/B sobre carga realista; licencia, repositorio público, traducción al inglés, vídeo, formulario | lista de entrega del plan 05 completa |
+| 30 | Reserva; solo correcciones | — |
+
+Regla de recorte, en este orden: reproducción por `seq` → vista de coordinación → delegación (W5) →
+L3 (hooks nativos). No se recortan: integridad, aprobaciones, por qué, costo.
+
+### Decisiones que necesitan tu aprobación (fase 2)
+
+| # | Decisión | Dónde |
+|---|---|---|
+| D1 | El enrutador determinista manda; el modelo solo sugiere perfil | plan 10 §9 |
+| D2 | Profundidad máxima de delegación = 2 | plan 10 §9 |
+| D3 | Perfil de costo desconocido exige permiso explícito | plan 10 §9 |
+| D4 | Interfaz como aplicación estática sin dependencias + API JSON/SSE | plan 12 §2 |
+| D5 | Los resultados medidos NO se documentan en el repo (criterio ya acordado) | memoria |
