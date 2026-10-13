@@ -333,7 +333,10 @@ pedido/servido) y repetir S-A con n = 20 por modelo en el fixture real.
   | planas + contrato como `context` separado | 2/3 | 2/3 |
   | ídem + `apply_changes` repetido inocuo (n = 5) | **1/5** | **4/5** (3 sin reparación) |
 
-  Super: ≈ US$0,035 y ≈ 30 s por misión; Lightning ≈ US$0,012. Con un plan fijo y Super como
+  Medido con `fallbacks: []` (sin respaldo), así que cada fila es el modelo solo. Super: ≈ US$0,035 y
+  ≈ 30 s por misión; Lightning ≈ US$0,012. **Re-medición tras hacer atómico `apply_changes`
+  (commit `5a3fbdd`)**: Super 3/3 (2 sin reparación), 27,6 s y US$0,031 de media. Las filas
+  anteriores se midieron sobre el árbol de trabajo previo a ese commit. Con un plan fijo y Super como
   `worker` por defecto, la misión completa terminó `DONE` en 22,7 s (≈ US$0,025, una `STALE_VIEW`
   resuelta). Con el supervisor planificando: `DONE` en 49,7 s (≈ US$0,028, sin llamadas rechazadas;
   el plan salió como cadena, así que no hubo colisión). **Muestras pequeñas (n = 3–5)**: indican

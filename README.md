@@ -33,7 +33,7 @@ Node ≥ 24 (TypeScript runs via native type stripping; no build step, no runtim
 ## Live results (13 Oct 2026, small n)
 
 Discount mission, 3 concurrent agents sharing one file, accepted only by unit tests + an independent oracle:
-Super 120B as worker completed 4/5 runs (~$0.035, ~30 s); a supervisor-planned run completed in 49.7 s (~$0.028).
+Super 120B as worker (no fallback) completed 4/5 runs earlier and 3/3 at commit `5a3fbdd` (~$0.03, ~28 s); a supervisor-planned run completed in 49.7 s (~$0.028). The shipped default falls back to Lightning on provider failure; a mid-mission fallback is recorded in the journal and makes a run non-comparable.
 Details and failure modes: `docs/plans/06-integracion-nebius-nvidia.md` §15. Reproduce: `node --env-file=.env scripts/mission-bench.ts --runs 5`.
 
 ## Layout
