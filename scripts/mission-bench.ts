@@ -45,6 +45,8 @@ const walk = (root: string, dir = ""): string[] =>
 interface Row {
   arm: string;
   violations: Record<string, number>;
+  /** Lines of another agent's work that a write actually erased (not merely risked). */
+  lostLines: number;
   worker: string;
   run: number;
   status: string;
@@ -104,9 +106,11 @@ for (const worker of WORKERS) {
       const viol: Violation[] = [...checkLineage(traceOf(), initial), ...checkGrantBeforeWrite(journal), ...checkAcceptance(journal), ...checkChain(journal)];
       const violations: Record<string, number> = {};
       for (const v of viol) violations[`${v.invariant}:${v.code}`] = (violations[`${v.invariant}:${v.code}`] ?? 0) + 1;
+      const lost = viol.filter((v) => v.code === "LOST_UPDATE").reduce((n, v) => n + ((v.detail["lostLines"] as string[] | undefined)?.length ?? 0), 0);
       row = {
         arm,
         violations,
+        lostLines: lost,
         worker,
         run,
         status: r.status,
@@ -126,14 +130,14 @@ for (const worker of WORKERS) {
         })(),
       };
     } catch (e) {
-      row = { arm, violations: {}, worker, run, status: "ERROR", reason: String((e as Error).message).slice(0, 120), repair: 0, wallS: (Date.now() - t0) / 1000, calls: 0, tokens: 0, usd: 0, rejected: {}, tasks: "", failure: null };
+      row = { arm, violations: {}, lostLines: 0, worker, run, status: "ERROR", reason: String((e as Error).message).slice(0, 120), repair: 0, wallS: (Date.now() - t0) / 1000, calls: 0, tokens: 0, usd: 0, rejected: {}, tasks: "", failure: null };
     } finally {
       await zoo.close();
       journal.close();
       lock.release();
     }
     rows.push(row);
-    console.log(`[${arm}] ${worker.split("/").pop()} #${run}: violations=${JSON.stringify(row.violations)} ${row.status}${row.reason ? ` (${row.reason})` : ""} repair=${row.repair} ${row.wallS}s ${row.calls} calls ${row.tokens} tok $${row.usd.toFixed(4)} rejected=${JSON.stringify(row.rejected)}${row.failure ? `\n      why: ${row.failure}` : ""}`);
+    console.log(`[${arm}] ${worker.split("/").pop()} #${run}: violations=${JSON.stringify(row.violations)} lostLines=${row.lostLines} ${row.status}${row.reason ? ` (${row.reason})` : ""} repair=${row.repair} ${row.wallS}s ${row.calls} calls ${row.tokens} tok $${row.usd.toFixed(4)} rejected=${JSON.stringify(row.rejected)}${row.failure ? `\n      why: ${row.failure}` : ""}`);
   }
   }
 }
@@ -147,9 +151,10 @@ for (const w of WORKERS) {
     const first = mine.filter((r) => r.status === "DONE" && r.repair === 0).length;
     const lost = mine.reduce((n, r) => n + (r.violations["I1:LOST_UPDATE"] ?? 0), 0);
     const withLoss = mine.filter((r) => (r.violations["I1:LOST_UPDATE"] ?? 0) > 0).length;
+    const erased = mine.reduce((n, r) => n + r.lostLines, 0);
     const other = mine.reduce((n, r) => n + Object.entries(r.violations).filter(([k]) => k !== "I1:LOST_UPDATE").reduce((m, [, v]) => m + v, 0), 0);
     const avg = (f: (r: Row) => number) => mine.reduce((x, r) => x + f(r), 0) / mine.length;
-    console.log(`[${a}] ${w}: DONE ${done}/${mine.length} (no repair ${first}) | I1 lost updates ${lost} in ${withLoss}/${mine.length} runs | other violations ${other} | avg ${avg((r) => r.wallS).toFixed(1)}s ${Math.round(avg((r) => r.tokens))} tok $${avg((r) => r.usd).toFixed(4)}`);
+    console.log(`[${a}] ${w}: DONE ${done}/${mine.length} (no repair ${first}) | unsafe overwrites (I1) ${lost} in ${withLoss}/${mine.length} runs, lines actually erased ${erased} | other violations ${other} | avg ${avg((r) => r.wallS).toFixed(1)}s ${Math.round(avg((r) => r.tokens))} tok $${avg((r) => r.usd).toFixed(4)}`);
   }
 }
 mkdirSync("evidence", { recursive: true });

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { runTask, type TaskSpec } from "../../src/agent/loop.ts";
-import { checkAcceptance, checkChain, checkGrantBeforeWrite, checkLineage, digestOnDisk, executorTrace, type WriteRecord } from "../../src/audit/invariants.ts";
+import { checkAcceptance, checkChain, checkGrantBeforeWrite, checkLineage, digestOnDisk, executorTrace, lostLines, type WriteRecord } from "../../src/audit/invariants.ts";
 import { NaiveGateway } from "../../src/bench/naive-gateway.ts";
 import type { DigestOrAbsent } from "../../src/digest/file.ts";
 import type { WriteGateway } from "../../src/executor/gateway.ts";
@@ -87,6 +87,7 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
     assert.equal(v[0]!.detail["writer"], `${RUN}:tb`);
     assert.match(schema(), /discount_cents/);
     assert.doesNotMatch(schema(), /discount_bps/, "A's change is gone");
+    assert.deepEqual(v[0]!.detail["lostLines"], ["discount_bps: int = 0"], "and the checker names exactly what was destroyed");
   });
 
   test("SYNAPSER (executor): one STALE_VIEW, a re-read, both edits land; I1–I5 hold", async () => {
@@ -101,6 +102,7 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
     assert.equal(exTrace.trace.length, 2);
     const v = [...checkLineage(exTrace.trace, base), ...checkGrantBeforeWrite(env.journal), ...checkAcceptance(env.journal), ...checkChain(env.journal)];
     assert.deepEqual(v, []);
+    assert.equal(exTrace.trace.flatMap((w) => lostLines(w)).length, 0);
   });
 
   test("the checker is not vacuous: it flags a hand-made lost update and a hand-made foreign overwrite", () => {
@@ -113,5 +115,36 @@ describe("lost update: same agents, same interleaving, two write paths", () => {
     const v = checkLineage(trace, new Map([["f", d("0")]]));
     assert.deepEqual(v.map((x) => `${x.invariant}:${x.code}@${String(x.detail["seq"])}`), ["I1:LOST_UPDATE@2", "I3:UNPREDICTED_BYTES_OVERWRITTEN@3"]);
     assert.deepEqual(checkLineage(trace.slice(0, 1), new Map([["f", d("0")]])), []);
+  });
+});
+
+describe("I4 checker", () => {
+  test("DONE through a passing validation is accepted; DONE without evidence, or through a failing one, is flagged", async () => {
+    const env = await makeEnv();
+    try {
+      env.journal.tx((t) => {
+        t.insertMission({ runId: RUN, objective: "x", repo: "w", baseSha: "n/a", planRevision: 1, limits: {} });
+        for (const id of ["w1", "w2", "w3", "val-ok", "val-bad"]) {
+          t.insertTask({ runId: RUN, taskId: id, actorOwner: `${RUN}:${id}`, priority: 0, scope: [], spec: { kind: id.startsWith("val") ? "validation" : "agent", objective: id, criteria: [] }, planRevision: 1, deps: [] });
+        }
+        t.insertValidation({ validationId: "v1", runId: RUN, taskId: "val-ok", command: "unit", snapshotDigest: "s", scopeDigest: "s" });
+        t.insertValidation({ validationId: "v2", runId: RUN, taskId: "val-bad", command: "unit", snapshotDigest: "s", scopeDigest: "s" });
+      });
+      const setDone = (id: string, by?: string) =>
+        env.journal.tx((t) => {
+          t.setTaskState(RUN, id, "PENDING", "DONE", by ? { by } : {});
+        });
+      env.journal.tx((t) => {
+        t.finishValidation("v1", RUN, { exitCode: 0, valid: true, outputBlob: null });
+        t.finishValidation("v2", RUN, { exitCode: 1, valid: true, outputBlob: null });
+      });
+      setDone("w1", "val-ok");
+      setDone("w2", "val-bad");
+      setDone("w3");
+      const v = checkAcceptance(env.journal).map((x) => x.where).sort();
+      assert.deepEqual(v, ["w2", "w3"]);
+    } finally {
+      await env.close();
+    }
   });
 });

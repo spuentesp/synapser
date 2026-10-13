@@ -149,7 +149,23 @@ export class NaiveGateway implements WriteGateway {
     for (const r of p.resolved) {
       const before = digestOnDisk(this.#root, r.path);
       const written = (r.after === null ? ABSENT : sha256Bytes(r.after)) as DigestOrAbsent;
-      this.trace.push({ seq: ++this.#seq, path: r.path, actor: p.actor, basedOn: p.basedOn.get(r.path) ?? ABSENT, onDiskBefore: before, written });
+      let onDiskText: string | null = null;
+      try {
+        onDiskText = readFileSync(absPath(this.#root, r.path), "utf8");
+      } catch {
+        /* absent */
+      }
+      this.trace.push({
+        seq: ++this.#seq,
+        path: r.path,
+        actor: p.actor,
+        basedOn: p.basedOn.get(r.path) ?? ABSENT,
+        onDiskBefore: before,
+        written,
+        basedOnText: r.before === null ? null : r.before.toString("utf8"),
+        onDiskBeforeText: onDiskText,
+        writtenText: r.after === null ? null : r.after.toString("utf8"),
+      });
       const abs = absPath(this.#root, r.path);
       if (r.after === null) rmSync(abs, { force: true });
       else {

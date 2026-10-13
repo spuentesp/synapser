@@ -10,6 +10,7 @@
 //   I4 acceptance   a task is DONE only with a passing validation on a valid snapshot.
 //   I5 chain        the ledger's hash chain verifies.
 
+import { readFileSync } from "node:fs";
 import { ABSENT, type DigestOrAbsent, observeFile } from "../digest/file.ts";
 import type { Journal } from "../journal/journal.ts";
 import { absPath } from "../executor/fs-applier.ts";
@@ -26,6 +27,24 @@ export interface WriteRecord {
   onDiskBefore: DigestOrAbsent | "other";
   /** Digest written (ABSENT for a delete). */
   written: DigestOrAbsent;
+  /** Optional text of the three states, to tell an unsafe write from an actual loss of content. */
+  basedOnText?: string | null;
+  onDiskBeforeText?: string | null;
+  writtenText?: string | null;
+}
+
+const lines = (t: string | null | undefined): Set<string> =>
+  new Set((t ?? "").split("\n").map((l) => l.trim()).filter((l) => l.length > 0));
+
+/**
+ * Lines that were on disk, that this writer did not know about (absent from its base), and that
+ * its write erased. Non-empty = another agent's work was actually destroyed, not just risked.
+ */
+export function lostLines(w: WriteRecord): string[] {
+  if (w.onDiskBeforeText === undefined || w.basedOnText === undefined || w.writtenText === undefined) return [];
+  const base = lines(w.basedOnText);
+  const after = lines(w.writtenText);
+  return [...lines(w.onDiskBeforeText)].filter((l) => !base.has(l) && !after.has(l));
 }
 
 export interface Violation {
@@ -55,7 +74,7 @@ export function checkLineage(trace: readonly WriteRecord[], initial: ReadonlyMap
         invariant: "I1",
         code: "LOST_UPDATE",
         where: w.path,
-        detail: { seq: w.seq, writer: w.actor, basedOn: w.basedOn, tree_had: expected, overwritten: expected !== w.basedOn },
+        detail: { seq: w.seq, writer: w.actor, basedOn: w.basedOn, tree_had: expected, lostLines: lostLines(w) },
       });
     }
     if (w.onDiskBefore !== expected) {
@@ -80,13 +99,28 @@ export function checkGrantBeforeWrite(journal: Journal): Violation[] {
   return out;
 }
 
-/** I4: DONE only with a passing validation on a valid snapshot. */
+/**
+ * I4: a task is DONE only through acceptance evidence. Agent tasks are completed BY a validation
+ * task (the DONE event names it in `by`); that validation task must own at least one validation
+ * and every one of them must be valid and exit 0. A validation task's own DONE is checked directly.
+ */
 export function checkAcceptance(journal: Journal): Violation[] {
-  const passing = new Set(journal.listValidations().filter((v) => v.valid && v.exitCode === 0).map((v) => v.taskId));
-  return journal
-    .listTasks()
-    .filter((t) => t.state === "DONE" && !passing.has(t.taskId) && t.spec?.kind !== "validate")
-    .map((t) => ({ invariant: "I4" as const, code: "DONE_WITHOUT_ACCEPTANCE", where: t.taskId, detail: {} }));
+  const byTask = new Map<string, { valid: boolean; exitCode: number | null }[]>();
+  for (const v of journal.listValidations()) (byTask.get(v.taskId) ?? byTask.set(v.taskId, []).get(v.taskId)!).push(v);
+  const passes = (taskId: string): boolean => {
+    const vs = byTask.get(taskId) ?? [];
+    return vs.length > 0 && vs.every((v) => v.valid && v.exitCode === 0);
+  };
+  const out: Violation[] = [];
+  for (const e of journal.listEvents()) {
+    if (e.entity !== "task" || e.toState !== "DONE") continue;
+    const by = (e.data as { by?: string }).by;
+    const evidence = by ?? e.entityId;
+    if (!passes(evidence)) {
+      out.push({ invariant: "I4", code: "DONE_WITHOUT_ACCEPTANCE", where: e.entityId, detail: { seq: e.seq, evidence } });
+    }
+  }
+  return out;
 }
 
 /** I5. */
@@ -105,6 +139,20 @@ export function executorTrace(journal: Journal, root: string): { hook: NonNullab
   const hook = ({ actionId, actor, path }: { actionId: string; actor: string; path: string }) => {
     const f = journal.getActionFiles(actionId).find((x) => x.path === path);
     if (!f) return;
+    const blob = (ref: string | null): string | null => {
+      if (!ref) return null;
+      try {
+        return journal.artifacts.get(ref).toString("utf8");
+      } catch {
+        return null;
+      }
+    };
+    let onDiskText: string | null = null;
+    try {
+      onDiskText = readFileSync(absPath(root, path), "utf8");
+    } catch {
+      /* absent */
+    }
     trace.push({
       seq: ++seq,
       path,
@@ -112,6 +160,9 @@ export function executorTrace(journal: Journal, root: string): { hook: NonNullab
       basedOn: (f.beforeDigest ?? ABSENT) as DigestOrAbsent,
       onDiskBefore: digestOnDisk(root, path),
       written: (f.afterDigest ?? ABSENT) as DigestOrAbsent,
+      basedOnText: blob(f.beforeBlob),
+      onDiskBeforeText: onDiskText,
+      writtenText: blob(f.afterBlob),
     });
   };
   return { hook, trace };
