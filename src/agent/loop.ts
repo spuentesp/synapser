@@ -4,7 +4,8 @@
 // authority: argument validation, no identity from the model, file content only as `tool` data.
 
 import type { Edit } from "../digest/canonical.ts";
-import type { ActionReceipt, Executor } from "../executor/executor.ts";
+import type { ActionReceipt } from "../executor/executor.ts";
+import type { WriteGateway } from "../executor/gateway.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import { type ChatMessage, ModelError, type ModelPort, type ParsedToolCall } from "../model/types.ts";
@@ -50,7 +51,7 @@ export const DEFAULT_LIMITS: LoopLimits = {
 
 export interface LoopDeps {
   model: ModelPort;
-  executor: Executor;
+  executor: WriteGateway;
   journal: Journal;
   runId: string;
   budget?: BudgetManager;

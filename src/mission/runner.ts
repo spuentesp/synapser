@@ -4,7 +4,7 @@
 // every write has settled. DONE for the mission = acceptance evidence on a consistent snapshot.
 
 import { runTask, type LoopLimits, type TaskRunResult } from "../agent/loop.ts";
-import type { Executor } from "../executor/executor.ts";
+import type { WriteGateway } from "../executor/gateway.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
@@ -21,7 +21,7 @@ export interface MissionSpec {
 }
 
 export interface MissionDeps {
-  executor: Executor;
+  executor: WriteGateway;
   journal: Journal;
   model: ModelPort;
   validation: ValidationPort;
