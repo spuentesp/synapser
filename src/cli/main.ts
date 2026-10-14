@@ -96,7 +96,11 @@ async function main(): Promise<void> {
       case "serve": {
         const { createApi } = await import("../api/server.ts");
         const pi = argv.indexOf("--port");
+        // plan 17 P17.8: a fixed operator token, from the environment, so writes survive a restart and clients can hold it.
+        const operatorToken = process.env["SYNAPSER_OPERATOR_TOKEN"];
+        if (operatorToken !== undefined && operatorToken.length < 32) throw new Error("SYNAPSER_OPERATOR_TOKEN must be at least 32 characters");
         const api = createApi({
+          ...(operatorToken ? { token: operatorToken } : {}),
           stateDir: cfg.stateDir,
           trustMode: cfg.trustMode,
           control: { manager: rt.manager, chat: rt.chat, library: rt.library, libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
