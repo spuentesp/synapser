@@ -25,6 +25,9 @@ export interface ModelConfig {
   maxConcurrency: number;
 }
 
+/** The system roles, in the order the configuration file, `config show` and the doctor list them. */
+export const SYSTEM_ROLES: readonly Role[] = ["supervisor", "worker", "repair", "advisor", "chat"];
+
 export function defaultModelConfig(): ModelConfig {
   return {
     providers: {
@@ -87,17 +90,45 @@ export function validateConfig(cfg: ModelConfig): void {
     providerErrors.push(...validateProviderConfig(name, provider));
   }
   if (providerErrors.length) throw new ModelError("CONFIG", providerErrors.join("; "));
-  for (const role of ["supervisor", "worker", "repair", "advisor", "chat"] as const) {
-    const r = cfg.roles[role];
-    if (!r) throw new ModelError("CONFIG", `role ${role} is not configured`);
-    const provider = cfg.providers[r.provider];
-    if (!provider) throw new ModelError("CONFIG", `role ${role}: unknown provider ${r.provider}`);
-    if (!r.model) throw new ModelError("CONFIG", `role ${role}: no model`);
-    if (!provider.models.some((model) => model.id === r.model)) throw new ModelError("CONFIG", `role ${role}: model ${r.model} is not declared by provider ${r.provider}`);
-    for (const fallback of r.fallbacks ?? []) {
-      if (!provider.models.some((model) => model.id === fallback)) throw new ModelError("CONFIG", `role ${role}: fallback ${fallback} is not declared by provider ${r.provider}`);
+  const roleErrors = SYSTEM_ROLES.flatMap((role) => validateRoleConfig(role, cfg.roles[role], cfg.providers));
+  if (roleErrors.length) throw new ModelError("CONFIG", roleErrors.join("; "));
+}
+
+/**
+ * Validate one role assignment without throwing, so a whole configuration file can report every problem.
+ * A role names its provider AND its model; every fallback must be declared by that same provider.
+ */
+export function validateRoleConfig(role: string, value: unknown, providers: Readonly<Record<string, ProviderConfig>>): string[] {
+  const at = `roles.${role}`;
+  if (value === undefined) return [`${at} is not configured`];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [`${at}: must be an object with provider and model`];
+  const r = value as Partial<RoleConfig>;
+  const errors: string[] = [];
+  const provider = typeof r.provider === "string" && Object.hasOwn(providers, r.provider) ? providers[r.provider] : undefined;
+  if (typeof r.provider !== "string" || !r.provider) errors.push(`${at}: provider is required`);
+  else if (!provider) errors.push(`${at}: unknown provider ${r.provider}`);
+  if (typeof r.model !== "string" || !r.model) errors.push(`${at}: model is required`);
+  else if (provider && !provider.models.some((model) => model.id === r.model)) errors.push(`${at}: model ${r.model} is not declared by provider ${r.provider}`);
+  if (r.temperature !== undefined && (typeof r.temperature !== "number" || !Number.isFinite(r.temperature) || r.temperature < 0 || r.temperature > 2)) {
+    errors.push(`${at}: temperature must be between 0 and 2`);
+  }
+  if (r.fallbacks !== undefined) {
+    if (!Array.isArray(r.fallbacks) || r.fallbacks.some((item) => typeof item !== "string")) errors.push(`${at}: fallbacks must be an array of model ids`);
+    else if (provider) {
+      for (const fallback of r.fallbacks) if (!provider.models.some((model) => model.id === fallback)) errors.push(`${at}: fallback ${fallback} is not declared by provider ${r.provider}`);
     }
   }
+  return errors;
+}
+
+/**
+ * The model config the system roles (planner, advisor, chat, …) run on: the operator's providers and role
+ * assignments with the default limits. Validated as a whole, so a bad assignment fails at startup, not at a call.
+ */
+export function systemModelConfig(providers: Record<string, ProviderConfig>, roles: Record<Role, RoleConfig>): ModelConfig {
+  const cfg: ModelConfig = { ...defaultModelConfig(), providers, roles };
+  validateConfig(cfg);
+  return cfg;
 }
 
 /** Validate one provider without throwing so whole-file configuration can report every problem. */

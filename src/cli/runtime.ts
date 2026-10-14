@@ -4,7 +4,7 @@ import { Advisor } from "../advisor/advisor.ts";
 import { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { type SynapserConfig } from "../config/load.ts";
-import { defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../model/index.ts";
+import { journalRecorder, OpenAICompatibleProvider, systemModelConfig } from "../model/index.ts";
 import { priceResolverForProviders } from "../model/recorder.ts";
 import { buildCatalog, type ProfileCard } from "../orchestration/catalog.ts";
 import { loadHistory } from "../orchestration/history.ts";
@@ -24,7 +24,7 @@ export interface Runtime {
 }
 
 export function createRuntime(cfg: SynapserConfig): Runtime {
-  const systemModels = defaultModelConfig();
+  const systemModels = systemModelConfig(cfg.providers, cfg.roles);
   const systemPrice = priceResolverForProviders(systemModels.providers);
   const engine = new ProductionEngine({
     workspaceRoot: cfg.workspace,

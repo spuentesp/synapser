@@ -6,7 +6,6 @@ import { accessSync, constants, existsSync, mkdirSync } from "node:fs";
 import type { AgentProfile } from "../agents/profile.ts";
 import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
-import { defaultModelConfig } from "../model/config.ts";
 
 export interface Probe {
   /** Resolve a program on PATH; null when absent. */
@@ -77,9 +76,15 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   checks.push({ name: "zoanthrope", ok: Boolean(zoo), detail: zoo ? `${zoo} — ${(await probe.version(zoo, ["--version"])) ?? "?"}` : "set ZOANTHROPE_BIN to the pinned binary" });
   checks.push({ name: "workspace", ok: probe.exists(cfg.workspace), detail: cfg.workspace });
   checks.push({ name: "state dir", ok: probe.writable(cfg.stateDir), detail: cfg.stateDir });
-  const defaults = defaultModelConfig();
-  const hasModelKey = defaults.providers["tokenfactory"]!.apiKeyEnv.some((n) => probe.env(n));
-  checks.push({ name: "model key (Nebius Token Factory)", ok: hasModelKey, detail: hasModelKey ? "set" : "none of NEBIUS_API_KEY / NEBIUS_TOKEN / NEMOTRON_TOKEN is set — Nemotron cannot plan or advise" });
+  // one key check per provider that a system role runs on; each names the roles it serves (plan 14 Q2.3)
+  const servedBy = new Map<string, string[]>();
+  for (const [role, assignment] of Object.entries(cfg.roles)) servedBy.set(assignment.provider, [...(servedBy.get(assignment.provider) ?? []), role]);
+  for (const [providerId, served] of servedBy) {
+    const provider = cfg.providers[providerId]!;
+    const hasKey = provider.apiKeyEnv.some((n) => probe.env(n));
+    checks.push({ name: `model key (${providerId})`, ok: hasKey, detail: hasKey ? "set" : `none of ${provider.apiKeyEnv.join(" / ")} is set — system roles ${served.join(", ")} cannot run` });
+  }
+  const hasModelKey = cfg.providers["tokenfactory"]!.apiKeyEnv.some((n) => probe.env(n));
   const hasSearch = ["TAVILY_API_KEY", "TAVILY_TOKEN"].some((n) => probe.env(n));
   checks.push({ name: "search key (Tavily)", ok: hasSearch, detail: hasSearch ? "set" : "not set — research and pushback are off (never simulated)" });
   checks.push({ name: "commands", ok: cfg.commands.length > 0, detail: cfg.commands.length ? cfg.commands.map((c) => c.id).join(", ") : "no allowlisted commands: `command` conditions cannot be used" });

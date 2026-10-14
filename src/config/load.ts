@@ -5,7 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { PARSERS } from "../agents/usage.ts";
-import { defaultModelConfig, type ProviderConfig, validateProviderConfig } from "../model/config.ts";
+import { defaultModelConfig, type ProviderConfig, type RoleConfig, SYSTEM_ROLES, validateProviderConfig, validateRoleConfig } from "../model/config.ts";
+import type { Role } from "../model/types.ts";
 import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
@@ -15,6 +16,8 @@ export interface SynapserConfig {
   stateDir: string;
   commands: AllowedCommand[];
   providers: Record<string, ProviderConfig>;
+  /** The provider and model each system role (planner, worker, repair, advisor, chat) runs on. */
+  roles: Record<Role, RoleConfig>;
   profiles: AgentProfile[];
   pools: PoolSpec[];
   startRequiresApproval: boolean;
@@ -180,6 +183,34 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     if (!provider) errors.push(`agent "${profile.id}" references unknown provider "${String(profile.provider)}"`);
     else if (!provider.models.some((model) => model.id === profile.model)) errors.push(`agent "${profile.id}" references model "${String(profile.model)}" not declared by provider "${profile.provider}"`);
   }
+
+  // ---- system roles (plan 14 Q2.3): a role that appears in the file replaces its default assignment entirely:
+  // it must state provider AND model, and inherits nothing else (no fallbacks from the default provider)
+  const roles: Record<Role, RoleConfig> = defaultModelConfig().roles;
+  const mentioned = new Set<Role>();
+  if (raw["roles"] !== undefined) {
+    if (!raw["roles"] || typeof raw["roles"] !== "object" || Array.isArray(raw["roles"])) errors.push(`roles must be an object keyed by system role (${SYSTEM_ROLES.join(", ")})`);
+    else {
+      for (const [name, value] of Object.entries(raw["roles"] as Record<string, unknown>)) {
+        if (!(SYSTEM_ROLES as readonly string[]).includes(name)) {
+          errors.push(`roles.${name} is not a system role (${SYSTEM_ROLES.join(", ")})`);
+          continue;
+        }
+        mentioned.add(name as Role);
+        const problems = validateRoleConfig(name, value, providers);
+        if (problems.length) {
+          errors.push(...problems);
+          continue;
+        }
+        const r = value as Partial<RoleConfig>;
+        roles[name as Role] = { provider: r.provider!, model: r.model!, temperature: r.temperature ?? 0, ...(r.fallbacks ? { fallbacks: [...r.fallbacks] } : {}) };
+      }
+    }
+  }
+  // Defaults are checked against the FINAL providers too: redefining a provider must fail at load, not at the first call.
+  for (const role of SYSTEM_ROLES) {
+    if (!mentioned.has(role)) errors.push(...validateRoleConfig(role, roles[role], providers).map((problem) => `${problem} (default assignment; set roles.${role} to change it)`));
+  }
   const pools: PoolSpec[] = [];
   if (raw["pools"] !== undefined) {
     if (!Array.isArray(raw["pools"])) errors.push("pools must be an array");
@@ -260,7 +291,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   };
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, providers, profiles, pools, policy, identity, advisor,
+    workspace, stateDir, commands, providers, roles, profiles, pools, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

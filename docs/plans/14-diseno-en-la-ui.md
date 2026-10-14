@@ -94,6 +94,10 @@ dicen qué hacer y enlazan al diseñador, y la corrida del workflow seleccionado
 - **L3** Editar la biblioteca no cambia un workflow en curso: se congela al iniciar.
 - **L4** Toda edición desde la UI exige token y queda como evento; la configuración inválida se rechaza entera.
 - **L5** Un adaptador solo emite flags que su tabla de capacidades declara (prueba contra `--help` real).
+- **L6** Cada rol del sistema corre sobre el proveedor y el modelo declarados en la configuración final. Un rol
+  que el archivo nombra reemplaza su asignación por defecto por completo: proveedor y modelo son obligatorios y
+  no hereda fallbacks de otro proveedor. Los roles que no nombra conservan su asignación y se validan igual
+  contra los proveedores finales. Un documento inválido se rechaza entero.
 
 Verificación y falsación de la inyección:
 
@@ -111,12 +115,18 @@ Verificación y falsación de la inyección:
   digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
   almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes
   auditados. La exigencia de token y mismo origen se verifica en Q2.6, en el límite HTTP.
+- L6 se verifica en `test/model/system-roles.test.ts`: sin bloque `roles` la configuración equivale a la
+  predeterminada; un rol movido a otro proveedor no hereda fallbacks; un documento con varios problemas los
+  lista todos juntos; redefinir un proveedor que usa un rol por defecto falla al cargar; y un `chat.send` a
+  través de `createRuntime` llega al proveedor configurado, con su modelo, su clave y su tarifa declarada. Se
+  falsa con un runtime que ignora los roles configurados (debe fallar la prueba de extremo a extremo) y con un
+  cargador que omite la validación de asignaciones por defecto (debe fallar la prueba de redefinición).
 
 ## 8. Fases
 
 | Fase | Entrega | Verificación |
 |---|---|---|
 | Q1 | Adaptadores por agente + capacidades + inyección de skills por mecanismo nativo | pruebas por adaptador; L2, L5; corrida real por CLI |
-| Q2 | Biblioteca (proveedores, skills, plantillas, agentes) + API + eventos; roles del sistema asignables a proveedor+modelo | L1, L3, L4 |
+| Q2 | Biblioteca (proveedores, skills, plantillas, agentes) + API + eventos; roles del sistema asignables a proveedor+modelo | L1, L3, L4, L6 |
 | Q3 | Diseñadores de workflow y agente, plantillas integradas, «probar agente» | prueba en navegador real |
 | Q4 | Inicio y estados vacíos | capturas |

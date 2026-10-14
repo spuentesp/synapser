@@ -12,7 +12,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 - Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
   plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
-  Estado al traspaso: 381 pasan, 0 fallan, 8 omitidas. Una tarea no está hecha si baja ese número.
+  Estado al traspaso: 424 pasan, 0 fallan, 9 omitidas (433 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
   (gitignored); **nunca** imprimirlas ni commitearlas; revisar el diff antes de cada commit.
 - Commits: mensaje claro, cuerpo con el porqué, y cerrar con `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -89,9 +89,17 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: ebee726 · prueba: validación acumulada de proveedores, modelos y precios; migración
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
   costo conocido por tarifa declarada y costo desconocido ante tarifa ausente o ambigua; suite completa.
-- [~] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
-  hoy fijos en `defaultModelConfig()`.
-  quién: GPT-5 Codex · desde: 2026-10-14
+- [x] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
+  hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: PENDING · prueba:
+  `test/model/system-roles.test.ts` (sin bloque `roles` = predeterminados; un rol movido no hereda fallbacks;
+  documento inválido con todos sus problemas; redefinir un proveedor usado por un rol por defecto falla al cargar;
+  extremo a extremo por `createRuntime` y `chat.send` contra servidor local: petición, modelo, clave y tarifa;
+  `doctor` revisa la clave de cada proveedor de roles). Falsada con un runtime que ignora los roles y con un
+  cargador sin validación de asignaciones por defecto. Suite completa.
+  nota: en producción `worker` y `repair` no llegan a ninguna llamada. `runMission` siempre recibe
+  `orchestration` y los perfiles nativos llevan proveedor propio (`modelFor`); solo la ruta sin orquestación
+  (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
+  gobernar también los perfiles nativos.
 - [ ] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
 - [ ] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
 - [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
@@ -142,3 +150,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-13 | GPT-5 Codex | Q1.4: adaptador `kimi`; parser de sesión aislado y mecanismo `--skills-dir` declarado. |
 | 2026-10-13 | GPT-5 Codex | Q1.5: adaptador `mimo`; skills nativas confirmadas mediante `skills.paths` en config efímera. |
 | 2026-10-13 | GPT-5 Codex | Q1.6: adaptador `generic-cli`; argv declarativo, parser `plain` y fallback `prompt-prepend`. |
+| 2026-10-14 | Claude Haiku 5.5 | Q2.3 tomada tras el reclamo de GPT-5 Codex (`29ff01e`, sin código). Roles del sistema configurables en `synapser.config.json` y validados enteros; runtime y `doctor` los usan. |
