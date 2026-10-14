@@ -101,7 +101,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
   gobernar también los perfiles nativos.
 - [x] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
-  commit: PENDING · prueba: `test/model/connection.test.ts` (ocho casos: éxito con cabecera y tarifa declarada;
+  commit: 37562e2 · prueba: `test/model/connection.test.ts` (ocho casos: éxito con cabecera y tarifa declarada;
   sin clave no sale ninguna petición; 401 sin eco de la clave; redirección rechazada sin entregar la clave al
   destino; endpoint sin listado; 2xx sin `choices`; error de red solo por nombre; tiempo límite). CLI
   `provider test <id>` probado contra un servidor local: código 0, clave ausente de la salida. No escribe en el
