@@ -164,7 +164,8 @@ function nativeAgent(at: string, id: string, values: Record<string, unknown>, po
 function checkAgent(at: string, profile: AgentProfile, policy: LibraryPolicy): ResolvedAgent {
   const problems = validateProfile(profile).map((p) => `${at}: ${p}`);
   if (profile.provider) {
-    const provider = policy.providers[profile.provider];
+    // an own key only: "constructor" or "__proto__" would otherwise be read from Object.prototype (plan 16 P16.3)
+    const provider = Object.hasOwn(policy.providers, profile.provider) ? policy.providers[profile.provider] : undefined;
     if (!provider) problems.push(`${at}: provider ${profile.provider} is defined neither by the operator's file nor by the library`);
     else if (!provider.models.some((m) => m.id === profile.model)) problems.push(`${at}: model ${profile.model ?? "(missing)"} is not declared by provider ${profile.provider}`);
   }

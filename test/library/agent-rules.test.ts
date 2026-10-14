@@ -160,3 +160,40 @@ describe("libraryPolicyOf: what the operator's file makes a base", () => {
     assert.deepEqual(p.providerKeyEnv, ["K"]);
   });
 });
+
+// P16.3, found by a probe at the trust boundary. JSON.parse makes an own "__proto__" key, which an object literal cannot,
+// and a provider named "constructor" was read from Object.prototype, so the validator threw a TypeError where it should
+// refuse. The documents here come from JSON, as the API's do. Before the fix the provider cases threw instead.
+describe("P16.3: prototype names from JSON are refused, never read as the document's own rules", () => {
+  const policy = libraryPolicyOf({ providers: { "file-p": PROVIDER }, providerKeyEnv: ["LIB_KEY"], profiles: [builtin("nemotron-worker")] });
+  const NATIVE = `"adapter":"native","role":"writer","description":"d","tags":[],"timeoutMs":1000,"model":"m1","provider":"file-p"`;
+  const EXTENDING = `"extends":"nemotron-worker","description":"d","provider":"file-p","model":"m1"`;
+  const check = (id: string, json: string) => validateLibraryDocument("agents", id, JSON.parse(json), policy);
+
+  test("an own __proto__, constructor or toString key is refused, in both variants", () => {
+    for (const [extra, key] of [[`"__proto__":{"argv":["sh"]}`, "__proto__"], [`"constructor":1`, "constructor"], [`"toString":"x"`, "toString"]] as const) {
+      assert.deepEqual(check("lib-n", `{${NATIVE},${extra}}`), [`agents/lib-n: ${key} is not allowed in a native library agent (plan 15 IC1)`]);
+      assert.deepEqual(check("lib-e", `{${EXTENDING},${extra}}`), [`agents/lib-e: ${key} is not allowed in an agent that extends a profile (plan 15 IC1)`]);
+    }
+  });
+
+  test("a base named like a prototype is an unknown base, not a built-in profile", () => {
+    for (const name of ["constructor", "__proto__", "toString"]) {
+      assert.deepEqual(check("lib-e", `{"extends":"${name}","description":"d"}`), [`agents/lib-e: extends ${name}, which is neither a built-in profile nor one of the operator's file`]);
+    }
+  });
+
+  test("a provider named like a prototype is undeclared, and is not read from Object.prototype", () => {
+    for (const name of ["constructor", "__proto__", "toString"]) {
+      // validateProfile reports a name that is not a lowercase slug first; the provider check follows
+      const undeclared = `provider ${name} is defined neither by the operator's file nor by the library`;
+      const slug = /^[a-z0-9][a-z0-9-]{0,63}$/.test(name) ? [] : ["provider must be a lowercase slug"];
+      assert.deepEqual(check("lib-n", `{${NATIVE.replace(`"provider":"file-p"`, `"provider":"${name}"`)}}`), [...slug.map((s) => `agents/lib-n: ${s}`), `agents/lib-n: ${undeclared}`]);
+      assert.deepEqual(check("lib-e", `{${EXTENDING.replace(`"provider":"file-p"`, `"provider":"${name}"`)}}`), [...slug.map((s) => `agents/lib-e: ${s}`), `agents/lib-e: ${undeclared}`]);
+    }
+  });
+
+  test("a model named like a prototype is not declared by the provider", () => {
+    assert.deepEqual(check("lib-n", `{${NATIVE.replace(`"model":"m1"`, `"model":"constructor"`)}}`), ["agents/lib-n: model constructor is not declared by provider file-p"]);
+  });
+});
