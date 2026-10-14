@@ -154,8 +154,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: f5cc434 · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
   una llamada con tarifa suma en USD y una sin tarifa se cuenta aparte, nunca como cero) y navegador real: captura
   `home.png` en `evidence/`. Suite completa.
-- [~] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
-  Costo, Coordinación, Aprobaciones, Integridad). commit: PENDING · prueba: navegador real en un directorio de estado
+- [x] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
+  Costo, Coordinación, Aprobaciones, Integridad). commit: f5cc434 · prueba: navegador real en un directorio de estado
   vacío: las vistas por corrida dicen qué hacer y ofrecen el diseñador (`empty-swarm.png` en `evidence/`). Al probar
   se encontró que sin corridas las vistas quedaban en esqueletos para siempre; corregido en el estado de carga del
   hook. Suite completa.
