@@ -66,7 +66,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: 6386db6. Prueba: sustitución argv sin shell,
   parser `plain`, validación de perfil y suite completa verdes.
 - [x] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
-  en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2. commit: 0000000 · prueba:
+  en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2. commit: 41a06a2 · prueba:
   suite completa; falsación de procedencia/digest/rutas y de ampliación de permisos; corrida del runner
   con archivo de skill en HOME efímero y auditoría en fila + evento.
 - [ ] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
