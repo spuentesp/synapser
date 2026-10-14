@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { call, ScriptedModel } from "../agent/scripted.ts";
 import type { ProfileCard } from "../../src/orchestration/catalog.ts";
 import { Journal } from "../../src/journal/journal.ts";
+import { sha256Bytes } from "../../src/digest/file.ts";
 import { LibraryStore } from "../../src/library/store.ts";
 import { ProductionEngine } from "../../src/workflow/engine.ts";
 import { type Actor, WorkflowManager } from "../../src/workflow/manager.ts";
@@ -18,6 +19,7 @@ import { BASELINE } from "../executor/env.ts";
 
 const OP: Actor = { id: "ana", role: "operator" };
 const KEY = "LIB_E2E_KEY";
+const SKILL_TEXT = "Review the change against the house style: short sentences, no jargon.";
 
 /** A stand-in for an OpenAI-compatible endpoint. It answers every request with a finish call and keeps what it was asked. */
 async function endpoint(summary: string): Promise<{ url: string; requests: string[]; close: () => Promise<void> }> {
@@ -82,9 +84,11 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     lib.put("providers", "lib-provider", provider(answers.url), OP.id);
     lib.put("agents", "lib-reviewer", { adapter: "native", description: "reviews the change", role: "advisor", tags: ["review"], timeoutMs: 120_000, provider: "lib-provider", model: "lib-model" }, OP.id);
 
+    lib.put("skills", "style-guide", { id: "style-guide", name: "style-guide", description: "how to review", content: SKILL_TEXT }, OP.id);
+
     let plannerSaw: string[] = [];
     const engine = new ProductionEngine({
-      workspaceRoot: ws, stateDir: state, commands: [], profiles: [], providerKeyEnv: [KEY],
+      workspaceRoot: ws, stateDir: state, commands: [], profiles: [], providerKeyEnv: [KEY], agentSkills: { "lib-reviewer": ["style-guide"] },
       models: () => new ScriptedModel(() => ({ calls: [call("finish", { summary: "nothing to do" })] })),
       planner: async (_w, catalog: ProfileCard[]) => {
         plannerSaw = catalog.map((c) => c.id);
@@ -120,6 +124,11 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
 
     assert.ok(plannerSaw.includes("lib-reviewer"), `the planner's catalog lacks the library agent: ${plannerSaw.join(", ")}`);
     assert.ok(answers.requests.some((r) => r.includes("judge the change")), "the review did not reach the endpoint the snapshot names");
+    assert.ok(answers.requests.some((r) => r.includes(SKILL_TEXT)), "the library skill did not reach the endpoint the snapshot names");
+    // the run records the skill it used: its id, the digest of its bytes and the mechanism (plan 14 Q5.4)
+    const reviews = mgr.journalOf("wf-library")?.listAgentRuns().filter((r) => r.profileId === "lib-reviewer") ?? [];
+    assert.ok(reviews.length > 0, "the library reviewer left no run record");
+    assert.deepEqual(reviews.at(-1)?.skills, [{ id: "style-guide", digest: sha256Bytes(Buffer.from(SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
     assert.equal(after.requests.length, 0, "an edit made after the snapshot redirected the run");
     assert.equal(later.requests.length, 0, "an edit made while planning redirected the run");
   });

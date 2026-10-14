@@ -12,6 +12,7 @@ import { runAgent } from "./runner.ts";
 import type { LoopLimits } from "../agent/loop.ts";
 import { unknownUsage, type UsageRecord } from "./usage.ts";
 import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
+import { prependSkills, validateInjectedSkills } from "./skills.ts";
 
 // ---- cli-oneshot -----------------------------------------------------------------------------
 
@@ -45,6 +46,7 @@ export class CliOneShotRunner implements AgentRunner {
       journal: req.journal,
       generation: req.generation,
       adapter: this.#cliAdapter,
+      ...(req.injectedSkills ? { injectedSkills: req.injectedSkills } : {}),
     });
     return {
       agentRunId: r.agentRunId,
@@ -91,6 +93,9 @@ export class NativeLoopRunner implements AgentRunner {
     const baseDigest = treeDigest(req.workspaceRoot);
     const role = req.profile.nativeRole ?? "worker";
 
+    // plan 14 Q5.4: library skills reach the native loop by prompt-prepend; their provenance and digests are checked first (L1)
+    const injected = req.injectedSkills ?? { skills: [] };
+    const skills = validateInjectedSkills(injected, "prompt-prepend");
     const r = await runTask(
       {
         model: this.#modelFor?.(req.profile) ?? this.#model,
@@ -108,7 +113,7 @@ export class NativeLoopRunner implements AgentRunner {
       },
       {
         taskId: req.task.taskId,
-        objective: req.task.objective + (req.extraPrompt ? `\n\n${req.extraPrompt}` : ""),
+        objective: prependSkills(req.task.objective + (req.extraPrompt ? `\n\n${req.extraPrompt}` : ""), injected.skills),
         scope: req.task.scope,
         criteria: req.task.criteria,
         ...(req.task.context ? { context: req.task.context } : {}),
@@ -159,7 +164,7 @@ export class NativeLoopRunner implements AgentRunner {
         turns: usage.turns, apiMs: null, networkIsolated: false, permissionDenials: null,
         promptBlob: null, stdoutBlob: null, stderrBlob: null, finalTextBlob: null,
         toolUse: Object.keys(toolUse).length ? toolUse : null,
-        skills: [],
+        skills,
         changes: applied.flatMap((a) => journal.getActionFiles(a.actionId).map((f) => ({ path: f.path, op: f.op, beforeDigest: f.beforeDigest, afterDigest: f.afterDigest }))),
       }),
     );

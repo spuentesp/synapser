@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import type { AgentProfile } from "../../src/agents/profile.ts";
 import type { ProviderConfig } from "../../src/model/config.ts";
 import { type OperatorFile, LibraryRunError, resolveLibrary, runLibrary } from "../../src/library/resolve.ts";
+import { sha256Bytes } from "../../src/digest/file.ts";
 import type { FrozenLibrary } from "../../src/library/store.ts";
 import type { EngineRun } from "../../src/workflow/manager.ts";
 import { ProductionEngine } from "../../src/workflow/engine.ts";
@@ -19,7 +20,7 @@ const fileOff: AgentProfile = { ...fileNative, id: "file-off", enabled: false };
 
 const file: OperatorFile = { providers: { "file-provider": FILE_PROVIDER }, profiles: [fileNative, filePooled, fileOff], providerKeyEnv: ["LIB_KEY"] };
 
-type Doc = { kind: "providers" | "agents"; id: string; document: Record<string, unknown> };
+type Doc = { kind: "providers" | "agents" | "skills"; id: string; document: Record<string, unknown> };
 function snapshot(docs: Doc[]): FrozenLibrary {
   return {
     entries: docs.map((d) => ({ kind: d.kind, id: d.id, digest: "sha256:0" as FrozenLibrary["entries"][number]["digest"] })),
@@ -105,6 +106,60 @@ describe("the library a run reads (plan 14 Q5.1)", () => {
     assert.ok(view.profiles.some((p) => p.id === "ok-agent"));
     assert.ok(!view.profiles.some((p) => p.id === "bad-agent"));
     assert.equal(view.problems.length, 1);
+  });
+});
+
+describe("library skills in a run (plan 14 Q5.4)", () => {
+  const STYLE = "Write short sentences, and no jargon.";
+  const withSkill = (agentSkills: Record<string, string[]>): OperatorFile => ({ ...file, agentSkills });
+  const agentDoc = { extends: "file-native", description: "tuned", temperature: 0.3 };
+  const skillDoc = (content: string) => ({ id: "style", name: "style", description: "house style", content });
+
+  test("a skill the operator's file assigns to an agent enters its run, with the digest of its bytes (L1)", () => {
+    const view = runLibrary(withSkill({ "lib-tuned": ["style"] }), snapshot([
+      { kind: "agents", id: "lib-tuned", document: agentDoc },
+      { kind: "skills", id: "style", document: skillDoc(STYLE) },
+    ]));
+    assert.deepEqual(view.skillsFor.get("lib-tuned"), [
+      { id: "style", digest: sha256Bytes(Buffer.from(STYLE, "utf8")), content: STYLE, source: "library" },
+    ]);
+  });
+
+  test("an agent the file does not assign a skill to receives none", () => {
+    const view = runLibrary(withSkill({}), snapshot([{ kind: "agents", id: "lib-tuned", document: agentDoc }]));
+    assert.equal(view.skillsFor.get("lib-tuned"), undefined);
+  });
+
+  test("a skill the file names but the library does not hold refuses the run, naming the agent and the skill", () => {
+    assert.throws(
+      () => runLibrary(withSkill({ "lib-tuned": ["style"] }), snapshot([{ kind: "agents", id: "lib-tuned", document: agentDoc }])),
+      (e: unknown) => e instanceof LibraryRunError && e.message.includes("agentSkills.lib-tuned: skill style is not in this run's library"),
+    );
+  });
+
+  test("a skill over the size limit refuses the run (64 KiB, as the library rules say)", () => {
+    assert.throws(
+      () => runLibrary(withSkill({ "lib-tuned": ["style"] }), snapshot([
+        { kind: "agents", id: "lib-tuned", document: agentDoc },
+        { kind: "skills", id: "style", document: skillDoc("x".repeat(64 * 1024 + 1)) },
+      ])),
+      /content is larger than/,
+    );
+  });
+
+  test("more than five skills for one agent is refused (decision D6)", () => {
+    const ids = ["a", "b", "c", "d", "e", "f"];
+    assert.throws(
+      () => runLibrary(withSkill({ "lib-tuned": ids }), snapshot([{ kind: "agents", id: "lib-tuned", document: agentDoc }])),
+      /at most 5 skills per agent/,
+    );
+  });
+
+  test("an agent the file names must be a profile of the operator's file or of the library", () => {
+    assert.throws(
+      () => runLibrary(withSkill({ ghost: ["style"] }), snapshot([{ kind: "skills", id: "style", document: skillDoc(STYLE) }])),
+      /agentSkills: ghost is not a profile/,
+    );
   });
 });
 

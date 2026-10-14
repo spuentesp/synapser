@@ -1,23 +1,33 @@
-// What a run reads from the library (plan 14 Q5.1). A run uses its snapshot (L3) and the operator's file, nothing else.
-// The snapshot is checked under the operator's file as it stands now, so a document the file no longer accepts refuses
-// the run whole, with every reason. Skills and templates are not read until Q5.4 consumes them.
+// What a run reads from the library (plan 14 Q5.1 and Q5.4). A run uses its snapshot (L3) and the operator's file, nothing
+// else. The snapshot is checked under the operator's file as it stands now, so a document the file no longer accepts
+// refuses the run whole, with every reason. A skill enters a run only where the operator's file assigns it to an agent
+// (decision D6), as a library document, with the digest of its bytes (L1).
 
+import type { InjectedSkill } from "../agents/adapter.ts";
 import type { AgentProfile } from "../agents/profile.ts";
+import { sha256Bytes } from "../digest/file.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import type { FrozenLibrary, LibraryEntry, LibraryStore } from "./store.ts";
 import { libraryPolicyOf, resolveAgent, validateLibraryDocument } from "./validate.ts";
+
+/** At most this many library skills per agent (decision D6). */
+const MAX_SKILLS_PER_AGENT = 5;
 
 /** What the operator's file contributes to every run. */
 export interface OperatorFile {
   providers: Record<string, ProviderConfig>;
   profiles: AgentProfile[];
   providerKeyEnv?: readonly string[];
+  /** The library skills each agent receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
+  agentSkills?: Record<string, readonly string[]>;
 }
 
-/** The providers and agents one view of the library yields, and the problems that keep documents out of it. */
+/** The providers, agents and skills one view of the library yields, and the problems that keep documents out of it. */
 export interface LibraryView {
   providers: Record<string, ProviderConfig>;
   profiles: AgentProfile[];
+  /** The skills each agent receives in this run, each with the digest of its bytes (plan 14 Q5.4). */
+  skillsFor: Map<string, InjectedSkill[]>;
   problems: string[];
 }
 
@@ -33,15 +43,15 @@ export class LibraryRunError extends Error {
 
 /** Resolves a view of the library against the operator's file. A problem never stops it: the document is left out. */
 export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undefined): LibraryView {
-  if (!source) return { providers: file.providers, profiles: file.profiles, problems: [] };
   const base = libraryPolicyOf({ providers: file.providers, providerKeyEnv: file.providerKeyEnv ?? [], profiles: file.profiles });
   const problems: string[] = [];
   // providers first: an agent may name only a provider that is itself valid
   const libraryProviders: Record<string, ProviderConfig> = {};
   const agents: { id: string; document: Record<string, unknown> }[] = [];
-  for (const entry of source.entries) {
-    if (entry.kind !== "providers" && entry.kind !== "agents") continue;
-    const document = source.get(entry.kind, entry.id);
+  const skillDocs = new Map<string, Record<string, unknown>>();
+  for (const entry of source?.entries ?? []) {
+    if (entry.kind !== "providers" && entry.kind !== "agents" && entry.kind !== "skills") continue;
+    const document = source?.get(entry.kind, entry.id);
     if (!document) {
       problems.push(`${entry.kind}/${entry.id}: not in this view of the library`);
       continue;
@@ -50,8 +60,10 @@ export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undef
       const found = validateLibraryDocument("providers", entry.id, document, base);
       problems.push(...found);
       if (found.length === 0) libraryProviders[entry.id] = document as unknown as ProviderConfig;
-    } else {
+    } else if (entry.kind === "agents") {
       agents.push({ id: entry.id, document: document as Record<string, unknown> });
+    } else {
+      skillDocs.set(entry.id, document as Record<string, unknown>);
     }
   }
   const policy = libraryPolicyOf({ providers: file.providers, providerKeyEnv: file.providerKeyEnv ?? [], profiles: file.profiles }, libraryProviders);
@@ -64,7 +76,36 @@ export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undef
       if (profile) profiles.push(profile);
     }
   }
-  return { providers: { ...policy.providers }, profiles: [...file.profiles, ...profiles], problems };
+  const allProfiles = [...file.profiles, ...profiles];
+  // skills: only the agents the operator's file names receive one, and only a skill this run's library holds, valid, with
+  // the digest of its bytes (L1)
+  const skillsFor = new Map<string, InjectedSkill[]>();
+  for (const [agentId, skillIds] of Object.entries(file.agentSkills ?? {})) {
+    if (!allProfiles.some((p) => p.id === agentId)) {
+      problems.push(`agentSkills: ${agentId} is not a profile of the operator's file or of the library`);
+      continue;
+    }
+    if (skillIds.length > MAX_SKILLS_PER_AGENT) {
+      problems.push(`agentSkills.${agentId}: at most ${MAX_SKILLS_PER_AGENT} skills per agent (decision D6)`);
+      continue;
+    }
+    const injected: InjectedSkill[] = [];
+    for (const skillId of skillIds) {
+      const document = skillDocs.get(skillId);
+      if (!document) {
+        problems.push(`agentSkills.${agentId}: skill ${skillId} is not in this run's library`);
+        continue;
+      }
+      const found = validateLibraryDocument("skills", skillId, document);
+      problems.push(...found);
+      if (found.length === 0) {
+        const content = document["content"] as string;
+        injected.push({ id: skillId, digest: sha256Bytes(Buffer.from(content, "utf8")), content, source: "library" });
+      }
+    }
+    skillsFor.set(agentId, injected);
+  }
+  return { providers: { ...policy.providers }, profiles: allProfiles, skillsFor, problems };
 }
 
 /** The view a run uses. A library that does not hold under the operator's file refuses the run whole. */

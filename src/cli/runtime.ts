@@ -34,6 +34,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     profiles: cfg.profiles,
     providers: cfg.providers,
     providerKeyEnv: cfg.providerKeyEnv,
+    agentSkills: cfg.agentSkills,
     models: (journal) => new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(journal, systemPrice) }),
     ...(cfg.research ? { research: (journal: Journal, runId: string) => new ResearchSession({ port: researchFromEnv(), journal, runId, guard: new QueryGuard(cfg.workspace) }) } : {}),
     knownUsdPerRun: cfg.knownUsdPerRun,

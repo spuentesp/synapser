@@ -84,8 +84,9 @@ Runs read the library. A run takes the providers and agents as they are when it 
 configuration file as it stands, and does not start if any of them no longer holds, with every reason. A library agent
 either extends a built-in or file profile and changes a few of its fields (never its commands, its home or its
 permissions), or is a native agent with its own provider and model. A workflow whose reviews name an agent the library
-does not hold fails at its start, with the reason. Skills from the library are not attached to agents yet: that waits
-for the user's decision D6 (plan 15). The system roles (planner, advisor, chat, worker, repair) are still assigned in
+does not hold fails at its start, with the reason. Library skills reach an agent when the configuration file lists them under `agentSkills` (at most five per agent).
+The file decides which skill each agent gets; the library only supplies the text, and the run records its digest
+(decision D6, plan 15). The system roles (planner, advisor, chat, worker, repair) are still assigned in
 `synapser.config.json` under `roles`, and `synapser provider test <id>` checks a configured provider from the terminal.
 
 ## Layout

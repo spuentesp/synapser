@@ -18,6 +18,8 @@ export interface SynapserConfig {
   providers: Record<string, ProviderConfig>;
   /** Environment variable names a LIBRARY provider may name as its key (P15 IC2). Empty by default; only this file grows it. */
   providerKeyEnv: string[];
+  /** The library skills each agent id receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
+  agentSkills: Record<string, string[]>;
   /** The provider and model each system role (planner, worker, repair, advisor, chat) runs on. */
   roles: Record<Role, RoleConfig>;
   profiles: AgentProfile[];
@@ -298,9 +300,23 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     if (!Array.isArray(raw["providerKeyEnv"]) || raw["providerKeyEnv"].some((n) => typeof n !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(n))) errors.push("providerKeyEnv must be a list of environment variable names");
     else providerKeyEnv.push(...new Set(raw["providerKeyEnv"] as string[]));
   }
+  // plan 14 Q5.4 (decision D6): the operator's file decides which library skills each agent receives, at most five each
+  const agentSkills: Record<string, string[]> = {};
+  if (raw["agentSkills"] !== undefined) {
+    const map = raw["agentSkills"];
+    if (!map || typeof map !== "object" || Array.isArray(map)) errors.push("agentSkills must be an object from agent id to a list of skill ids");
+    else {
+      for (const [agent, ids] of Object.entries(map as Record<string, unknown>)) {
+        if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(agent)) errors.push(`agentSkills: ${agent} is not an agent id`);
+        if (!Array.isArray(ids) || ids.some((x) => typeof x !== "string" || !/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(x))) errors.push(`agentSkills.${agent} must be a list of skill ids`);
+        else if (ids.length > 5) errors.push(`agentSkills.${agent}: at most 5 skills per agent (decision D6)`);
+        else agentSkills[agent] = [...new Set(ids as string[])];
+      }
+    }
+  }
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, providers, roles, providerKeyEnv, profiles, pools, policy, identity, advisor,
+    workspace, stateDir, commands, providers, roles, providerKeyEnv, agentSkills, profiles, pools, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

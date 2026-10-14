@@ -48,6 +48,8 @@ export interface EngineConfig {
   providers?: Record<string, ProviderConfig>;
   /** Key variable names library providers may use (plan 15 IC2), from the operator's file. Empty by default. */
   providerKeyEnv?: readonly string[];
+  /** The library skills each agent id receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
+  agentSkills?: Record<string, readonly string[]>;
   /** One model port per run (so calls are recorded in THAT run's journal). */
   models: (journal: Journal) => ModelPort;
   research?: (journal: Journal, runId: string) => ResearchSession | undefined;
@@ -78,7 +80,7 @@ export class ProductionEngine implements WorkflowEngine {
     // does not hold stops here, before it takes the workspace lock.
     let library: LibraryView;
     try {
-      library = runLibrary({ providers: c.providers ?? defaultModelConfig().providers, profiles: c.profiles, ...(c.providerKeyEnv ? { providerKeyEnv: c.providerKeyEnv } : {}) }, r.library);
+      library = runLibrary({ providers: c.providers ?? defaultModelConfig().providers, profiles: c.profiles, ...(c.providerKeyEnv ? { providerKeyEnv: c.providerKeyEnv } : {}), ...(c.agentSkills ? { agentSkills: c.agentSkills } : {}) }, r.library);
     } catch (e) {
       if (e instanceof LibraryRunError) return { status: "FAILED", reason: e.message };
       throw e;
@@ -131,7 +133,7 @@ export class ProductionEngine implements WorkflowEngine {
         }
         return m;
       };
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(GENERIC_CLI_ADAPTER), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)]);
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(GENERIC_CLI_ADAPTER), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)], { skillsFor: (profileId) => library.skillsFor.get(profileId) ?? [] });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

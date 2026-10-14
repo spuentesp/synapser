@@ -11,6 +11,7 @@
 //   orca         (future) workers driven through Orca's orchestration; same contract
 // The ledger row (`agent_runs`) is written by the implementation and has the same fields for all.
 
+import type { InjectedSkill, InjectedSkills } from "./adapter.ts";
 import type { Executor } from "../executor/executor.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
@@ -39,6 +40,8 @@ export interface AgentRunRequest {
   executor: Executor;
   generation: number;
   budget?: BudgetManager;
+  /** The library skills this agent receives in this run (plan 14 Q5.4); each runner checks their provenance. */
+  injectedSkills?: InjectedSkills;
   deadlineMs?: number;
   /** Native agents may ask for subtasks through this port; CLI agents have no such tool. */
   delegation?: import("../orchestration/delegation.ts").DelegationPort;
@@ -74,18 +77,27 @@ export interface AgentRunner {
   run(req: AgentRunRequest): Promise<AgentRunOutput>;
 }
 
+export interface RegistryOptions {
+  /** The library skills a profile's agents receive in this run (plan 14 Q5.4). */
+  skillsFor?: (profileId: string) => readonly InjectedSkill[];
+}
+
 export class AgentRunnerRegistry {
   readonly #by = new Map<AdapterId, AgentRunner>();
-  constructor(runners: readonly AgentRunner[]) {
+  readonly #skillsFor: ((profileId: string) => readonly InjectedSkill[]) | undefined;
+  constructor(runners: readonly AgentRunner[], options: RegistryOptions = {}) {
     for (const r of runners) {
       if (this.#by.has(r.adapter)) throw new Error(`duplicate runner for adapter ${r.adapter}`);
       this.#by.set(r.adapter, r);
     }
+    this.#skillsFor = options.skillsFor;
   }
   for(profile: AgentProfile): AgentRunner {
     const r = this.#by.get(adapterOf(profile));
     if (!r) throw new Error(`no runner registered for adapter "${adapterOf(profile)}" (profile ${profile.id})`);
-    return r;
+    const skillsFor = this.#skillsFor;
+    if (!skillsFor) return r;
+    return { adapter: r.adapter, run: (req) => r.run({ ...req, injectedSkills: { skills: skillsFor(req.profile.id) } }) };
   }
   adapters(): AdapterId[] {
     return [...this.#by.keys()];
