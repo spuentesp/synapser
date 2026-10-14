@@ -17,7 +17,7 @@ muestra es una consulta sobre el ledger y cita los eventos que la sustentan.** N
 
 ## 2. Arquitectura
 
-Aplicación web servida por un `http` de Node **sin dependencias de servidor** (mismo criterio que el resto:
+Aplicación web en **React + Tailwind + shadcn/ui** (decisión del 13 oct; el mismo stack de los demás proyectos), servida por un `http` de Node **sin dependencias de servidor** (mismo criterio que el resto:
 superficie mínima), más una API JSON delgada que solo proyecta `src/audit/*`. Sin framework de
 estado en el cliente: la fuente es el servidor. SSE para el flujo vivo.
 
@@ -74,3 +74,14 @@ deslizador. `scripts/demo.ts` levanta una misión determinista completa con la i
 
 Pruebas: contrato de la API (U1–U5, SSE, entradas hostiles) y la interfaz en un navegador real por
 CDP (render, clic en *Aprobar* ⇒ evento en el ledger con actor, texto hostil inerte).
+
+### Cambio de stack (13 oct)
+
+La primera versión de la interfaz (JS sin dependencias) se reemplazó por **React 19 + Vite +
+Tailwind 4 + shadcn/ui** (variante base-ui) en `web/`. El servidor y los invariantes U1–U5 no
+cambian: la app es un artefacto de compilación (`web/dist`) que `src/api/server.ts` sirve con la misma
+CSP estricta; el núcleo conserva cero dependencias de ejecución. Comandos: `npm run web:install`,
+`npm run web:build`, `npm run web:dev` (proxy de `/api`). Estados de misión con tokens semánticos
+(`--status-*`) definidos en el CSS global, según las reglas del skill de shadcn. Skills instalados para
+el stack en `.claude/skills` (shadcn/ui oficial, Vercel react-best-practices y composition-patterns,
+Tailwind v4 comunitario), con `skills-lock.json` fijando sus hashes.

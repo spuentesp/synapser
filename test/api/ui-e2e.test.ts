@@ -2,7 +2,7 @@
 // clicking "Approve" records an approval on the ledger with the actor. Skipped without a browser.
 
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +23,12 @@ const findChrome = (): string | null => {
   return null;
 };
 const CHROME = findChrome();
+
+// The app is a build artifact (web/dist). Build it on demand when its dependencies are installed.
+const WEB = new URL("../../web/", import.meta.url).pathname;
+const built = (): boolean => existsSync(join(WEB, "dist/index.html"));
+if (!built() && existsSync(join(WEB, "node_modules"))) spawnSync("npm", ["--prefix", WEB, "run", "build"], { stdio: "ignore" });
+const BUILT = built();
 
 class Cdp {
   #ws: WebSocket;
@@ -67,7 +73,7 @@ class Cdp {
   }
 }
 
-describe("UI in a real browser", { skip: CHROME ? false : "no Chromium found (set CHROME_BIN)" }, () => {
+describe("UI in a real browser", { skip: !CHROME ? "no Chromium found (set CHROME_BIN)" : !BUILT ? "web app not built (npm --prefix web install && npm --prefix web run build)" : false }, () => {
   let env: Env;
   let api: ApiServer;
   let base: string;
@@ -105,11 +111,11 @@ describe("UI in a real browser", { skip: CHROME ? false : "no Chromium found (se
 
   test("renders the swarm, shows the gate, and Approve records the decision with the actor", async () => {
     await cdp.send("Page.navigate", { url: `${base}/#swarm` });
-    await cdp.waitFor(`document.querySelectorAll('.card').length >= 3`);
-    const titles = await cdp.eval<string[]>(`[...document.querySelectorAll('.card .title')].map(e => e.textContent)`);
+    await cdp.waitFor(`document.querySelectorAll('[data-testid="agent-card"]').length >= 3`);
+    const titles = await cdp.eval<string[]>(`[...document.querySelectorAll('[data-testid="agent-card"]')].map(e => e.dataset.task)`);
     assert.ok(titles.length >= 3, titles.join(","));
-    assert.equal(await cdp.eval<boolean>(`document.querySelector('.integrity').classList.contains('ok')`), true, "chain badge is green");
-    assert.equal(await cdp.eval<string>(`document.querySelector('.nav .count')?.textContent`), "1", "one pending approval is advertised");
+    assert.equal(await cdp.eval<boolean>(`document.querySelector('[data-testid="integrity"]').dataset.ok === 'true'`), true, "chain badge is green");
+    assert.equal(await cdp.eval<string>(`document.querySelector('[data-view="approvals"] [data-slot="badge"]')?.textContent`), "1", "one pending approval is advertised");
 
     // no script or style injection is possible through ledger text: the page has a strict CSP
     const csp = (await fetch(`${base}/`)).headers.get("content-security-policy");
@@ -117,22 +123,23 @@ describe("UI in a real browser", { skip: CHROME ? false : "no Chromium found (se
 
     await cdp.eval(`document.querySelector('[data-view="approvals"]').click()`);
     await cdp.waitFor(`document.querySelector('[data-decide="APPROVED"]')`);
-    await cdp.eval(`document.querySelector('#actor').value = 'e2e-tester'`);
+    // type like a user: React's controlled input listens to a real input event
+    await cdp.eval(`(() => { const el = document.querySelector('#actor'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'e2e-tester'); el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await cdp.eval(`document.querySelector('[data-decide="APPROVED"]').click()`);
-    await cdp.waitFor(`document.querySelector('.empty') && document.querySelector('.empty').textContent.length > 0 && !document.querySelector('[data-decide]')`);
+    await cdp.waitFor(`!document.querySelector('[data-decide]') && document.querySelector('[data-testid="decide-msg"]')`);
 
     const ev = env.journal.listEvents().filter((e) => e.entity === "approval" && e.entityId === "deploy");
     assert.deepEqual(ev.map((e) => e.toState), ["PENDING", "APPROVED"]);
     assert.equal((ev[1]!.data as { actor: string }).actor, "e2e-tester");
-    assert.equal(await cdp.eval<string | null>(`document.querySelector('.nav .count')?.textContent ?? null`), null, "the badge clears");
+    assert.equal(await cdp.eval<string | null>(`document.querySelector('[data-view="approvals"] [data-slot="badge"]')?.textContent ?? null`), null, "the badge clears");
   });
 
   test("hostile text in the ledger is rendered as text, never as markup", async () => {
     env.journal.tx((t) => t.event(RUN, "alert", "<img src=x onerror=window.__pwned=1>", null, "COST_UNKNOWN", { profile: "<script>window.__pwned=1</script>" }));
     await cdp.send("Page.navigate", { url: `${base}/#timeline` });
-    await cdp.waitFor(`document.querySelectorAll('.table tbody tr').length > 3`);
+    await cdp.waitFor(`document.querySelectorAll('table tbody tr').length > 3`);
     assert.equal(await cdp.eval<unknown>(`window.__pwned`), undefined);
-    assert.equal(await cdp.eval<number>(`document.querySelectorAll('.view img, .view script').length`), 0);
-    assert.match(await cdp.eval<string>(`document.querySelector('.view').textContent`), /<img src=x/);
+    assert.equal(await cdp.eval<number>(`document.querySelectorAll('main img, main script').length`), 0);
+    assert.match(await cdp.eval<string>(`document.querySelector('main').textContent`), /<img src=x/);
   });
 });

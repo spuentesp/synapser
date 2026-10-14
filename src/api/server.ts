@@ -13,7 +13,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { join, normalize, resolve } from "node:path";
+import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify, waste, whoChanged, why } from "../audit/queries.ts";
 import { swarmState } from "../audit/state.ts";
@@ -22,8 +22,11 @@ import { currentPlanDigest, decideApproval, pendingApprovals } from "../orchestr
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const TASK_ID = /^[A-Za-z0-9._-]{1,80}$/;
-const UI_DIR = fileURLToPath(new URL("../ui/", import.meta.url));
-const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
+const DEFAULT_UI_DIR = fileURLToPath(new URL("../../web/dist/", import.meta.url));
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml", ".woff2": "font/woff2", ".json": "application/json; charset=utf-8", ".map": "application/json",
+};
 const MAX_EVIDENCE = 40;
 
 export interface ApiOptions {
@@ -34,6 +37,8 @@ export interface ApiOptions {
   journals?: Map<string, Journal>;
   /** Poll period of the SSE stream, ms. */
   ssePollMs?: number;
+  /** Directory of the built web app (default: web/dist). */
+  uiDir?: string;
 }
 
 export interface ApiServer {
@@ -54,6 +59,7 @@ export function createApi(opts: ApiOptions): ApiServer {
   const token = opts.token ?? randomBytes(16).toString("hex");
   const own = new Map<string, Journal>();
   const stateDir = resolve(opts.stateDir);
+  const uiDir = resolve(opts.uiDir ?? DEFAULT_UI_DIR) + sep;
 
   const journalFor = (id: string): Journal | null => {
     const held = opts.journals?.get(id);
@@ -121,18 +127,24 @@ export function createApi(opts: ApiOptions): ApiServer {
 
     // ---- static UI ----
     if (method === "GET" && !path.startsWith("/api/")) {
+      if (!existsSync(join(uiDir, "index.html"))) {
+        return fail(res, 503, "UI_NOT_BUILT", "run `npm --prefix web install && npm --prefix web run build`");
+      }
       const rel = path === "/" ? "index.html" : path.slice(1);
-      const abs = normalize(join(UI_DIR, rel));
-      if (!abs.startsWith(UI_DIR) || !existsSync(abs) || !statSync(abs).isFile()) return fail(res, 404, "NOT_FOUND");
-      const ext = abs.slice(abs.lastIndexOf("."));
+      const abs = normalize(join(uiDir, rel));
+      // a single-page app: unknown paths without an extension fall back to the shell
+      const fallback = !abs.startsWith(uiDir) ? null : !existsSync(abs) && !/\.[a-z0-9]+$/i.test(rel) ? join(uiDir, "index.html") : abs;
+      if (!fallback || !existsSync(fallback) || !statSync(fallback).isFile()) return fail(res, 404, "NOT_FOUND");
+      const file = fallback;
+      const ext = file.slice(file.lastIndexOf("."));
       res.writeHead(200, {
         "content-type": MIME[ext] ?? "application/octet-stream",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         // no inline script, no third-party origin: the page can only talk to its own server
-        "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
+        "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'",
       });
-      return void res.end(readFileSync(abs));
+      return void res.end(readFileSync(file));
     }
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);

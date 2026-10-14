@@ -8,3 +8,6 @@ evidence/
 !.env.example
 .lain/
 __pycache__/
+web/node_modules/
+web/dist/
+*.tsbuildinfo

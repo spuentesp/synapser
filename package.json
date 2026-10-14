@@ -9,6 +9,10 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "web:install": "npm --prefix web install",
+    "web:build": "npm --prefix web run build",
+    "web:dev": "npm --prefix web run dev",
+    "demo": "node scripts/demo.ts",
     "test": "node --test --test-reporter=spec \"test/**/*.test.ts\"",
     "gate:g0": "node scripts/gate-g0.ts",
     "test:live": "node --env-file=.env --test --test-reporter=spec \"test/live/**/*.test.ts\""
