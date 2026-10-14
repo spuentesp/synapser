@@ -205,6 +205,14 @@ export class WorkflowManager {
     return { ok: true, id: v.workflow.id };
   }
 
+  /** Validate a draft exactly as create() would, and write nothing: the designer's live check (plan 14 Q3.1). */
+  check(input: unknown): { ok: true } | { ok: false; errors: string[] } {
+    const raw = { ...(input as Record<string, unknown>) };
+    if (raw["id"] === undefined) raw["id"] = "draft";
+    const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...(this.#o.profileIds ? { profileIds: this.#o.profileIds } : {}) });
+    return v.ok ? { ok: true } : { ok: false, errors: v.errors };
+  }
+
   /** Changing conditions is a REVISION (C2): allowed until the workflow is terminal; the next DONE must
    *  be judged against it (the engine reads the current revision on every evaluation round). */
   edit(id: string, input: unknown, actor: Actor): Result<{ revision: number }> {

@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Play, Square } from 'lucide-react'
+import { Pencil, Play, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Empty, ErrorNote } from './common'
+import { WorkflowDesigner, type WorkflowDoc } from './workflow-designer'
 
 interface Item { id: string; title: string; state: string; revision: number; reason: string | null }
 interface Detail {
   id: string; state: string; reason: string | null; revision: number
-  workflow: { title: string; description: string; goals: string[] }
+  workflow: WorkflowDoc
   conditions: { id: string; statement: string; required: boolean; status: string; evidence: string | null; detail: string | null }[]
 }
 const STATE_TONE: Record<string, string> = { DONE: 'text-status-done', FAILED: 'text-destructive', CANCELLED: 'text-muted-foreground', RUNNING: 'text-status-running', AWAITING_START: 'text-status-waiting' }
-const TEMPLATE = JSON.stringify({ title: '', description: '', goals: [], conditions: [{ id: 'c1', statement: '', checker: { kind: 'diff', require: [] } }] }, null, 2)
 
 export function WorkflowsView({ token, tick, selected, onSelect }: { token: string | null; tick: number; selected: string | null; onSelect: (id: string | null) => void }) {
   const { t } = useI18n()
   const [items, setItems] = useState<Item[]>([])
   const [detail, setDetail] = useState<Detail | null>(null)
-  const [json, setJson] = useState(TEMPLATE)
+  // null: the designer is closed; { editing: null }: a new workflow; { editing: doc }: a draft being edited
+  const [design, setDesign] = useState<{ editing: (WorkflowDoc & { id: string }) | null } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [pollTick, setPoll] = useState(0)
 
@@ -52,9 +52,6 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
       setErr(e instanceof ApiError ? e.code : (e as Error).message)
     }
   }
-  const parse = (): unknown | null => {
-    try { return JSON.parse(json) } catch { setErr('BAD_JSON'); return null }
-  }
   const canStart = detail && ['DRAFT', 'AWAITING_START'].includes(detail.state)
   const live = detail && ['PLANNING', 'RUNNING', 'VERIFYING', 'AWAITING_START'].includes(detail.state)
 
@@ -63,23 +60,28 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
       <div className="grid content-start gap-2">
         {items.length === 0 ? <Empty>{t('noWorkflows')}</Empty> : null}
         {items.map((w) => (
-          <button key={w.id} type="button" onClick={() => onSelect(w.id)} className={cn('rounded-xl border bg-card p-3 text-left text-sm transition-colors hover:bg-muted', selected === w.id && 'border-primary')}>
+          <button key={w.id} type="button" onClick={() => { setDesign(null); onSelect(w.id) }} className={cn('rounded-xl border bg-card p-3 text-left text-sm transition-colors hover:bg-muted', selected === w.id && 'border-primary')}>
             <div className="font-semibold">{w.title}</div>
             <div className="mt-0.5 flex items-center gap-2 text-xs"><span className={cn('font-semibold', STATE_TONE[w.state])}>{w.state}</span><code className="font-mono text-muted-foreground">{w.id}</code></div>
           </button>
         ))}
-        <details className="rounded-xl border bg-card p-3 text-sm">
-          <summary className="cursor-pointer font-semibold">{t('newWorkflow')}</summary>
-          <Textarea className="mt-2 font-mono text-xs" rows={12} value={json} onChange={(e) => setJson(e.target.value)} />
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" onClick={() => { const b = parse(); if (b) void call('POST', '/api/workflows', b) }}>{t('saveDraft')}</Button>
-            {detail && detail.state === 'DRAFT' ? <Button size="sm" variant="outline" onClick={() => { const b = parse(); if (b) void call('PUT', `/api/workflows/${detail.id}`, b) }}>{t('saveDraft')} → {detail.id.slice(0, 8)}</Button> : null}
-          </div>
-        </details>
+        <Button variant="outline" onClick={() => setDesign({ editing: null })}>
+          <Plus data-icon="inline-start" />
+          {t('designerNew')}
+        </Button>
       </div>
       <div className="min-w-0">
         {err ? <ErrorNote code={err} /> : null}
-        {detail ? (
+        {design ? (
+          <WorkflowDesigner
+            key={design.editing?.id ?? 'new'}
+            token={token}
+            initial={design.editing}
+            editingId={design.editing?.id ?? null}
+            onSaved={(id) => { setDesign(null); onSelect(id); void load() }}
+            onCancel={() => setDesign(null)}
+          />
+        ) : detail ? (
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-wrap items-center gap-2">
@@ -91,9 +93,10 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
             <CardContent className="grid gap-4 text-sm">
               <p className="whitespace-pre-wrap text-muted-foreground">{detail.workflow.description}</p>
               {detail.reason ? <p className="text-xs text-destructive">{detail.reason}</p> : null}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {canStart ? <Button size="sm" onClick={() => void call('POST', `/api/workflows/${detail.id}/start`, {})}><Play data-icon="inline-start" />{t('startWorkflow')}</Button> : null}
                 {live ? <Button size="sm" variant="outline" onClick={() => void call('POST', `/api/workflows/${detail.id}/cancel`, {})}><Square data-icon="inline-start" />{t('cancelWorkflow')}</Button> : null}
+                {detail.state === 'DRAFT' ? <Button size="sm" variant="outline" onClick={() => setDesign({ editing: { ...detail.workflow, id: detail.id } })}><Pencil data-icon="inline-start" />{t('designerEdit')}</Button> : null}
               </div>
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('conditionsLabel')}</h3>

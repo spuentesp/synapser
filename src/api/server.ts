@@ -236,6 +236,11 @@ export function createApi(opts: ApiOptions): ApiServer {
     const m = c.manager;
     if (top === "catalog" && method === "GET") return json(res, 200, { agents: c.catalog?.() ?? [] });
     if (top === "config" && method === "GET") return json(res, 200, c.config?.() ?? {});
+    // the designer's live check: the same validator as create, nothing is written (plan 14 Q3.1)
+    if (top === "designer" && id === "check" && method === "POST") {
+      const b = await readBody(req, res);
+      return b === undefined ? undefined : json(res, 200, m.check(b));
+    }
     if (top === "library" && c.library) return libraryRoute(c.library, req, res, id, action, method, parts.length);
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
@@ -298,7 +303,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       return void res.end(readFileSync(file));
     }
 
-    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");

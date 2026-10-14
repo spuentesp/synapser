@@ -123,17 +123,20 @@ export interface WhyReport {
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
-  constructor(status: number, code: string) {
+  /** Every problem the server listed for a refused document (empty for other errors). */
+  readonly errors: string[]
+  constructor(status: number, code: string, errors: string[] = []) {
     super(code)
     this.status = status
     this.code = code
+    this.errors = errors
   }
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init)
-  const body = (await r.json().catch(() => ({}))) as { error?: string }
-  if (!r.ok) throw new ApiError(r.status, body.error ?? r.statusText)
+  const body = (await r.json().catch(() => ({}))) as { error?: string; errors?: string[] }
+  if (!r.ok) throw new ApiError(r.status, body.error ?? r.statusText, Array.isArray(body.errors) ? body.errors : [])
   return body as T
 }
 

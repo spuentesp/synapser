@@ -78,6 +78,8 @@ Agent(native) { provider, model, temperature, tier, role, skills[] }
   constructor de condiciones por tipo de verificador (con validación en vivo contra el validador real);
   vista previa del JSON; **plantillas** parametrizadas (`library/templates`), con unas integradas
   (cambio acotado con pruebas, investigación con citas, revisión de PR, migración con no-metas).
+- **Comprobación en vivo** (Q3.1): el diseñador consulta el validador del servidor (`POST /api/designer/check`), que
+  no escribe nada; «Guardar» solo se habilita con un documento que ese validador acepta.
 - **Diseñador de agente**: elegir adaptador, nivel, rol, permisos, presupuesto, pool, skills; botón
   «probar» que corre una tarea trivial en una copia desechable y muestra el resultado y el costo.
 - **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger.

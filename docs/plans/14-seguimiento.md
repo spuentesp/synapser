@@ -12,7 +12,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 - Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
   plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
-  Estado al traspaso: 452 pasan, 0 fallan, 9 omitidas (461 pruebas). Una tarea no está hecha si baja ese número.
+  Estado al traspaso: 459 pasan, 0 fallan, 9 omitidas (468 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
   (gitignored); **nunca** imprimirlas ni commitearlas; revisar el diff antes de cada commit.
 - Commits: mensaje claro, cuerpo con el porqué, y cerrar con `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -129,8 +129,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q3 — Diseñadores y plantillas (UI)
 
-- [ ] Q3.1 Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
-  vivo contra el validador real, vista previa JSON.
+- [x] Q3.1 Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
+  vivo contra el validador real, vista previa JSON. commit: PENDING · prueba: `test/api/designer.test.ts`
+  (borrador válido sin escritura; borrador inválido con todos sus problemas y la redacción del validador; token
+  y origen) y navegador real con Chromium headless (capturas en `evidence/`): un borrador válido se guarda; uno
+  inválido lista sus problemas y deja Guardar deshabilitado; un borrador se edita y guarda con PUT. Suite completa.
+  nota: esta tarea se empezó sin commit de reclamo previo (ver bitácora).
 - [ ] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
   revisión, migración con no-metas.
 - [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
@@ -179,3 +183,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q2.6: `/api/library` (lectura abierta; escritura con token y mismo origen); validación completa por tipo; guardia único; precios decimales en la biblioteca con la opción `decimals`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.7: `doctor` y `config show` leen la biblioteca con un manejador de solo lectura (sin sincronizar ni crear journal). |
 | 2026-10-14 | Claude Haiku 5.5 | Revisión del trabajo de GPT-5 Codex (Q2.2): el cargador buscaba `providers[id]` sin propiedad propia; `provider: "constructor"` lanzaba `TypeError` en vez de `ConfigError`. Corregido en `src/config/load.ts`. |
+| 2026-10-14 | Claude Haiku 5.5 | Q3.1: diseñador de workflow (formulario, condiciones por verificador, comprobación en vivo con el validador del servidor vía `POST /api/designer/check`, vista previa JSON). Empezado sin commit de reclamo previo: proceso incumplido, registrado aquí. |
