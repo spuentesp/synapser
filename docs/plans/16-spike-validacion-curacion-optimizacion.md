@@ -76,12 +76,12 @@ Rama `spike/mcp-sdk`: `b53f601` (caracterización y X1, contra el servidor de `m
 **Clientes reales (X3).**
 - Claude Code 2.1.299: conectado al arrancar; `workflow_list` respondió sin error.
 - codex-cli 0.160.1: llamada completada. Para esa invocación se habilitó solo esa herramienta y se aprobó: el bloqueo inicial lo puso la política de aprobación del cliente, no el servidor.
-- mimo 0.1.15: conectado (`mimo mcp list`). No se ejecutó la llamada: sus credenciales están en su directorio de datos, y usarlo sin copiarlas escribiría en la base de sesiones del operador.
+- mimo 0.1.15: `mimo mcp list` lo ve conectado. Por ACP (`mimo acp`, agente OpenCode 0.1.15), la sesión con el servidor de Synapser se acepta, pero la llamada no llegó a ocurrir: el proveedor respondió `402 Insufficient account balance`. Sin esa llamada no hay prueba de la herramienta; hace falta saldo y repetir el chequeo.
 - kimi 2.1.1: su CLI no tiene subcomando ni flag MCP, pero su runtime carga servidores MCP desde `$KIMI_CODE_HOME/mcp.json`, desde `.mcp.json` del proyecto (con workspace de confianza) y desde `mcpServers` de ACP. Verificado por ACP: `session/new` con el servidor de Synapser, una llamada a `workflow_list` con permiso concedido una vez y respuesta `{"workflows":[]}`. La sesión queda en `~/.kimi-code/sessions/`. Headless con MCP no verificado: sin credenciales la corrida se para antes de arrancar MCP.
 
 El detalle está en `evidence/p16-2-clients/` (no versionado).
 
-**Criterios.** X1 cumplido: la instantánea de `tools/list` por rol coincide, y se falsó quitando una herramienta y cambiando una descripción. X2 cumplido: `mcp.test.ts` y `stdio-e2e.test.ts` pasan sin cambiar sus líneas. X3 cumplido con Claude Code, codex y kimi (por ACP); mimo conecta sin llamada. X4 cumplido: tres paquetes en el árbol de producción.
+**Criterios.** X1 cumplido: la instantánea de `tools/list` por rol coincide, y se falsó quitando una herramienta y cambiando una descripción. X2 cumplido: `mcp.test.ts` y `stdio-e2e.test.ts` pasan sin cambiar sus líneas. X3 cumplido con Claude Code, codex y kimi (por ACP); mimo queda pendiente por saldo insuficiente de su proveedor. X4 cumplido: tres paquetes en el árbol de producción.
 
 **Lo que la adopción compra:** la negociación de las revisiones 2025 y los tipos del protocolo, mantenidos por el SDK. No compra la revisión `2026-07-28`, y el encuadre y `tools/call` siguen siendo nuestros.
 
