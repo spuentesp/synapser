@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { PARSERS } from "../agents/usage.ts";
-import { defaultModelConfig, type ProviderConfig, type RoleConfig, SYSTEM_ROLES, validateProviderConfig, validateRoleConfig } from "../model/config.ts";
+import { defaultModelConfig, type ProviderConfig, type RoleConfig, SYSTEM_ROLES, validateProviderConfig, validateRoleConfig, metadataEndpointProblems } from "../model/config.ts";
 import type { Role } from "../model/types.ts";
 import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
@@ -99,7 +99,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     if (!raw["providers"] || typeof raw["providers"] !== "object" || Array.isArray(raw["providers"])) errors.push("providers must be an object keyed by provider id");
     else {
       for (const [id, value] of Object.entries(raw["providers"] as Record<string, unknown>)) {
-        const problems = validateProviderConfig(id, value);
+        const problems = [...validateProviderConfig(id, value), ...metadataEndpointProblems(id, value)];
         if (problems.length) errors.push(...problems);
         else providers[id] = value as ProviderConfig;
       }
@@ -150,7 +150,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
             apiKeyEnv: endpoint?.apiKeyEnv as string[],
             models: [{ id: endpoint?.model as string }],
           };
-          const problems = validateProviderConfig(migratedProvider, legacy);
+          const problems = [...validateProviderConfig(migratedProvider, legacy), ...metadataEndpointProblems(migratedProvider, legacy)];
           if (problems.length) return void errors.push(...problems.map((problem) => `${at}.endpoint: ${problem.replace(`provider ${migratedProvider}: `, "")}`));
           providers[migratedProvider] = legacy;
         }

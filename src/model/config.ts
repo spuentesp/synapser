@@ -88,7 +88,7 @@ export function loadModelConfig(path: string): ModelConfig {
 export function validateConfig(cfg: ModelConfig): void {
   const providerErrors: string[] = [];
   for (const [name, provider] of Object.entries(cfg.providers)) {
-    providerErrors.push(...validateProviderConfig(name, provider));
+    providerErrors.push(...validateProviderConfig(name, provider), ...metadataEndpointProblems(name, provider));
   }
   if (providerErrors.length) throw new ModelError("CONFIG", providerErrors.join("; "));
   const roleErrors = SYSTEM_ROLES.flatMap((role) => validateRoleConfig(role, cfg.roles[role], cfg.providers));
@@ -134,6 +134,22 @@ export function systemModelConfig(providers: Record<string, ProviderConfig>, rol
 }
 
 /** Validate one provider without throwing so whole-file configuration can report every problem. */
+/** K6 (plan 17): variables Synapser reserves for itself; no provider key may name one. */
+export const RESERVED_ENV = /^SYNAPSER_/;
+/** K7 (plan 17): cloud metadata addresses; no provider endpoint may point at one. */
+export const METADATA_HOSTS = new Set(["169.254.169.254", "metadata.google.internal", "metadata", "fd00:ec2::254"]);
+
+/** K7 (plan 17) for the operator's own providers. Library providers keep their D3 check in the library validator. */
+export function metadataEndpointProblems(name: string, provider: unknown): string[] {
+  const baseUrl = provider && typeof provider === "object" ? (provider as { baseUrl?: unknown }).baseUrl : undefined;
+  if (typeof baseUrl !== "string") return [];
+  try {
+    return METADATA_HOSTS.has(new URL(baseUrl).hostname.replace(/^\[|\]$/g, "")) ? [`provider ${name}: baseUrl points at a cloud metadata address (plan 17 K7)`] : [];
+  } catch {
+    return []; // the baseUrl check in validateProviderConfig reports it
+  }
+}
+
 export function validateProviderConfig(name: string, provider: unknown): string[] {
   const at = `provider ${name}`;
   if (!provider || typeof provider !== "object") return [`${at}: must be an object`];
@@ -141,6 +157,9 @@ export function validateProviderConfig(name: string, provider: unknown): string[
   const errors: string[] = [];
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) errors.push(`${at}: id must be a lowercase slug`);
   if (p.protocol !== "openai-compatible" && p.protocol !== "anthropic") errors.push(`${at}: unsupported protocol ${String(p.protocol)}`);
+  if (Array.isArray(p.apiKeyEnv)) {
+    for (const name of p.apiKeyEnv) if (typeof name === "string" && RESERVED_ENV.test(name)) errors.push(`${at}: ${name} is reserved by Synapser and cannot hold a provider key (plan 17 K6)`);
+  }
   if (typeof p.baseUrl !== "string" || (!/^https:\/\//.test(p.baseUrl) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(p.baseUrl))) {
     errors.push(`${at}: baseUrl must be https (or loopback for tests)`);
   }

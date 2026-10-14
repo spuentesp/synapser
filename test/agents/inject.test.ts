@@ -8,7 +8,7 @@ import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { BUILTIN_PROFILES, type AgentProfile } from "../../src/agents/profile.ts";
-import { validateProviderConfig, validateRoleConfig } from "../../src/model/config.ts";
+import { metadataEndpointProblems, validateProviderConfig, validateRoleConfig } from "../../src/model/config.ts";
 
 // Plan 17 P17.5 and P17.3. The key value is a fake; it must reach the child's environment and nowhere else (K1).
 const SECRET = "sk-test-SECRET-VALUE-0001";
@@ -182,5 +182,21 @@ describe("plan 17 P17.6: a profile names its operator provider; the run resolves
   test("a library document cannot set injectProvider over a CLI base", async () => {
     const { validateLibraryDocument } = await import("../../src/library/validate.ts");
     assert.ok(validateLibraryDocument("agents", "w1", { extends: "codex-writer", injectProvider: "p1", model: "m-large" }).length > 0);
+  });
+});
+
+describe("plan 17 P17.4: the provider validator refuses reserved keys and metadata endpoints, at load and on write", () => {
+  const base = { protocol: "openai-compatible" as const, baseUrl: "https://models.example/v1", apiKeyEnv: ["P1_KEY"], models: [{ id: "m1" }] };
+
+  test("a provider key may not name a Synapser-reserved variable (K6)", () => {
+    assert.match(validateProviderConfig("p1", { ...base, apiKeyEnv: ["SYNAPSER_OPERATOR_TOKEN"] }).join(" "), /reserved by Synapser/);
+  });
+
+  test("a provider endpoint may not be a cloud metadata address (K7)", () => {
+    assert.match(metadataEndpointProblems("p1", { ...base, baseUrl: "http://169.254.169.254/latest" }).join(" "), /cloud metadata address/);
+  });
+
+  test("ordinary providers still pass", () => {
+    assert.deepEqual(validateProviderConfig("p1", base), []);
   });
 });

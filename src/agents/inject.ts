@@ -1,4 +1,4 @@
-import type { ProviderConfig } from "../model/config.ts";
+import { METADATA_HOSTS, RESERVED_ENV, type ProviderConfig } from "../model/config.ts";
 
 // Plan 17 P17.5: per-run injection of one operator-declared provider into a CLI.
 // K1: the key never enters argv, a file, the ledger or an error. It travels only in the child's environment,
@@ -30,11 +30,6 @@ export interface InjectionPlan {
   homeFiles?: { path: string; content: string }[];
 }
 
-/** K6: variables Synapser reserves for itself (the operator token and its own credentials). */
-export const RESERVED_ENV = /^SYNAPSER_/;
-
-/** K7 (proposal): cloud metadata addresses, refused whoever declares them. */
-const METADATA_HOSTS = new Set(["169.254.169.254", "metadata.google.internal", "metadata", "fd00:ec2::254"]);
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
