@@ -62,7 +62,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
   commit: a836569. Prueba: `--help` y esquema del binario
   instalado, argv determinista, parser del 402 capturado y suite completa verdes; llamada pagada omitida por saldo.
-- [ ] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
+- [~] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
+  quién: GPT-5 Codex · desde: 2026-10-13
 - [ ] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2.
 - [ ] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
