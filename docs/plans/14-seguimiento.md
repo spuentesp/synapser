@@ -119,7 +119,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
   guardia (`writeAllowed`) sustituye las tres copias. Precios decimales: `test/library/decimals.test.ts`, con la
   opción `decimals` de la forma canónica solo para la biblioteca (ver decisiones abiertas). Suite completa.
-- [x] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo. commit: PENDING · prueba:
+- [x] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo. commit: 70da347 · prueba:
   `test/library/read.test.ts` (sin biblioteca no se crea journal; leer no materializa la proyección; doctor muestra
   el índice, informa la clave de cada proveedor de biblioteca sin que sea fatal y falla un documento que ya no cumple
   sus reglas; `config show` lista el índice sin documentos; un manejador de solo lectura rechaza escrituras). Falsada
