@@ -16,6 +16,8 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["default", "yolo"],
   budgetFlag: false,
   resume: true,
+  cliFlags: ["--format", "--pure", "--dir", "--model", "--dangerously-skip-permissions"],
+  profileDefinedFlags: false,
 });
 
 export class MimoAdapter implements AgentAdapter {

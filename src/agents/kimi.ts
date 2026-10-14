@@ -16,6 +16,8 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["default", "yolo", "plan"],
   budgetFlag: false,
   resume: true,
+  cliFlags: ["-p", "--output-format", "--yolo", "--plan", "--skills-dir"],
+  profileDefinedFlags: false,
 });
 
 export class KimiAdapter implements AgentAdapter {

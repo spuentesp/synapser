@@ -16,6 +16,8 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["read-only", "workspace-write"],
   budgetFlag: false,
   resume: true,
+  cliFlags: ["--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", "-C", "-m"],
+  profileDefinedFlags: false,
 });
 
 export class CodexAdapter implements AgentAdapter {

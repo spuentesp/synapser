@@ -15,6 +15,8 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"],
   budgetFlag: true,
   resume: true,
+  cliFlags: ["-p", "--output-format", "--model", "--allowedTools", "--disallowedTools", "--permission-mode", "--max-budget-usd"],
+  profileDefinedFlags: false,
 });
 
 export class ClaudeCodeAdapter implements AgentAdapter {

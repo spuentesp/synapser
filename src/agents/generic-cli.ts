@@ -15,6 +15,8 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: [],
   budgetFlag: false,
   resume: false,
+  cliFlags: [],
+  profileDefinedFlags: true,
 });
 
 export class GenericCliAdapter implements AgentAdapter {

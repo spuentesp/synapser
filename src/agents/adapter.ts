@@ -17,6 +17,10 @@ export interface AgentCapabilities {
   permissionModes: readonly string[];
   budgetFlag: boolean;
   resume: boolean;
+  /** Complete option surface emitted by this dedicated adapter (positional commands excluded). */
+  cliFlags: readonly string[];
+  /** Generic wrappers forward flags from the operator-owned profile instead of emitting their own. */
+  profileDefinedFlags: boolean;
 }
 
 export interface InjectedSkill {
@@ -123,6 +127,8 @@ export class ProfileCliAdapter implements AgentAdapter {
     permissionModes: [],
     budgetFlag: false,
     resume: false,
+    cliFlags: [],
+    profileDefinedFlags: true,
   });
 
   build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {

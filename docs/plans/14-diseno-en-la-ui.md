@@ -104,6 +104,9 @@ Verificación y falsación de la inyección:
 - L2 se verifica construyendo la misma invocación con y sin skills y comparando sus flags protegidos de
   herramientas, permisos, sandbox y presupuesto. Se falsa con un adaptador deliberadamente defectuoso que
   cambia `--allowedTools` o `--max-budget-usd` al recibir una skill.
+- L5 se verifica extrayendo los flags de todas las variantes construidas por cada adaptador, exigiendo
+  igualdad con `capabilities.cliFlags`, y buscando cada declaración en el `--help` del binario instalado.
+  Se falsa al emitir un flag no declarado o al declarar uno que el binario real no reconoce.
 
 ## 8. Fases
 

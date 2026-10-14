@@ -98,7 +98,10 @@ describe("runner skill audit", () => {
     const adapter: AgentAdapter = {
       id: "generic-cli",
       displayName: "skill double",
-      capabilities: { headless: true, structuredOutput: true, skills: "native", skillMechanism: "native-dir", mcp: false, permissionModes: [], budgetFlag: false, resume: false },
+      capabilities: {
+        headless: true, structuredOutput: true, skills: "native", skillMechanism: "native-dir", mcp: false,
+        permissionModes: [], budgetFlag: false, resume: false, cliFlags: [], profileDefinedFlags: false,
+      },
       build(_profile, task, selected): AgentInvocation {
         const path = join(task.home, ".skills", selected.skills[0]?.id ?? "missing", "SKILL.md");
         return {
