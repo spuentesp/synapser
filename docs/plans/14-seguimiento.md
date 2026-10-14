@@ -162,7 +162,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
   commit: f5cc434 · prueba: navegador real: al elegir un borrador en Workflows, el selector de corrida pasa a la corrida
   de ese workflow (verificado con dos borradores). Suite completa.
-- [ ] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP).
+- [~] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP).
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 
 ### Cierre
 
