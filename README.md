@@ -75,12 +75,17 @@ $ node scripts/verify-export.ts <run>.ledger.json     # verifies an export with 
   detail; decisions are taken in Approvals.
 - **Library** holds providers, agents, skills and templates as versioned documents. A refused document lists every
   problem at once. *Test connection* calls a stored provider's endpoint with its key; the report names the environment
-  variable the key came from and never shows the key. Limit: a provider's key can be any environment variable of the
-  server, and a local process that can read the console's session token can send it to any https address. A page from
-  another site cannot. This is declared in the design document (section 40) and is not yet closed.
+  variable the key came from and never shows the key. Limits: a library provider may use only the key names listed in
+  `providerKeyEnv` in the configuration file (empty by default), and a listed key can still be sent to any https address
+  that a library provider names. A local process that can read the console's session token can write such a provider.
+  A page from another site cannot. This is declared in the design document (section 40) and is not yet closed.
 
-Library documents are not read by runs yet: the workflow engine still takes providers and agents from the
-configuration file. The system roles (planner, advisor, chat, worker, repair) are assigned in
+Runs read the library. A run takes the providers and agents as they are when it starts, checks them against the
+configuration file as it stands, and does not start if any of them no longer holds, with every reason. A library agent
+either extends a built-in or file profile and changes a few of its fields (never its commands, its home or its
+permissions), or is a native agent with its own provider and model. A workflow whose reviews name an agent the library
+does not hold fails at its start, with the reason. Skills from the library are not attached to agents yet: that waits
+for the user's decision D6 (plan 15). The system roles (planner, advisor, chat, worker, repair) are still assigned in
 `synapser.config.json` under `roles`, and `synapser provider test <id>` checks a configured provider from the terminal.
 
 ## Layout

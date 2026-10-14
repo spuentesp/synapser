@@ -144,8 +144,7 @@ Verificación y falsación de la inyección:
 - L3 se verifica en `test/library/freeze.test.ts` y `test/workflow/library-freeze.test.ts`: la instantánea se
   copia a los artefactos de la corrida y se lee por digest, así que sobrevive sin los artefactos de `_server`;
   la primera instantánea de una corrida gana; y un motor que edita la biblioteca en mitad de la corrida sigue
-  leyendo la versión de arranque. Se falsa con lecturas en vivo, que hacen fallar la prueba del motor. Hoy
-  ningún consumidor lee la biblioteca durante una corrida; el manejador congelado es la única vía cuando lo haga.
+  leyendo la versión de arranque. Se falsa con lecturas en vivo, que hacen fallar la prueba del motor. Desde Q5.1 las corridas leen su instantánea (`src/library/resolve.ts`): ningún otro camino lee la biblioteca viva durante una corrida.
 
 ## 8. Fases
 

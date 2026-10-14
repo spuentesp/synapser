@@ -1,7 +1,7 @@
 # Plan 15 — Amenazas de la biblioteca y de las claves
 
-Estado: **propuesta** (14 oct). Motivo: la biblioteca todavía no la leen las corridas. Antes de que lo haga, hay que
-acotar qué puede decir un documento de biblioteca, porque un documento escrito por la API se convertiría en
+Estado: **controles provisionales implementados** (14 oct, P15.2); las corridas ya leen la biblioteca (Q5). Este plan
+acota qué puede decir un documento de biblioteca, porque un documento escrito por la API se convertiría en
 configuración de ejecución: comandos del host, claves enviadas a destinos y permisos de agentes. Este plan documenta
 las amenazas con los controles que existen hoy, propone cuatro controles provisionales que sólo restringen (y por
 tanto no necesitan una decisión previa), y deja las mitigaciones definitivas como decisiones del usuario (sección 6).
