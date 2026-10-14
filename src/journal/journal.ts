@@ -426,6 +426,7 @@ export class Tx {
         c.requestBlob, c.responseBlob,
       );
     this.event(c.runId, "model_call", c.callId, null, c.error ? "FAILED" : "OK", {
+      task_id: c.taskId,
       role: c.role,
       requested_model: c.requestedModel,
       served_model: c.servedModel,

@@ -255,8 +255,8 @@ export class ZooAdapter {
     return { postId: str(body, "post_id") };
   }
 
-  async auditLog(limit = 200): Promise<unknown[]> {
-    const body = await this.#tool("get_audit_log", { limit });
+  async auditLog(limit = 200, sinceUnix?: number): Promise<unknown[]> {
+    const body = await this.#tool("get_audit_log", { limit, ...(sinceUnix !== undefined ? { since_unix: sinceUnix } : {}) });
     if (body["ok"] !== true || !Array.isArray(body["events"])) throw new ZooError("MALFORMED", "audit body", body);
     return body["events"] as unknown[];
   }

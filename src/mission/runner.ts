@@ -9,6 +9,8 @@ import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ValidationPort, ValidationResult } from "../validation/runner.ts";
+import type { ZooCollector } from "../zoo/collector.ts";
+import { announceIntent, type IntentSink } from "../zoo/intent.ts";
 import { DelegationBroker, type DelegationConfig } from "../orchestration/delegation.ts";
 import { approvalStatus, currentPlanDigest, decideApproval, requestApproval } from "../orchestration/gates.ts";
 import { dispatchStep, type OrchestrationDeps, type StepRow } from "../orchestration/dispatch.ts";
@@ -31,6 +33,12 @@ export interface MissionDeps {
   budget?: BudgetManager;
   /** When present, steps are routed to profiles and run through the AgentRunner port (plan 10). */
   orchestration?: OrchestrationDeps;
+  /** Periodically drains Zoanthrope's audit ring into the ledger (plan 11 L2); read-only. */
+  collector?: ZooCollector;
+  /** Minimum ms between drains inside the scheduling loop (default 500). */
+  collectEveryMs?: number;
+  /** Declare each task's intention to Zoanthrope before it starts (plan 11 L1). */
+  intent?: IntentSink;
   /** Let running agents request subtasks (plan 10 §5). Absent = delegation is off. */
   delegation?: Partial<DelegationConfig> & { budgetUsd?: number };
   /** Web research for agents of the plain (non-orchestrated) path. */
@@ -115,6 +123,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       deps: agentIds,
     });
     t.setMissionState(runId, "DRAFT", "RUNNING");
+    if (deps.intent) t.event(runId, "intent_policy", runId, null, "ENABLED", {});
   });
   emit("mission.started");
 
@@ -136,6 +145,9 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   // ---- task executors ------------------------------------------------------------------------
   const runAgent = async (id: string): Promise<Outcome> => {
     const row = specOf(id)!;
+    if (deps.intent) {
+      await announceIntent(deps.intent, journal, runId, { taskId: id, objective: String(row.spec.objective), scope: row.scope, criteria: (row.spec.criteria as string[]) ?? [] });
+    }
     const isRepair = row.spec.kind === "repair";
     if (deps.orchestration) {
       const o = await dispatchStep(
@@ -196,9 +208,23 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     return { taskId: id, ok: allOk, label: allOk ? "ACCEPTED" : "ACCEPTANCE_FAILED", ...(allOk ? {} : { detail: last }) };
   };
 
+  // observation must never change the outcome of a mission: errors are recorded, not raised
+  let lastDrain = 0;
+  const drain = async (force = false) => {
+    if (!deps.collector) return;
+    if (!force && Date.now() - lastDrain < (deps.collectEveryMs ?? 500)) return;
+    lastDrain = Date.now();
+    try {
+      await deps.collector.drain();
+    } catch (e) {
+      journal.tx((t) => t.event(runId, "zoo_gap", "collector", null, "ERROR", { error: String((e as Error).message ?? e).slice(0, 200) }));
+    }
+  };
+
   // ---- scheduling loop -------------------------------------------------------------------------
   let currentValidate = "validate";
   for (;;) {
+    await drain();
     if (!failure && !timedOut && Date.now() > deadline) {
       timedOut = true;
       failure = "mission time budget exhausted";
@@ -324,6 +350,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     }
   }
 
+  await drain(true);
   // ---- result -----------------------------------------------------------------------------------
   // Work that was never accepted stays visibly incomplete (S08): VALIDATING → FAILED with the cause.
   for (const t of journal.listTasks()) {

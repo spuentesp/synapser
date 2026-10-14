@@ -115,3 +115,43 @@ export function checkBudget(journal: Journal, opts: { budgetUsd?: number } = {})
   }
   return out;
 }
+
+/**
+ * Z3 (plan 11): when intents are enabled, a task's intention is on the ledger BEFORE its first write.
+ * Judged on ledger order alone — Zoanthrope's own audit is not a premise (Z1).
+ */
+export function checkIntentBeforeWrite(journal: Journal): Violation[] {
+  const events = journal.listEvents();
+  if (!events.some((e) => e.entity === "intent_policy")) return [];
+  const taskOf = new Map<string, string>();
+  const firstWrite = new Map<string, number>();
+  const intent = new Map<string, number>();
+  for (const e of events) {
+    if (e.entity === "action" && e.toState === "PREPARED") taskOf.set(e.entityId, String((e.data as { task_id?: string }).task_id));
+    if (e.entity === "action" && e.toState === "EXECUTING") {
+      const t = taskOf.get(e.entityId);
+      if (t !== undefined && !firstWrite.has(t)) firstWrite.set(t, e.seq);
+    }
+    if (e.entity === "intent" && !intent.has(e.entityId)) intent.set(e.entityId, e.seq);
+  }
+  const out: Violation[] = [];
+  for (const [task, wseq] of firstWrite) {
+    const iseq = intent.get(task);
+    if (iseq === undefined) out.push({ invariant: "Z3", code: "NO_INTENT", where: task, detail: { firstWriteSeq: wseq } });
+    else if (iseq > wseq) out.push({ invariant: "Z3", code: "INTENT_AFTER_WRITE", where: task, detail: { intentSeq: iseq, firstWriteSeq: wseq } });
+  }
+  return out;
+}
+
+/** Z4: every claim alive in Zoanthrope that belongs to this run maps to an unreconciled action. */
+export function checkNoSilentOrphans(journal: Journal, claims: readonly { agent: string; path: string }[]): Violation[] {
+  const out: Violation[] = [];
+  const prefix = `${journal.runId}:`;
+  for (const c of claims) {
+    if (!c.agent.startsWith(prefix)) continue;
+    const actor = c.agent.replace(/#r$/, "");
+    const held = journal.unreconciledForActor(actor).flatMap((a) => journal.getActionFiles(a.actionId).map((f) => f.path));
+    if (!held.includes(c.path)) out.push({ invariant: "Z4", code: "ORPHAN_CLAIM", where: c.path, detail: { agent: c.agent } });
+  }
+  return out;
+}

@@ -48,7 +48,7 @@ export function lostLines(w: WriteRecord): string[] {
 }
 
 export interface Violation {
-  invariant: "I1" | "I2" | "I3" | "I4" | "I5" | "W1" | "W2" | "W3" | "W4" | "W5";
+  invariant: "I1" | "I2" | "I3" | "I4" | "I5" | "W1" | "W2" | "W3" | "W4" | "W5" | "Z3" | "Z4";
   code: string;
   where: string;
   detail: Record<string, unknown>;
