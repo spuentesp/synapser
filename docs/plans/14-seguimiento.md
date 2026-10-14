@@ -73,7 +73,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `--help` del binario real (omitida si el binario no está). commit: 3966715 · prueba: igualdad entre
   flags construidos y `capabilities.cliFlags`; contraste con `--help` real de Claude, Codex, Kimi y MiMo;
   suite completa.
-- [ ] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
+- [~] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
+  quién: GPT-5 Codex · desde: 2026-10-14
 
 ### Q2 — Biblioteca, proveedores y API
 
