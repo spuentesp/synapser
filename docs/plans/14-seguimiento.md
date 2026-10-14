@@ -49,7 +49,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: fb0b10a. Prueba: suite completa y regresión
   directa de delegación `build/parse` verdes.
 - [x] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
-  commit: 33192b6 (inicio; implementación y cierre en este commit). Prueba: construcción exacta de argv,
+  commit: f8a043b. Prueba: construcción exacta de argv,
   validación de permisos/presupuesto, parser sobre salida capturada y suite completa verdes.
 - [ ] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
