@@ -126,8 +126,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "standard",
     description: "Codex CLI, workspace-write sandbox, in an isolated copy",
     role: "writer",
-    homeOverlay: [".codex"],
-    argv: ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "-s", "workspace-write", "-C", "{cwd}", "{prompt}"],
+    adapter: "codex",
+    argv: [],
+    permissions: { mode: "workspace-write" },
     parser: "codex-jsonl",
     timeoutMs: 300_000,
     tags: ["code", "tests"],
@@ -138,8 +139,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "advanced",
     description: "Codex CLI, read-only sandbox",
     role: "advisor",
-    homeOverlay: [".codex"],
-    argv: ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-C", "{cwd}", "{prompt}"],
+    adapter: "codex",
+    argv: [],
+    permissions: { mode: "read-only" },
     parser: "codex-jsonl",
     timeoutMs: 300_000,
     tags: ["review", "advice"],
@@ -188,6 +190,11 @@ export function validateProfile(p: AgentProfile): string[] {
     for (const [field, tools] of [["allowedTools", p.permissions?.allowedTools], ["disallowedTools", p.permissions?.disallowedTools]] as const) {
       if (tools?.some((tool) => !tool || tool.includes(","))) errs.push(`claude-code ${field} entries must be non-empty and contain no commas`);
     }
+  }
+  if (adapterOf(p) === "codex") {
+    const modes = ["read-only", "workspace-write"];
+    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`codex permission mode must be one of ${modes.join(", ")}`);
+    if (p.maxBudgetUsd !== undefined) errs.push("codex has no per-run USD budget flag");
   }
   if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");

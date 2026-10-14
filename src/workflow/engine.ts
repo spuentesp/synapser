@@ -5,6 +5,7 @@
 
 import { CliOneShotRunner, NativeLoopRunner } from "../agents/adapters.ts";
 import { CLAUDE_CODE_ADAPTER } from "../agents/claude-code.ts";
+import { CODEX_ADAPTER } from "../agents/codex.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
 import { Executor } from "../executor/executor.ts";
@@ -99,7 +100,7 @@ export class ProductionEngine implements WorkflowEngine {
         }
         return m;
       };
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER)]);
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER)]);
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

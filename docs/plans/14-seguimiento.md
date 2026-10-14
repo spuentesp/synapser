@@ -51,8 +51,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
   commit: f8a043b. Prueba: construcción exacta de argv,
   validación de permisos/presupuesto, parser sobre salida capturada y suite completa verdes.
-- [~] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
-  quién: GPT-5 Codex · desde: 2026-10-13
+- [x] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
+  commit: 88efa10 (inicio; implementación y cierre en este commit). Prueba: argv y parser capturados,
+  sandbox validado, `CODEX_HOME` descartable y suite completa verdes.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
@@ -117,3 +118,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Sonnet 5.5 | Tracker creado; Q1–Q4 sin empezar. Último commit del código: `868ff29` |
 | 2026-10-13 | GPT-5 Codex | Q1.1: contrato `AgentAdapter`; el runner CLI delega construcción y parseo sin cambiar su aislamiento. |
 | 2026-10-13 | GPT-5 Codex | Q1.2: adaptador `claude-code`; perfiles con modelo, permisos y presupuesto explícitos. |
+| 2026-10-13 | GPT-5 Codex | Q1.3: adaptador `codex`; sandbox por perfil y `CODEX_HOME` dentro del HOME descartable. |

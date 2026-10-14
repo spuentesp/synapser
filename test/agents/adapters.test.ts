@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { NO_INJECTED_SKILLS } from "../../src/agents/adapter.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
+import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/cli/${name}`, import.meta.url), "utf8");
@@ -41,5 +42,32 @@ describe("ClaudeCodeAdapter", () => {
     assert.ok(validateProfile({ ...advisor, permissions: { allowedTools: ["Read", "Write"] } }).some((problem) => /advisor/.test(problem)));
     assert.ok(validateProfile({ ...advisor, permissions: { mode: "bypassPermissions" } }).some((problem) => /advisor/.test(problem)));
     assert.ok(validateProfile({ ...advisor, maxBudgetUsd: 0 }).some((problem) => /maxBudgetUsd/.test(problem)));
+  });
+});
+
+describe("CodexAdapter", () => {
+  test("pins CODEX_HOME to the disposable HOME and builds sandbox policy from the profile", () => {
+    const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === "codex-writer")!;
+    const invocation = CODEX_ADAPTER.build(
+      profile,
+      { prompt: "fix one thing", cwd: "/isolated/work", home: "/isolated/home", envSource: { PATH: "/bin", HOME: "/real/home", CODEX_HOME: "/real/codex" } },
+      NO_INJECTED_SKILLS,
+    );
+    assert.deepEqual(invocation.argv, [
+      "codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config",
+      "-s", "workspace-write", "-C", "/isolated/work", "fix one thing",
+    ]);
+    assert.equal(invocation.env["HOME"], "/isolated/home");
+    assert.equal(invocation.env["CODEX_HOME"], "/isolated/home/.codex");
+    assert.equal(invocation.argvTemplate.at(-1), "{prompt}");
+  });
+
+  test("uses the Codex parser and refuses controls the CLI cannot enforce", () => {
+    const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === "codex-advisor")!;
+    assert.equal(CODEX_ADAPTER.parse(fixture("codex.jsonl"), profile).outcome, "SUCCEEDED");
+    assert.deepEqual(CODEX_ADAPTER.capabilities.permissionModes, ["read-only", "workspace-write"]);
+    assert.equal(CODEX_ADAPTER.capabilities.budgetFlag, false);
+    assert.ok(validateProfile({ ...profile, permissions: { mode: "danger-full-access" } }).some((problem) => /codex permission mode/.test(problem)));
+    assert.ok(validateProfile({ ...profile, maxBudgetUsd: 1 }).some((problem) => /no per-run USD budget/.test(problem)));
   });
 });
