@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 import type { ProfileCard } from "../orchestration/catalog.ts";
-import { currentPlanDigest, decideApproval } from "../orchestration/gates.ts";
+import { currentPlanDigest, decideApproval, isSelfBound, pendingGates } from "../orchestration/gates.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
 
@@ -194,17 +194,8 @@ export class McpServer {
     ];
   }
 
-  /** Latest approval event per (key, digest); PENDING ones are the open gates. */
-  #pending(j: Journal): { key: string; digest: string; kind: string; why: string; seq: number }[] {
-    const latest = new Map<string, { seq: number; state: string; digest: string; why: string }>();
-    for (const e of j.listEvents()) {
-      if (e.entity !== "approval") continue;
-      const d = e.data as { plan_digest?: string; why?: string };
-      latest.set(e.entityId, { seq: e.seq, state: String(e.toState), digest: String(d.plan_digest), why: d.why ?? "" });
-    }
-    return [...latest]
-      .filter(([, v]) => v.state === "PENDING")
-      .map(([key, v]) => ({ key, digest: v.digest, kind: key === "start" ? "start" : key.startsWith("cond:") ? "condition" : "step", why: v.why, seq: v.seq }));
+  #pending(j: Journal) {
+    return pendingGates(j);
   }
 
   #decide(a: Record<string, unknown>, s: McpSession, decision: "APPROVED" | "REJECTED"): unknown {
@@ -215,7 +206,7 @@ export class McpServer {
     const gate = this.#pending(j).find((g) => g.key === String(a["gate"]));
     if (!gate) return { error: "NO_SUCH_PENDING_GATE" };
     const r = decideApproval(j, id, {
-      taskId: gate.key, planDigest: gate.digest, currentDigest: gate.key.startsWith("cond:") || gate.key === "start" ? gate.digest : currentPlanDigest(j),
+      taskId: gate.key, planDigest: gate.digest, currentDigest: isSelfBound(gate.key) ? gate.digest : currentPlanDigest(j),
       decision, actor: `${s.client}#${s.id}`, channel: "mcp", challenge: String(a["code"] ?? ""),
       ...(typeof a["reason"] === "string" ? { reason: a["reason"] as string } : {}),
     });

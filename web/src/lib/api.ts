@@ -35,6 +35,7 @@ export interface SwarmState {
   mission: { state: string | null; planRevision: number }
   agents: AgentState[]
   pendingApprovals: string[]
+  gates: { key: string; kind: 'start' | 'step' | 'condition' | 'effect'; digest: string; summary: string; seq: number }[]
   alerts: { taskId: string; code: string; profile: string | null }[]
   zoo: { observations: number; gaps: number }
   delegations: { accepted: number; rejected: number }

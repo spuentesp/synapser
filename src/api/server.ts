@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify, waste, whoChanged, why } from "../audit/queries.ts";
 import { swarmState } from "../audit/state.ts";
 import { Journal } from "../journal/journal.ts";
-import { currentPlanDigest, decideApproval, pendingApprovals, readChallenge } from "../orchestration/gates.ts";
+import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const TASK_ID = /^[A-Za-z0-9._-]{1,80}$/;
@@ -181,7 +181,8 @@ export function createApi(opts: ApiOptions): ApiServer {
       const r = decideApproval(j, runId, {
         taskId: sub,
         planDigest: String(b.planDigest ?? ""),
-        currentDigest: currentPlanDigest(j),
+        // plan steps are bound to the plan digest; start/conditions/effects to their own
+        currentDigest: isSelfBound(sub) ? (pendingGates(j).find((g) => g.key === sub)?.digest ?? "") : currentPlanDigest(j),
         decision: b.decision,
         actor,
         ...(b.reason ? { reason: String(b.reason).slice(0, 300) } : {}),
@@ -207,7 +208,9 @@ export function createApi(opts: ApiOptions): ApiServer {
           ...st,
           planDigest: currentPlanDigest(j),
           agents: st.agents.map((a) => ({ ...a, evidence: ev.of([a.taskId]) })),
-          pendingApprovals: pendingApprovals(j, currentPlanDigest(j)),
+          pendingApprovals: pendingGates(j).map((g) => g.key),
+          gates: pendingGates(j).map((g) => ({ key: g.key, kind: g.kind, digest: g.digest, summary: g.why, seq: g.seq })),
+          stepApprovals: pendingApprovals(j, currentPlanDigest(j)),
         });
       }
       case "timeline":

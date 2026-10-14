@@ -24,6 +24,8 @@ const dict = {
     unknownNote: 'Costo desconocido: nunca se suma como 0', allRuns: 'corridas', stateLabel: 'estado',
     plan: 'plan', loading: 'Cargando…', error: 'Error', gate: 'Compuerta', planDigest: 'digest del plan',
     empty: 'Sin datos todavía',
+    showCode: 'Código para el agente', codeNote: 'Dáselo al agente SOLO si apruebas: es lo que le permite relayar tu OK por MCP.',
+    gateStart: 'Inicio del workflow', gateStep: 'Paso del plan', gateCondition: 'Condición', gateEffect: 'Efecto',
   },
   en: {
     run: 'Run', swarm: 'Swarm', timeline: 'Timeline', why: 'Why', cost: 'Cost',
@@ -46,6 +48,8 @@ const dict = {
     unknownNote: 'Unknown cost is never summed as 0', allRuns: 'runs', stateLabel: 'state',
     plan: 'plan', loading: 'Loading…', error: 'Error', gate: 'Gate', planDigest: 'plan digest',
     empty: 'No data yet',
+    showCode: 'Code for the agent', codeNote: 'Give it to the agent ONLY if you approve: it is what lets it relay your OK over MCP.',
+    gateStart: 'Workflow start', gateStep: 'Plan step', gateCondition: 'Condition', gateEffect: 'Effect',
   },
 } as const
 

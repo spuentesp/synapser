@@ -130,3 +130,29 @@ export function pendingApprovals(journal: Journal, currentDigest: string): strin
 }
 
 export { approvals as _approvalEvents };
+
+/** Keys whose approval is bound to their OWN digest (a snapshot, a document, an effect), not the plan's. */
+export const isSelfBound = (key: string): boolean => key === "start" || key.startsWith("cond:") || key.startsWith("effect:");
+
+export interface PendingGate {
+  key: string;
+  digest: string;
+  why: string;
+  seq: number;
+  kind: "start" | "step" | "condition" | "effect";
+}
+
+/** Latest approval event per key; PENDING ones are the open gates. One implementation for UI, CLI, MCP. */
+export function pendingGates(journal: Journal): PendingGate[] {
+  const latest = new Map<string, { seq: number; state: string; digest: string; why: string }>();
+  for (const a of approvals(journal)) {
+    const ev = journal.listEvents().find((e) => e.seq === a.seq);
+    latest.set(a.taskId, { seq: a.seq, state: a.state, digest: a.planDigest, why: String((ev?.data as { why?: string } | undefined)?.why ?? "") });
+  }
+  return [...latest]
+    .filter(([, v]) => v.state === "PENDING")
+    .map(([key, v]) => ({
+      key, digest: v.digest, why: v.why, seq: v.seq,
+      kind: (key === "start" ? "start" : key.startsWith("cond:") ? "condition" : key.startsWith("effect:") ? "effect" : "step") as PendingGate["kind"],
+    }));
+}

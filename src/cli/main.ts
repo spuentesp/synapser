@@ -14,8 +14,7 @@ import { readFileSync } from "node:fs";
 import { createRuntime } from "./runtime.ts";
 import { ConfigError, loadConfig } from "../config/load.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
-import { currentPlanDigest, decideApproval, readChallenge } from "../orchestration/gates.ts";
-import type { Journal } from "../journal/journal.ts";
+import { currentPlanDigest, decideApproval, isSelfBound, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { Actor } from "../workflow/manager.ts";
 
 const argv = process.argv.slice(2);
@@ -33,16 +32,6 @@ const die = (msg: string, code = 1): never => {
 };
 
 const OPERATOR: Actor = { id: `cli:${process.env["USER"] ?? "operator"}`, role: "operator" };
-
-function pendingGates(j: Journal) {
-  const latest = new Map<string, { seq: number; state: string; digest: string; why: string }>();
-  for (const e of j.listEvents()) {
-    if (e.entity !== "approval") continue;
-    const d = e.data as { plan_digest?: string; why?: string };
-    latest.set(e.entityId, { seq: e.seq, state: String(e.toState), digest: String(d.plan_digest), why: d.why ?? "" });
-  }
-  return [...latest].filter(([, v]) => v.state === "PENDING").map(([key, v]) => ({ key, ...v }));
-}
 
 async function main(): Promise<void> {
   const cfgPath = flag("config");
@@ -107,7 +96,7 @@ async function main(): Promise<void> {
         if (sub === "show") return say({ workflow_id: a, gate: b, code: readChallenge(j, b, g.digest), note: "give this code to the agent ONLY if you approve" });
         if (sub === "approve" || sub === "reject") {
           const r = decideApproval(j, a!, {
-            taskId: b, planDigest: g.digest, currentDigest: b.startsWith("cond:") || b === "start" ? g.digest : currentPlanDigest(j),
+            taskId: b, planDigest: g.digest, currentDigest: isSelfBound(b) ? g.digest : currentPlanDigest(j),
             decision: sub === "approve" ? "APPROVED" : "REJECTED", actor: OPERATOR.id, channel: "cli", ...(flag("reason") ? { reason: flag("reason") as string } : {}),
           });
           return r.ok ? say({ ok: true, gate: b }) : die(`not decided: ${r.code}`);
