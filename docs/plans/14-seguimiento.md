@@ -106,7 +106,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   destino; endpoint sin listado; 2xx sin `choices`; error de red solo por nombre; tiempo límite). CLI
   `provider test <id>` probado contra un servidor local: código 0, clave ausente de la salida. No escribe en el
   ledger; devuelve uso y costo estimado. Suite completa.
-- [ ] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
+- [~] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas.
 - [ ] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
