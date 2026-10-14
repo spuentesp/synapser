@@ -13,7 +13,8 @@ import { SYSTEM_PROMPT, taskPrompt } from "./prompts.ts";
 import { validate } from "./schema.ts";
 import { ResearchError } from "../research/types.ts";
 import type { ResearchSession } from "../research/session.ts";
-import { normalizeArgs, TOOL_EXAMPLES, TOOL_SCHEMAS, TOOL_SPECS, WEB_SEARCH_SPEC } from "./tools.ts";
+import type { DelegationPort } from "../orchestration/delegation.ts";
+import { normalizeArgs, REQUEST_SUBTASK_SPEC, TOOL_EXAMPLES, TOOL_SCHEMAS, TOOL_SPECS, WEB_SEARCH_SPEC } from "./tools.ts";
 
 export interface TaskSpec {
   taskId: string;
@@ -67,6 +68,8 @@ export interface LoopDeps {
   limits?: Partial<LoopLimits>;
   /** When present the agent may call web_search (plan 07). */
   research?: ResearchSession;
+  /** When present the agent may call request_subtask (plan 10 §5, W5). */
+  delegation?: DelegationPort;
   /** Observer for UIs and tests; must not throw. */
   onStep?: (s: StepInfo) => void;
 }
@@ -177,7 +180,7 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
     let res;
     try {
       res = await model.complete(
-        { role: deps.role ?? "worker", messages, tools: deps.research ? [...TOOL_SPECS, WEB_SEARCH_SPEC] : TOOL_SPECS, toolChoice: "auto", maxTokens: L.maxTokensPerCall },
+        { role: deps.role ?? "worker", messages, tools: [...TOOL_SPECS, ...(deps.research ? [WEB_SEARCH_SPEC] : []), ...(deps.delegation ? [REQUEST_SUBTASK_SPEC] : [])], toolChoice: "auto", maxTokens: L.maxTokensPerCall },
         { runId: deps.runId, taskId: task.taskId, ...(deps.budget ? { budget: deps.budget } : {}) },
       );
       result.modelCalls++;
@@ -501,6 +504,19 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
           }
           throw e;
         }
+      }
+
+      case "request_subtask": {
+        if (!deps.delegation) return { ok: false, payload: { error: "DISABLED", detail: "delegation is not available in this run" }, detail: "delegation disabled", noProgressKey: "subtask:DISABLED" };
+        const r = deps.delegation.request(task.taskId, {
+          objective: String(args["objective"]),
+          scope: args["scope"] as string[],
+          criteria: args["criteria"] as string[],
+          why: String(args["why"]),
+          ...(args["kind"] ? { kind: args["kind"] as "write" | "advise" | "review" } : {}),
+        });
+        if (r.ok) return { ok: true, payload: { status: "ACCEPTED", subtask: r.taskId, note: "it will run as its own task; continue with your own work and call finish when YOUR task is done" } };
+        return { ok: false, payload: { status: "REJECTED", error: r.code, detail: r.detail.slice(0, 300) }, detail: `subtask ${r.code}`, noProgressKey: `subtask:${r.code}` };
       }
 
       case "finish":

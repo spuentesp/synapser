@@ -40,6 +40,8 @@ export interface AgentRunRequest {
   generation: number;
   budget?: BudgetManager;
   deadlineMs?: number;
+  /** Native agents may ask for subtasks through this port; CLI agents have no such tool. */
+  delegation?: import("../orchestration/delegation.ts").DelegationPort;
 }
 
 export type IntegrationMode =

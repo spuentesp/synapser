@@ -341,6 +341,11 @@ export class Tx {
       .run(runId, revision, JSON.stringify(plan), accepted ? this.#now() : null);
     this.event(runId, "plan", String(revision), null, accepted ? "ACCEPTED" : "PROPOSED", {});
   }
+  /** Additive plan change: a node gains a dependency (e.g. the acceptance node waits for a new task). */
+  addTaskDep(runId: string, taskId: string, dependsOn: string): void {
+    this.#db.prepare("INSERT INTO task_deps(run_id,task_id,depends_on) VALUES(?,?,?)").run(runId, taskId, dependsOn);
+    this.event(runId, "task_dep", taskId, null, "ADDED", { depends_on: dependsOn });
+  }
   insertTask(t: { runId: string; taskId: string; actorOwner: string; priority: number; scope: string[]; spec: unknown; planRevision: number; deps: string[] }): void {
     this.#db
       .prepare("INSERT INTO tasks(run_id,task_id,actor_owner,state,priority,scope_json,criteria_json,plan_revision) VALUES(?,?,?,?,?,?,?,?)")
@@ -688,6 +693,13 @@ export class Journal {
   getMissionState(): string | null {
     const r = this.#db.prepare("SELECT state FROM missions WHERE run_id=?").get(this.runId) as Row | undefined;
     return r ? (r["state"] as string) : null;
+  }
+  listPlanRevisions(): { revision: number; plan: any; acceptedAt: number | null }[] {
+    return (this.#db.prepare("SELECT * FROM plan_revisions WHERE run_id=? ORDER BY revision").all(this.runId) as Row[]).map((r) => ({
+      revision: r["revision"] as number,
+      plan: JSON.parse(r["plan_json"] as string),
+      acceptedAt: (r["accepted_at"] as number | null) ?? null,
+    }));
   }
   listTasks(): { taskId: string; actorOwner: string; state: string; priority: number; scope: string[]; spec: any; deps: string[] }[] {
     const deps = this.#db.prepare("SELECT task_id, depends_on FROM task_deps WHERE run_id=?").all(this.runId) as Row[];

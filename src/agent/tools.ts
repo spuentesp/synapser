@@ -51,8 +51,22 @@ const WEB_SEARCH: Schema = {
   additionalProperties: false,
 };
 
+const REQUEST_SUBTASK: Schema = {
+  type: "object",
+  properties: {
+    objective: { type: "string", minLength: 5, maxLength: 1000 },
+    scope: { type: "array", items: path, minItems: 1, maxItems: MAX_PATHS },
+    criteria: { type: "array", items: { type: "string", minLength: 1, maxLength: 400 }, minItems: 1, maxItems: 6 },
+    why: { type: "string", minLength: 3, maxLength: 500 },
+    kind: { type: "string", enum: ["write", "advise", "review"] },
+  },
+  required: ["objective", "scope", "criteria", "why"],
+  additionalProperties: false,
+};
+
 export const TOOL_SCHEMAS: Record<string, Schema> = {
   web_search: WEB_SEARCH,
+  request_subtask: REQUEST_SUBTASK,
   read_files: READ,
   write_file: WRITE,
   replace_in_file: REPLACE,
@@ -95,6 +109,13 @@ export const WEB_SEARCH_SPEC: ToolSpec = fn(
   WEB_SEARCH,
 );
 
+/** Offered only when delegation is enabled for the run. */
+export const REQUEST_SUBTASK_SPEC: ToolSpec = fn(
+  "request_subtask",
+  "Ask the coordinator to add a SUBTASK to the plan when part of your work is better done separately. It is a request, not a command: it is accepted only if its scope is inside YOUR scope, the plan has room, and the depth limit allows it. It runs as its own task; you do not wait for it. Do not use it for work you can finish yourself.",
+  REQUEST_SUBTASK,
+);
+
 /** What a correct call looks like; returned with INVALID_ARGUMENTS so a model can copy it. */
 export const TOOL_EXAMPLES: Record<string, unknown> = {
   read_files: { paths: ["app/billing.py", "app/schema.py"] },
@@ -104,6 +125,7 @@ export const TOOL_EXAMPLES: Record<string, unknown> = {
   apply_changes: {},
   finish: { summary: "what was done" },
   web_search: { query: "ISO 4217 minor unit exponent Chilean peso", max_results: 3 },
+  request_subtask: { objective: "Add unit tests for the discount validation", scope: ["tests/test_discount.py"], criteria: ["tests cover 0 and 10000 bps"], why: "tests are a separate concern from the implementation" },
 };
 
 const KEY_ALIASES: Record<string, Record<string, string>> = {

@@ -8,7 +8,15 @@ import type { Plan } from "../mission/plan.ts";
 
 export type ApprovalStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
 
-export const planDigest = (plan: Plan): Digest => digestOfJson(plan);
+/** Digest of the plan AS STORED (JSON round-trip), so a stored revision and its source agree. */
+export const planDigest = (plan: Plan | unknown): Digest => digestOfJson(JSON.parse(JSON.stringify(plan)));
+
+/** Digest of the latest accepted plan revision: what an approval must be bound to. */
+export const currentPlanDigest = (journal: Journal): Digest => {
+  const revs = journal.listPlanRevisions().filter((r) => r.acceptedAt !== null);
+  const last = revs[revs.length - 1];
+  return planDigest(last ? last.plan : {});
+};
 
 interface ApprovalEvent {
   seq: number;

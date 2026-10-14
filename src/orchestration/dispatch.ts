@@ -8,6 +8,7 @@ import type { Executor } from "../executor/executor.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ProfileCard, StepKind } from "./catalog.ts";
+import type { DelegationPort } from "./delegation.ts";
 import { recordDispatch } from "./invariants.ts";
 import { route } from "./router.ts";
 
@@ -44,6 +45,7 @@ export async function dispatchStep(
   o: OrchestrationDeps,
   ctx: { journal: Journal; runId: string; planDigest: string; deadlineMs: number; budget?: BudgetManager },
   row: StepRow,
+  delegation: DelegationPort | null = null,
 ): Promise<StepOutcome> {
   const kind: StepKind = row.spec.step ?? "write";
   const isRepair = row.spec.kind === "repair";
@@ -81,6 +83,7 @@ export async function dispatchStep(
     generation: o.generation,
     ...(ctx.budget ? { budget: ctx.budget } : {}),
     deadlineMs: ctx.deadlineMs,
+    ...(delegation ? { delegation } : {}),
   };
 
   if (kind !== "write") {

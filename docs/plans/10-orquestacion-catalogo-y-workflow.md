@@ -133,10 +133,20 @@ del tope de costo. Rechazo ⇒ el agente recibe el código; no hay efecto latera
 | D2 ✅ | `maxDepth` configurable por workflow (default 2) | — |
 | D3 ✅ | Perfil de costo desconocido: **alerta**, no bloqueo; se aprende y se estima (§2.1) | — |
 
-## 10. Estado de implementación (tramo A)
+## 10. Estado de implementación
 
 Implementado en `src/orchestration/` y cubierto por `test/orchestration/`: catálogo con costo
 `known | estimated | unknown`, estimación determinista con retroprueba, enrutador total y
 determinista, validación de plan contra el catálogo, compuertas ligadas al digest, despacho por el
-puerto `AgentRunner`, verificadores W1–W4, y supervisor que ve el catálogo. Pendiente: subtareas
-pedidas por agentes (W5) y su revisión aditiva.
+puerto `AgentRunner`, verificadores W1–W4, y supervisor que ve el catálogo.
+
+**Subtareas pedidas por agentes (W5)** — `delegation.ts`: herramienta `request_subtask` para agentes
+nativos; el `DelegationBroker` valida con el mismo `validatePlan` más alcance ⊆ solicitante,
+profundidad configurable, anchura por tarea, tamaño del plan, presupuesto y "no demasiado tarde"
+(la aceptación aún no empezó). Una aceptación es una revisión de plan **aditiva por construcción**
+(las tareas previas se copian textualmente), añade la dependencia de la aceptación y emite
+`delegation ACCEPTED` con el `why` del agente rotulado como aserción; un rechazo no cambia nada y
+queda en el ledger. Un hijo hereda las compuertas del solicitante. Las aprobaciones se ligan al
+digest de la **última revisión aceptada**, de modo que una revisión aditiva invalida las pendientes.
+`checkDelegation` verifica aditividad, solicitante, profundidad, alcance y que la aceptación espera
+a toda tarea delegada. Los CLI de un solo disparo no tienen la herramienta (no hay canal de vuelta).

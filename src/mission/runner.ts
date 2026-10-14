@@ -9,7 +9,8 @@ import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ValidationPort, ValidationResult } from "../validation/runner.ts";
-import { approvalStatus, decideApproval, planDigest, requestApproval } from "../orchestration/gates.ts";
+import { DelegationBroker, type DelegationConfig } from "../orchestration/delegation.ts";
+import { approvalStatus, currentPlanDigest, decideApproval, requestApproval } from "../orchestration/gates.ts";
 import { dispatchStep, type OrchestrationDeps, type StepRow } from "../orchestration/dispatch.ts";
 import type { Plan, PlanTask } from "./plan.ts";
 
@@ -30,6 +31,8 @@ export interface MissionDeps {
   budget?: BudgetManager;
   /** When present, steps are routed to profiles and run through the AgentRunner port (plan 10). */
   orchestration?: OrchestrationDeps;
+  /** Let running agents request subtasks (plan 10 §5). Absent = delegation is off. */
+  delegation?: Partial<DelegationConfig> & { budgetUsd?: number };
   /** Web research for agents of the plain (non-orchestrated) path. */
   research?: import("../research/session.ts").ResearchSession;
   /** Evidence checks beyond commands (e.g. citation provenance); run after the commands pass. */
@@ -66,7 +69,8 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   };
   const runId = spec.runId;
   const agentIds = spec.plan.tasks.map((t) => t.id);
-  const digest = planDigest(spec.plan);
+  // approvals bind to the LATEST accepted plan revision: an additive revision invalidates pending ones
+  const digest = () => currentPlanDigest(journal);
   const outcomes = new Map<string, string>();
   const validations: ValidationResult[] = [];
   const validationTaskOf = new Map<string, string>();
@@ -94,6 +98,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
           ...(pt.profile ? { profile: pt.profile } : {}),
           ...(pt.tags ? { tags: pt.tags } : {}),
           ...(pt.gates ? { gates: pt.gates } : {}),
+          depth: 0,
         },
         planRevision: 1,
         deps: pt.deps,
@@ -117,6 +122,16 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     journal.tx((t) => t.setTaskState(runId, taskId, from, to, data));
   const specOf = (taskId: string) => journal.listTasks().find((t) => t.taskId === taskId);
   const running = new Map<string, Promise<Outcome>>();
+  const broker = deps.delegation
+    ? new DelegationBroker({
+        journal,
+        runId,
+        workspaceRoot: deps.orchestration?.workspaceRoot ?? process.cwd(),
+        config: deps.delegation,
+        ...(deps.orchestration ? { catalog: deps.orchestration.catalog } : {}),
+        ...(deps.delegation.budgetUsd !== undefined ? { budgetUsd: deps.delegation.budgetUsd } : {}),
+      })
+    : null;
 
   // ---- task executors ------------------------------------------------------------------------
   const runAgent = async (id: string): Promise<Outcome> => {
@@ -125,8 +140,9 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     if (deps.orchestration) {
       const o = await dispatchStep(
         deps.orchestration,
-        { journal, runId, planDigest: digest, deadlineMs: deadline, ...(deps.budget ? { budget: deps.budget } : {}) },
+        { journal, runId, planDigest: digest(), deadlineMs: deadline, ...(deps.budget ? { budget: deps.budget } : {}) },
         { taskId: id, scope: row.scope, spec: row.spec } as StepRow,
+        broker,
       );
       return { taskId: id, ok: o.ok, label: o.label, ...(o.detail ? { detail: o.detail } : {}) };
     }
@@ -138,6 +154,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         runId,
         ...(deps.budget ? { budget: deps.budget } : {}),
         ...(deps.research ? { research: deps.research } : {}),
+        ...(broker ? { delegation: broker } : {}),
         role: isRepair ? "repair" : "worker",
         deadlineMs: deadline,
         ...(L.loop ? { limits: L.loop } : {}),
@@ -194,9 +211,10 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     } else {
       const gateOpen = (t: (typeof tasks)[number]): boolean => {
         if (!(t.spec.gates as string[] | undefined)?.includes("approval")) return true;
-        let st = approvalStatus(journal, t.taskId, digest);
+        const cur = digest();
+        let st = approvalStatus(journal, t.taskId, cur);
         if (st === "NONE") {
-          requestApproval(journal, runId, t.taskId, digest, String(t.spec.objective ?? ""));
+          requestApproval(journal, runId, t.taskId, cur, String(t.spec.objective ?? ""));
           emit("approval.requested", t.taskId);
           st = "PENDING";
         }
@@ -205,13 +223,13 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
           if (auto) {
             decideApproval(journal, runId, {
               taskId: t.taskId,
-              planDigest: digest,
-              currentDigest: digest,
+              planDigest: cur,
+              currentDigest: cur,
               decision: auto.approve ? "APPROVED" : "REJECTED",
               actor: auto.actor,
               ...(auto.reason ? { reason: auto.reason } : {}),
             });
-            st = approvalStatus(journal, t.taskId, digest);
+            st = approvalStatus(journal, t.taskId, cur);
           }
         }
         if (st === "REJECTED") failure ??= `approval rejected for ${t.taskId}`;
@@ -234,7 +252,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     }
     if (running.size === 0) {
       // nothing runs: either we are done, or steps are waiting for a human decision
-      const waiting = !failure && !timedOut && journal.listTasks().some((t) => t.state === "PENDING" && (t.spec.gates as string[] | undefined)?.includes("approval") && approvalStatus(journal, t.taskId, digest) === "PENDING");
+      const waiting = !failure && !timedOut && journal.listTasks().some((t) => t.state === "PENDING" && (t.spec.gates as string[] | undefined)?.includes("approval") && approvalStatus(journal, t.taskId, digest()) === "PENDING");
       if (!waiting) break;
       await new Promise((r) => setTimeout(r, deps.orchestration?.approval?.pollMs ?? 250));
       continue;
