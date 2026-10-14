@@ -16,6 +16,8 @@ export interface SynapserConfig {
   stateDir: string;
   commands: AllowedCommand[];
   providers: Record<string, ProviderConfig>;
+  /** Environment variable names a LIBRARY provider may name as its key (P15 IC2). Empty by default; only this file grows it. */
+  providerKeyEnv: string[];
   /** The provider and model each system role (planner, worker, repair, advisor, chat) runs on. */
   roles: Record<Role, RoleConfig>;
   profiles: AgentProfile[];
@@ -290,8 +292,15 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     maxPerTask: typeof adv.maxPerTask === "number" ? adv.maxPerTask : 3,
   };
 
+  // P15 IC2: the names a library provider may use as its key. A document cannot grow this list; the operator's file can.
+  const providerKeyEnv: string[] = [];
+  if (raw["providerKeyEnv"] !== undefined) {
+    if (!Array.isArray(raw["providerKeyEnv"]) || raw["providerKeyEnv"].some((n) => typeof n !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(n))) errors.push("providerKeyEnv must be a list of environment variable names");
+    else providerKeyEnv.push(...new Set(raw["providerKeyEnv"] as string[]));
+  }
+
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, providers, roles, profiles, pools, policy, identity, advisor,
+    workspace, stateDir, commands, providers, roles, providerKeyEnv, profiles, pools, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

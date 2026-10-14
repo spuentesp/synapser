@@ -15,6 +15,8 @@ import { WorkflowManager } from "../../src/workflow/manager.ts";
 const PROVIDER = { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["LIBRARY_TEST_KEY"], models: [{ id: "m1", usdPer1MIn: 0.5, usdPer1MOut: 1.5 }] };
 
 describe("API library (plan 14 Q2.6)", () => {
+  // the key names the operator's file allows (P15 IC2); a test can change it between two requests
+  let allowedKeys: string[] = ["LIBRARY_TEST_KEY"];
   let state: string;
   let ws: string;
   let sj: Journal;
@@ -29,7 +31,8 @@ describe("API library (plan 14 Q2.6)", () => {
     sj = Journal.open(state, "_server");
     lib = new LibraryStore(state, sj);
     mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
-    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }) } });
+    allowedKeys = ["LIBRARY_TEST_KEY"];
+    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ providerKeyEnv: allowedKeys, bases: [] }) } });
     base = `http://127.0.0.1:${await api.listen(0)}`;
     token = api.token;
   });
@@ -100,17 +103,20 @@ describe("API library (plan 14 Q2.6)", () => {
     assert.equal(skill.status, 400);
     assert.match((await skill.json() as any).errors.join("\n"), /content must be a non-empty string/);
 
+    // plan 15 IC1: argv and parser belong to the operator's file, whatever the shape of the rest
     const agentShape = await call("PUT", "/api/library/agents/w1", { description: "x", role: "boss", argv: "nope", parser: "nope", timeoutMs: 0, tags: [] }, ok());
     assert.equal(agentShape.status, 400);
     const shapeText = (await agentShape.json() as any).errors.join("\n");
     assert.match(shapeText, /role must be/);
-    assert.match(shapeText, /argv must be an array/);
-    assert.match(shapeText, /parser must be one of/);
+    assert.match(shapeText, /argv is set by the operator's file/);
+    assert.match(shapeText, /parser is set by the operator's file/);
     assert.match(shapeText, /timeoutMs must be a positive number/);
+    assert.match(shapeText, /adapter is required for a native library agent/);
 
-    const agentRules = await call("PUT", "/api/library/agents/w1", { description: "x", role: "writer", argv: ["claude", "-p"], parser: "plain", timeoutMs: 1000, tags: ["code"] }, ok());
-    assert.equal(agentRules.status, 400, "the profile rules run once the shape is right");
-    assert.match((await agentRules.json() as any).errors.join("\n"), /argv must contain \{prompt\}/);
+    // the profile rules run once the shape is right: a native agent of its own with a provider name that is not a slug
+    const agentRules = await call("PUT", "/api/library/agents/w1", { adapter: "native", description: "x", role: "writer", provider: "Bad Provider", model: "m1", timeoutMs: 1000, tags: ["code"] }, ok());
+    assert.equal(agentRules.status, 400);
+    assert.match((await agentRules.json() as any).errors.join("\n"), /provider must be a lowercase slug/);
 
     assert.equal((await call("PUT", "/api/library/templates/t1", [], ok())).status, 400, "a template must be an object");
     assert.equal((await call("PUT", "/api/library/templates/t1", { title: "Cambio acotado" }, ok())).status, 200, "templates have no schema before Q3.2");
@@ -172,6 +178,23 @@ describe("API library (plan 14 Q2.6)", () => {
     assert.equal(body.ok, false);
     assert.equal(body.keyFrom, null);
     assert.equal(body.error, "no API key in environment (tried LIBRARY_TEST_KEY)");
+  });
+
+  test("a provider naming a key outside the operator's allowlist is refused at write time, with the reason (P15 IC2)", async () => {
+    const r = await call("PUT", "/api/library/providers/local", { ...PROVIDER, apiKeyEnv: ["TAVILY_API_KEY"] }, ok());
+    assert.equal(r.status, 400);
+    const body = (await r.json()) as { error: string; errors: string[] };
+    assert.equal(body.error, "INVALID_LIBRARY_DOCUMENT");
+    assert.match(body.errors.join("\n"), /apiKeyEnv TAVILY_API_KEY is not in providerKeyEnv/);
+    assert.equal(lib.get("providers", "local"), null, "nothing was stored");
+  });
+
+  test("the connection test honours the allowlist as it is now, not as it was when the document was stored (P15 IC2)", async () => {
+    assert.equal((await call("PUT", "/api/library/providers/local", PROVIDER, ok())).status, 200);
+    allowedKeys = [];
+    const r = await call("POST", "/api/library/providers/local/test", undefined, ok());
+    assert.equal(r.status, 403);
+    assert.equal(((await r.json()) as { error: string }).error, "KEY_NOT_ALLOWED");
   });
 
   test("without a library the routes do not exist", async () => {

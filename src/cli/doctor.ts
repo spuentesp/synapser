@@ -7,7 +7,7 @@ import type { AgentProfile } from "../agents/profile.ts";
 import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
 import { readLibrary } from "../library/store.ts";
-import { validateLibraryDocument } from "../library/validate.ts";
+import { libraryPolicyOf, validateLibraryDocument } from "../library/validate.ts";
 
 export interface Probe {
   /** Resolve a program on PATH; null when absent. */
@@ -102,7 +102,7 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
     checks.push({ name: "library", ok: false, detail: `cannot be read: ${String((e as Error).message ?? e).slice(0, 200)}` });
   }
   for (const entry of library) {
-    const problems = validateLibraryDocument(entry.kind, entry.id, entry.document);
+    const problems = validateLibraryDocument(entry.kind, entry.id, entry.document, libraryPolicyOf(cfg));
     if (problems.length) checks.push({ name: `library ${entry.kind}/${entry.id}`, ok: false, detail: problems.join("; ") });
     const names = entry.document["apiKeyEnv"];
     if (entry.kind === "providers" && Array.isArray(names)) {

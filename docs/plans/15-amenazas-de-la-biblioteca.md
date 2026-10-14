@@ -108,19 +108,24 @@ amplía permisos), con el tamaño máximo y con la procedencia visible. Decisió
 Se implementan **antes** de que las corridas lean la biblioteca. Sólo restringen: no requieren decidir la política final.
 
 **IC1. Agentes de biblioteca restringidos.** Un agente de biblioteca es uno de dos casos:
-- (a) extiende un perfil del archivo o integrado con `extends`, y sólo puede fijar `description`, `tags`, `tier`,
-  `timeoutMs` (acotado a una hora), `enabled`, `model`, `provider` y `temperature`; o
-- (b) es un agente nativo (`adapter: native`) con `provider` y `model`, sin `argv`, `env`, `homeOverlay`, `permissions`
-  ni `maxBudgetUsd`.
+- (a) extiende un perfil integrado o del archivo con `extends`, y sólo puede fijar `description`, `tags`, `tier`,
+  `timeoutMs` (acotado a una hora), `enabled`, `model`, `provider` y `temperature`. `enabled: true` sólo se acepta si
+  el archivo ya activa el perfil base: un documento puede desactivar un perfil, no activarlo. Un agente que extiende un
+  perfil que el archivo no activa queda desactivado aunque no diga nada.
+- (b) es un agente nativo (`adapter: native`) con `role`, `description`, `tags`, `timeoutMs`, `provider` y `model`,
+  sin `argv`, `env`, `homeOverlay`, `permissions` ni `maxBudgetUsd`.
 
-Se rechazan `argv`, `env`, `homeOverlay`, `permissions`, `maxBudgetUsd`, `adapter` (en el caso a), `parser`, `pool`,
-`steerable` y `disabledReason`, con el motivo en la respuesta. *Verificación*: un test por campo rechazado y uno por
-cada campo permitido. *Falsación*: una versión que copie `argv` de la biblioteca debe fallar el test de (a).
+Se rechazan `argv`, `env`, `homeOverlay`, `permissions`, `maxBudgetUsd`, `parser`, `pool`, `steerable` y
+`disabledReason` en los dos casos, y `adapter`, `role` y `nativeRole` en el caso (a), con el motivo en la respuesta.
+Las reglas de forma son tablas en `src/library/validate.ts`. Las semánticas las decide `validateProfile` sobre el
+perfil fusionado, la misma regla que el archivo. Sin dependencias: el núcleo no añade ninguna (plan 14).
+*Verificación*: un test por campo rechazado y uno por cada campo permitido (`test/library/agent-rules.test.ts`).
+*Falsación*: copiar `argv` de la biblioteca debe fallar el test de (a); quitar la regla de `enabled` también.
 
 **IC2. Nombres de clave permitidos.** `synapser.config.json` gana `providerKeyEnv`: lista de nombres de variables que
 los proveedores **de biblioteca** pueden usar. Vacía por defecto. Un proveedor de biblioteca cuyo `apiKeyEnv` nombre algo
 fuera de la lista se rechaza al escribir (400) y, si la lista cambia después, la corrida falla al arrancar con el motivo.
-Los proveedores del archivo y los integrados no cambian. *Verificación*: rechazo al escribir y al arrancar.
+Los proveedores del archivo y los integrados no cambian. *Verificación*: rechazo al escribir (400), y `doctor` al arrancar marca el documento. Que una corrida se niegue a arrancar llega con Q5.
 *Falsación*: sin la comprobación, el test de `TAVILY_API_KEY` falla.
 
 **IC3. Sin redirecciones en las llamadas de modelo.** `fetch` usa `redirect: "manual"`, y una respuesta 3xx es un

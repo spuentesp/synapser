@@ -180,8 +180,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: 638b43e · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
   nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
-- [~] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), uno a uno, cada uno con su verificador y su falsación. Bloquea Q5.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), cada uno con su verificador y su falsación. commit: PENDING · prueba: IC1 `test/library/agent-rules.test.ts` (49 pruebas, una por campo rechazado y una por campo permitido); IC2 `test/config/provider-key-allowlist.test.ts`, `test/api/library.test.ts` y `test/library/read.test.ts`; IC3 `test/model/redirects.test.ts`; IC4 `test/api/host.test.ts`. Falsación hecha en los cuatro: IC1 con `argv` copiado y sin la regla de `enabled`, IC2 sin la lista de claves, IC3 con `redirect` por defecto, IC4 sin la comprobación de `Host`. Suite completa: 533 pruebas, 524 pasan, 9 omitidas, 0 fallan. Era prerrequisito de Q5.
 - [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.
 
 ### Q5 — La biblioteca en las corridas
@@ -231,3 +230,5 @@ Abiertas: D1 a D7 del plan 15 (token, lista de variables, política de destinos,
 | 2026-10-14 | Claude Haiku 5.5 | Q4.4: intervenciones del asesor y efectos en el detalle del workflow, solo lectura (`GET …/interventions`, `GET …/effects`). |
 | 2026-10-14 | Claude Haiku 5.5 | P15: plan de amenazas de la biblioteca y de las claves, escrito antes de reclamarlo (proceso incumplido, registrado aquí). |
 | 2026-10-14 | Claude Haiku 5.5 | Decisiones del usuario: 1 hacer funcionar la biblioteca; 2 «probar agente» al final, tras investigar; 3 `decimals` aprobada; 4 riesgo de claves: plan con modelo de amenazas (P15); 5 sin cambios. |
+| 2026-10-14 | Claude Haiku 5.5 | Decisión del usuario: validar los documentos de biblioteca sin dependencias nuevas (opción A: tablas en `validate.ts`, `validateProfile` sobre el perfil fusionado). |
+| 2026-10-14 | Claude Haiku 5.5 | P15.2: IC1 a IC4 implementados y falsados. IC1 añade una regla que el plan no tenía: `enabled: true` sólo si el archivo activa el perfil base. |

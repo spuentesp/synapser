@@ -25,6 +25,7 @@ import { createRuntime } from "./runtime.ts";
 import { ConfigError, loadConfig } from "../config/load.ts";
 import { testProviderConnection } from "../model/connection.ts";
 import { readLibrary } from "../library/store.ts";
+import { libraryPolicyOf } from "../library/validate.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { Actor } from "../workflow/manager.ts";
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
         const pi = argv.indexOf("--port");
         const api = createApi({
           stateDir: cfg.stateDir,
-          control: { manager: rt.manager, chat: rt.chat, library: rt.library, catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
+          control: { manager: rt.manager, chat: rt.chat, library: rt.library, libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);
         console.log(`Synapser → http://127.0.0.1:${port}/  (workspace: ${cfg.workspace})`);

@@ -27,10 +27,10 @@ function stateWith(put: (lib: LibraryStore) => void): string {
   return state;
 }
 
-function configFor(state: string): string {
+function configFor(state: string, extra: Record<string, unknown> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "read-cfg-"));
   const path = join(root, "synapser.config.json");
-  writeFileSync(path, JSON.stringify({ workspace: root, stateDir: state, research: false }));
+  writeFileSync(path, JSON.stringify({ workspace: root, stateDir: state, research: false, ...extra }));
   return path;
 }
 
@@ -84,7 +84,8 @@ describe("the library as doctor and config show read it (plan 14 Q2.7)", () => {
   test("doctor shows the library, reports a provider key as information, and stays ok", async () => {
     const state = stateWith((lib) => lib.put("providers", "read-local", PROVIDER, "test:operator"));
     try {
-      const cfg = loadConfig({ path: configFor(state) });
+      // the operator's file allows the key name (plan 15 IC2); without that, the document itself fails (next test)
+      const cfg = loadConfig({ path: configFor(state, { providerKeyEnv: ["READ_TEST_KEY"] }) });
       const rep = await doctor(cfg, probe);
       const check = (name: string) => rep.checks.find((c) => c.name === name)!;
       assert.equal(check("library").ok, true);
@@ -92,6 +93,19 @@ describe("the library as doctor and config show read it (plan 14 Q2.7)", () => {
       assert.equal(check("library provider key (read-local)").ok, false);
       assert.match(check("library provider key (read-local)").detail, /none of READ_TEST_KEY is set/);
       assert.equal(rep.ok, true, "a missing library provider key is information, not a failure");
+    } finally {
+      rmSync(state, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor fails a library provider whose key name the operator's file does not allow (plan 15 IC2)", async () => {
+    const state = stateWith((lib) => lib.put("providers", "read-local", PROVIDER, "test:operator"));
+    try {
+      const rep = await doctor(loadConfig({ path: configFor(state) }), probe);
+      const check = rep.checks.find((c) => c.name === "library providers/read-local")!;
+      assert.equal(check.ok, false);
+      assert.match(check.detail, /apiKeyEnv READ_TEST_KEY is not in providerKeyEnv/);
+      assert.equal(rep.ok, false);
     } finally {
       rmSync(state, { recursive: true, force: true });
     }

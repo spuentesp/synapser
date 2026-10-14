@@ -24,7 +24,7 @@ import { swarmState } from "../audit/state.ts";
 import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
-import { validateLibraryDocument } from "../library/validate.ts";
+import { type LibraryPolicy, NO_LIBRARY_POLICY, validateLibraryDocument } from "../library/validate.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import { testProviderConnection } from "../model/connection.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
@@ -50,6 +50,8 @@ export interface ApiControl {
   config?: () => unknown;
   /** The operator library (plan 14 Q2.6). Absent ⇒ /api/library answers NOT_FOUND. */
   library?: LibraryStore;
+  /** What the operator's file allows library documents (plan 15): the configuration this process loaded at start. Absent ⇒ nothing. */
+  libraryPolicy?: () => LibraryPolicy;
 }
 
 const OPERATOR: Actor = { id: "ui:operator", role: "operator" };
@@ -191,7 +193,7 @@ export function createApi(opts: ApiOptions): ApiServer {
    * The operator library (plan 14 Q2.6). Reads are open like the other GETs (no secrets live in a document:
    * provider keys are environment NAMES, which validateProviderConfig enforces). Writes come through control().
    */
-  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string): Promise<void> {
+  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy): Promise<void> {
     const [kind, key, sub] = rest;
     if (rest.length > 3) return fail(res, 404, "NOT_FOUND");
     if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
@@ -211,6 +213,9 @@ export function createApi(opts: ApiOptions): ApiServer {
         return fail(res, 400, "BAD_ID");
       }
       if (!stored) return fail(res, 404, "UNKNOWN_ENTRY");
+      // the allowlist can change after the document was stored: the test honours the current one
+      const refused = validateLibraryDocument(k, key, stored.document, policy).filter((p) => p.includes("providerKeyEnv"));
+      if (refused.length) return json(res, 403, { error: "KEY_NOT_ALLOWED", errors: refused });
       return json(res, 200, { provider: key, ...(await testProviderConnection(stored.document as unknown as ProviderConfig)) });
     }
     if (method === "GET") {
@@ -226,7 +231,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       const body = await readBody(req, res);
       if (body === undefined) return;
       // every problem at once: an invalid edit changes nothing
-      const errors = validateLibraryDocument(k, key, body);
+      const errors = validateLibraryDocument(k, key, body, policy);
       if (errors.length) return json(res, 400, { error: "INVALID_LIBRARY_DOCUMENT", errors });
       try {
         const r = lib.put(k, key, body as LibraryDocument, OPERATOR.id);
@@ -296,7 +301,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         runs: runs.length,
       });
     }
-    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method);
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, c.libraryPolicy?.() ?? NO_LIBRARY_POLICY);
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {
@@ -504,6 +509,11 @@ export function createApi(opts: ApiOptions): ApiServer {
   }
 
   const server = createServer((req, res) => {
+    // P15 IC4: a page that rebinds its name to 127.0.0.1 reaches this server under its own host name, and the origin
+    // check cannot see the difference. The Host header must name this very server.
+    const port = (server.address() as { port: number } | null)?.port;
+    const host = req.headers["host"];
+    if (port === undefined || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) return fail(res, 421, "MISDIRECTED_HOST");
     route(req, res).catch((e) => {
       if (!res.headersSent) fail(res, 500, "INTERNAL", String((e as Error).message ?? e).slice(0, 200));
       else res.end();

@@ -214,6 +214,8 @@ export class OpenAICompatibleProvider implements ModelPort {
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(this.#d.config.timeoutMs),
+        // P15 IC3: a redirect would move the prompts (and the key) to an address the document chose; refuse it
+        redirect: "manual",
       });
     } catch (e) {
       const name = (e as Error)?.name;
@@ -237,6 +239,7 @@ export class OpenAICompatibleProvider implements ModelPort {
     const ra = a.headers.get("retry-after");
     const retryAfterMs = ra !== null && /^\d+(\.\d+)?$/.test(ra) ? Math.round(Number(ra) * 1000) : null;
     const s = a.status;
+    if (s >= 300 && s < 400) return new ModelError("BAD_REQUEST", `HTTP ${s}: redirect refused, the request was not followed`, { status: s });
     if (s === 401 || s === 403) return new ModelError("AUTH", `HTTP ${s}`, { status: s });
     if (s === 429) return new ModelError("RATE_LIMITED", msg, { status: s, retryAfterMs });
     if (s === 408) return new ModelError("TIMEOUT", msg, { status: s });
