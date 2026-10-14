@@ -130,7 +130,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 ### Q3 — Diseñadores y plantillas (UI)
 
 - [x] Q3.1 Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
-  vivo contra el validador real, vista previa JSON. commit: PENDING · prueba: `test/api/designer.test.ts`
+  vivo contra el validador real, vista previa JSON. commit: 1c55261 · prueba: `test/api/designer.test.ts`
   (borrador válido sin escritura; borrador inválido con todos sus problemas y la redacción del validador; token
   y origen) y navegador real con Chromium headless (capturas en `evidence/`): un borrador válido se guarda; uno
   inválido lista sus problemas y deja Guardar deshabilitado; un borrador se edita y guarda con PUT. Suite completa.
