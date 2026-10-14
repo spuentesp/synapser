@@ -95,6 +95,16 @@ dicen qué hacer y enlazan al diseñador, y la corrida del workflow seleccionado
 - **L4** Toda edición desde la UI exige token y queda como evento; la configuración inválida se rechaza entera.
 - **L5** Un adaptador solo emite flags que su tabla de capacidades declara (prueba contra `--help` real).
 
+Verificación y falsación de la inyección:
+
+- L1 se verifica en el límite del runner: exige procedencia `library`, recalcula el digest sobre los bytes,
+  rechaza ids duplicados y rutas que escapen o atraviesen enlaces, y registra `id + digest + mecanismo` en
+  `agent_runs` y su evento. Se falsa intentando inyectar procedencia ajena, contenido con digest alterado,
+  duplicados, recorrido `..` o un padre enlazado.
+- L2 se verifica construyendo la misma invocación con y sin skills y comparando sus flags protegidos de
+  herramientas, permisos, sandbox y presupuesto. Se falsa con un adaptador deliberadamente defectuoso que
+  cambia `--allowedTools` o `--max-budget-usd` al recibir una skill.
+
 ## 8. Fases
 
 | Fase | Entrega | Verificación |

@@ -139,6 +139,17 @@ describe("runner (isolation + observation)", () => {
     for (const k of ["NEBIUS_API_KEY", "NEMOTRON_TOKEN", "TAVILY_TOKEN", "ANTHROPIC_API_KEY"]) assert.equal(k in env, false, `${k} leaked`);
   });
 
+  test("a Claude HOME overlay never exposes or mutates operator skills", async () => {
+    const realHome = realpathSync(mkdtempSync(join(tmpdir(), "claude-home-")));
+    mkdirSync(join(realHome, ".claude", "skills", "private-skill"), { recursive: true });
+    writeFileSync(join(realHome, ".claude", "settings.json"), "{}");
+    writeFileSync(join(realHome, ".claude", "skills", "private-skill", "SKILL.md"), "private\n");
+    const r = await run("inspect-home-skills", { homeOverlay: [".claude"] }, { envSource: { PATH: process.env["PATH"], HOME: realHome } });
+    const observed = JSON.parse(journal.artifacts.get(r.changes.find((c) => c.path === "home-skills.json")!.afterBlob!).toString()) as { privateVisible: boolean };
+    assert.equal(observed.privateVisible, false);
+    assert.equal(readFileSync(join(realHome, ".claude", "skills", "private-skill", "SKILL.md"), "utf8"), "private\n");
+  });
+
   test("PLAN 13 §5.2: an agent that tries to publish from its copy cannot — no repository, no credentials, no config", async () => {
     // a real repository with a real remote, and every credential variable present in the parent env
     const bare = realpathSync(mkdtempSync(join(tmpdir(), "bare-")));

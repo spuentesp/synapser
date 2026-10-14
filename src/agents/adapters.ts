@@ -159,6 +159,7 @@ export class NativeLoopRunner implements AgentRunner {
         turns: usage.turns, apiMs: null, networkIsolated: false, permissionDenials: null,
         promptBlob: null, stdoutBlob: null, stderrBlob: null, finalTextBlob: null,
         toolUse: Object.keys(toolUse).length ? toolUse : null,
+        skills: [],
         changes: applied.flatMap((a) => journal.getActionFiles(a.actionId).map((f) => ({ path: f.path, op: f.op, beforeDigest: f.beforeDigest, afterDigest: f.afterDigest }))),
       }),
     );

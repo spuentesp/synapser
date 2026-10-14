@@ -3,6 +3,7 @@
 
 import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { prependSkills } from "./skills.ts";
 import { parsePlain, type ParsedRun } from "./usage.ts";
 
 const CAPABILITIES: AgentCapabilities = Object.freeze({
@@ -21,11 +22,13 @@ export class GenericCliAdapter implements AgentAdapter {
   readonly displayName = "Generic CLI";
   readonly capabilities = CAPABILITIES;
 
-  build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {
+  build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
+    const prompt = prependSkills(task.prompt, injected.skills);
     return {
-      argv: profile.argv.map((arg) => arg.replaceAll("{prompt}", task.prompt).replaceAll("{cwd}", task.cwd).replaceAll("{model}", profile.model ?? "")),
+      argv: profile.argv.map((arg) => arg.replaceAll("{prompt}", prompt).replaceAll("{cwd}", task.cwd).replaceAll("{model}", profile.model ?? "")),
       argvTemplate: [...profile.argv],
       env: buildAgentEnv(profile, task.envSource, task.home),
+      resetDirs: [],
       files: [],
     };
   }

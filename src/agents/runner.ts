@@ -5,7 +5,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Digest, MAX_ACTION_FILE_BYTES, observeFile } from "../digest/file.ts";
@@ -14,6 +14,7 @@ import { procStartTicks } from "../recovery/children.ts";
 import { listTree, takeSnapshot, treeEntries } from "../validation/snapshot.ts";
 import { NO_INJECTED_SKILLS, PROFILE_CLI_ADAPTER, type AgentAdapter, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { assertSkillPolicyUnchanged, materializeAdapterFiles, type RecordedSkill, validateInjectedSkills } from "./skills.ts";
 import { type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
 
 export { buildAgentEnv, CREDENTIAL_ENV_DENY, GIT_HARDENING } from "./adapter.ts";
@@ -50,6 +51,7 @@ export interface AgentRunResult {
   stdoutBlob: string;
   stderrBlob: string;
   networkIsolated: false;
+  skills: RecordedSkill[];
 }
 
 /** Directories the CLIs create for their own bookkeeping: not part of the user's change. */
@@ -66,6 +68,16 @@ export function makeScratchHome(scratch: string, profile: AgentProfile, realHome
     const src = join(realHome, rel);
     if (!existsSync(src)) continue;
     const dst = join(home, rel);
+    // Claude discovers user skills below ~/.claude/skills. Mirror its state one entry at a time so
+    // that directory can be replaced inside scratch without exposing or mutating the real one.
+    if (rel === ".claude" && statSync(src).isDirectory()) {
+      mkdirSync(dst, { recursive: true });
+      for (const name of readdirSync(src)) {
+        if (name === "skills") continue;
+        symlinkSync(join(src, name), join(dst, name));
+      }
+      continue;
+    }
     mkdirSync(join(dst, ".."), { recursive: true });
     try {
       symlinkSync(src, dst);
@@ -108,12 +120,16 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     const base = new Map(treeEntries(baseDir, snap.files).map((e) => [e.path, e]));
     const promptBlob = journal.artifacts.put(Buffer.from(o.prompt, "utf8"));
     const home = makeScratchHome(scratch, profile, (o.envSource ?? process.env)["HOME"]);
+    const injected = o.injectedSkills ?? NO_INJECTED_SKILLS;
+    const recordedSkills = validateInjectedSkills(injected, adapter.capabilities.skillMechanism);
+    const adapterTask = { prompt: o.prompt, cwd: work, home, envSource: o.envSource ?? process.env };
     const invocation = adapter.build(
       profile,
-      { prompt: o.prompt, cwd: work, home, envSource: o.envSource ?? process.env },
-      o.injectedSkills ?? NO_INJECTED_SKILLS,
+      adapterTask,
+      injected,
     );
-    if (invocation.files.length > 0) throw new Error(`adapter ${adapter.id} returned files before skill injection is enabled`);
+    if (injected.skills.length > 0) assertSkillPolicyUnchanged(adapter.build(profile, adapterTask, NO_INJECTED_SKILLS), invocation);
+    materializeAdapterFiles(invocation.resetDirs, invocation.files, { worktree: work, home });
     const argv = [...invocation.argv];
     const template = [...invocation.argvTemplate];
 
@@ -212,6 +228,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
         cacheWriteTokens: parsed.usage.cacheWriteTokens, reasoningTokens: parsed.usage.reasoningTokens, costUsd: parsed.usage.costUsd,
         turns: parsed.usage.turns, apiMs: parsed.usage.apiMs, networkIsolated: false, permissionDenials: parsed.permissionDenials,
         promptBlob, stdoutBlob, stderrBlob, finalTextBlob, toolUse: parsed.toolUse,
+        skills: recordedSkills,
         changes: changes.map((c) => ({ path: c.path, op: c.op, beforeDigest: c.beforeDigest, afterDigest: c.afterDigest })),
       }),
     );
@@ -220,6 +237,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       exitCode: exec.code, signal: exec.signal, timedOut: exec.timedOut, durationMs, usage: parsed.usage, toolUse: parsed.toolUse,
       sessionId: parsed.sessionId, finalText: parsed.finalText, baseDigest: snap.digest, baseConsistent: snap.consistent,
       changes, stdoutBlob, stderrBlob, networkIsolated: false,
+      skills: recordedSkills,
     };
   } finally {
     rmSync(scratch, { recursive: true, force: true });

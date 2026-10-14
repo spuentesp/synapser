@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AgentParseOptions, type AdapterTask, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { skillFiles } from "./skills.ts";
 import { parseKimi, type ParsedRun } from "./usage.ts";
 
 const CAPABILITIES: AgentCapabilities = Object.freeze({
@@ -22,7 +23,7 @@ export class KimiAdapter implements AgentAdapter {
   readonly displayName = "Kimi Code";
   readonly capabilities = CAPABILITIES;
 
-  build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {
+  build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["kimi", "-p", task.prompt, "--output-format", "stream-json"];
     const template = ["kimi", "-p", "{prompt}", "--output-format", "stream-json"];
     const mode = profile.permissions?.mode;
@@ -30,7 +31,18 @@ export class KimiAdapter implements AgentAdapter {
       argv.push(`--${mode}`);
       template.push(`--${mode}`);
     }
-    return { argv, argvTemplate: template, env: buildAgentEnv(profile, task.envSource, task.home), files: [] };
+    if (injected.skills.length > 0) {
+      const skillsDir = join(task.home, ".local/share/synapser/skills");
+      argv.push("--skills-dir", skillsDir);
+      template.push("--skills-dir", "{skillsDir}");
+    }
+    return {
+      argv,
+      argvTemplate: template,
+      env: buildAgentEnv(profile, task.envSource, task.home),
+      resetDirs: [{ root: "home", path: ".local/share/synapser/skills" }],
+      files: skillFiles(injected.skills, "home", ".local/share/synapser/skills"),
+    };
   }
 
   parse(stdout: string, _profile: AgentProfile, options: AgentParseOptions = {}): ParsedRun {

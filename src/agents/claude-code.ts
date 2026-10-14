@@ -3,6 +3,7 @@
 
 import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { skillFiles } from "./skills.ts";
 import { parseClaude, type ParsedRun } from "./usage.ts";
 
 const CAPABILITIES: AgentCapabilities = Object.freeze({
@@ -21,7 +22,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   readonly displayName = "Claude Code";
   readonly capabilities = CAPABILITIES;
 
-  build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {
+  build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["claude", "-p", task.prompt, "--output-format", "json"];
     const template = ["claude", "-p", "{prompt}", "--output-format", "json"];
     const add = (...args: string[]) => {
@@ -33,7 +34,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     if (profile.permissions?.disallowedTools?.length) add("--disallowedTools", profile.permissions.disallowedTools.join(","));
     if (profile.permissions?.mode) add("--permission-mode", profile.permissions.mode);
     if (profile.maxBudgetUsd !== undefined) add("--max-budget-usd", String(profile.maxBudgetUsd));
-    return { argv, argvTemplate: template, env: buildAgentEnv(profile, task.envSource, task.home), files: [] };
+    return {
+      argv, argvTemplate: template, env: buildAgentEnv(profile, task.envSource, task.home),
+      resetDirs: [{ root: "worktree", path: ".claude/skills" }, { root: "home", path: ".claude/skills" }],
+      files: skillFiles(injected.skills, "worktree", ".claude/skills"),
+    };
   }
 
   parse(stdout: string, _profile: AgentProfile): ParsedRun {

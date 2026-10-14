@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { skillFiles } from "./skills.ts";
 import { parseCodex, type ParsedRun } from "./usage.ts";
 
 const CAPABILITIES: AgentCapabilities = Object.freeze({
@@ -22,7 +23,7 @@ export class CodexAdapter implements AgentAdapter {
   readonly displayName = "Codex CLI";
   readonly capabilities = CAPABILITIES;
 
-  build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {
+  build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const sandbox = profile.permissions?.mode ?? (profile.role === "advisor" ? "read-only" : "workspace-write");
     const argv = ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", sandbox, "-C", task.cwd];
     const template = [...argv];
@@ -34,7 +35,11 @@ export class CodexAdapter implements AgentAdapter {
     template.push("{prompt}");
     const env = buildAgentEnv(profile, task.envSource, task.home);
     env["CODEX_HOME"] = join(task.home, ".codex");
-    return { argv, argvTemplate: template, env, files: [] };
+    return {
+      argv, argvTemplate: template, env,
+      resetDirs: [{ root: "home", path: ".codex/skills" }],
+      files: skillFiles(injected.skills, "home", ".codex/skills"),
+    };
   }
 
   parse(stdout: string, _profile: AgentProfile): ParsedRun {

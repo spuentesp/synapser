@@ -1,6 +1,10 @@
 import { ACTION_STATES, ACTION_TRANSITIONS } from "./transitions.ts";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+export const MIGRATIONS: Readonly<Record<number, string>> = Object.freeze({
+  1: "ALTER TABLE agent_runs ADD COLUMN skills_json TEXT NOT NULL DEFAULT '[]';",
+});
 
 const states = ACTION_STATES.map((s) => `'${s}'`).join(",");
 
@@ -99,7 +103,8 @@ CREATE TABLE agent_runs(
   cache_write_tokens INTEGER, reasoning_tokens INTEGER, cost_usd REAL, turns INTEGER, api_ms INTEGER,
   network_isolated INTEGER NOT NULL DEFAULT 0, permission_denials INTEGER,
   prompt_blob TEXT, stdout_blob TEXT, stderr_blob TEXT, final_text_blob TEXT,
-  tool_use_json TEXT, changes_json TEXT NOT NULL DEFAULT '[]') STRICT;
+  tool_use_json TEXT, changes_json TEXT NOT NULL DEFAULT '[]',
+  skills_json TEXT NOT NULL DEFAULT '[]') STRICT;
 
 CREATE TABLE events(
   run_id TEXT NOT NULL, seq INTEGER NOT NULL, ts INTEGER NOT NULL,

@@ -23,6 +23,8 @@ export interface InjectedSkill {
   id: string;
   digest: string;
   content: string;
+  /** Provenance is checked at the runner boundary; only frozen library entries may enter a run. */
+  source: "library";
 }
 
 export interface InjectedSkills {
@@ -45,11 +47,18 @@ export interface AdapterFile {
   content: string;
 }
 
+export interface AdapterDirectory {
+  root: "worktree" | "home";
+  path: string;
+}
+
 export interface AgentInvocation {
   argv: readonly string[];
   /** Prompt-free form stored in the ledger. */
   argvTemplate: readonly string[];
   env: Readonly<Record<string, string>>;
+  /** Skill discovery roots owned exclusively by this invocation; the runner clears them first. */
+  resetDirs: readonly AdapterDirectory[];
   files: readonly AdapterFile[];
 }
 
@@ -121,6 +130,7 @@ export class ProfileCliAdapter implements AgentAdapter {
       argv: profile.argv.map((arg) => arg.replaceAll("{prompt}", task.prompt).replaceAll("{cwd}", task.cwd).replaceAll("{model}", profile.model ?? "")),
       argvTemplate: [...profile.argv],
       env: buildAgentEnv(profile, task.envSource, task.home),
+      resetDirs: [],
       files: [],
     };
   }

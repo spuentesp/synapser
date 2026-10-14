@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { Digest } from "../digest/file.ts";
 import { eventHash, genesisHash } from "../audit/chain.ts";
 import { ArtifactStore } from "./artifacts.ts";
-import { SCHEMA_SQL, SCHEMA_VERSION, seedTransitionsSql } from "./schema.ts";
+import { MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION, seedTransitionsSql } from "./schema.ts";
 import { type ActionState, isLegalTransition } from "./transitions.ts";
 
 export class JournalError extends Error {
@@ -102,6 +102,7 @@ export interface AgentRunInsert {
   stderrBlob: string | null;
   finalTextBlob: string | null;
   toolUse: Record<string, number> | null;
+  skills?: { id: string; digest: string; mechanism: "native-dir" | "skills-dir-flag" | "prompt-prepend" }[];
   changes: { path: string; op: string; beforeDigest: string | null; afterDigest: string | null }[];
 }
 export interface ModelCallInsert {
@@ -389,14 +390,15 @@ export class Tx {
         `INSERT INTO agent_runs(agent_run_id,run_id,task_id,profile_id,role,adapter,started_at,finished_at,duration_ms,argv_json,base_digest,
            exit_code,signal,timed_out,outcome,reason,session_id,models_json,usage_provenance,input_tokens,output_tokens,cache_read_tokens,
            cache_write_tokens,reasoning_tokens,cost_usd,turns,api_ms,network_isolated,permission_denials,prompt_blob,stdout_blob,stderr_blob,
-           final_text_blob,tool_use_json,changes_json)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           final_text_blob,tool_use_json,changes_json,skills_json)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.agentRunId, r.runId, r.taskId, r.profileId, r.role, r.adapter, r.startedAt, r.finishedAt, r.durationMs, JSON.stringify(r.argv), r.baseDigest,
         r.exitCode, r.signal, r.timedOut ? 1 : 0, r.outcome, r.reason, r.sessionId, JSON.stringify(r.models), r.usageProvenance, r.inputTokens,
         r.outputTokens, r.cacheReadTokens, r.cacheWriteTokens, r.reasoningTokens, r.costUsd, r.turns, r.apiMs, r.networkIsolated ? 1 : 0,
         r.permissionDenials, r.promptBlob, r.stdoutBlob, r.stderrBlob, r.finalTextBlob, r.toolUse === null ? null : JSON.stringify(r.toolUse), JSON.stringify(r.changes),
+        JSON.stringify(r.skills ?? []),
       );
     this.event(r.runId, "agent_run", r.agentRunId, null, r.outcome, {
       profile: r.profileId,
@@ -409,6 +411,7 @@ export class Tx {
       cost_usd: r.costUsd,
       changed_files: r.changes.map((c) => c.path),
       tool_use: r.toolUse,
+      skills: r.skills ?? [],
       ...(r.reason ? { reason: r.reason } : {}),
     });
   }
@@ -555,7 +558,25 @@ export class Journal {
         db.exec("COMMIT");
       } else {
         const v = (db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as Row | undefined)?.["value"];
-        if (v !== String(SCHEMA_VERSION)) throw new JournalError(`schema_version ${String(v)} != ${SCHEMA_VERSION}`);
+        const version = Number(v);
+        if (!Number.isInteger(version) || version < 1 || version > SCHEMA_VERSION) {
+          throw new JournalError(`schema_version ${String(v)} is not supported (current ${SCHEMA_VERSION})`);
+        }
+        if (version < SCHEMA_VERSION) {
+          db.exec("BEGIN IMMEDIATE");
+          try {
+            for (let from = version; from < SCHEMA_VERSION; from += 1) {
+              const sql = MIGRATIONS[from];
+              if (!sql) throw new JournalError(`missing migration from schema_version ${from}`);
+              db.exec(sql);
+              db.prepare("UPDATE meta SET value=? WHERE key='schema_version'").run(String(from + 1));
+            }
+            db.exec("COMMIT");
+          } catch (e) {
+            db.exec("ROLLBACK");
+            throw e;
+          }
+        }
       }
     } catch (e) {
       try {
@@ -765,6 +786,7 @@ export class Journal {
       finalTextBlob: (r["final_text_blob"] as string | null) ?? null,
       toolUse: r["tool_use_json"] ? JSON.parse(r["tool_use_json"] as string) : null,
       changes: JSON.parse(r["changes_json"] as string),
+      skills: JSON.parse((r["skills_json"] as string | null) ?? "[]"),
     }));
   }
 

@@ -1,6 +1,6 @@
 // A stand-in agent CLI for tests: behaves like a one-shot tool that edits its cwd and prints
 // codex-style JSONL. First arg = behavior, second = prompt (ignored).
-import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 const mode = process.argv[2];
 const ok = (text = "done") => {
@@ -52,6 +52,10 @@ switch (mode) {
     writeFileSync("app/real.py", "y = 2\n");
     ok();
     break;
+  case "skill-file":
+    writeFileSync("skill-seen.txt", readFileSync(process.argv[3], "utf8"));
+    ok("read injected skill");
+    break;
   case "error-exit0":
     console.log(JSON.stringify({ type: "error", sessionID: "s1", error: { name: "APIError", data: { message: "Insufficient account balance", statusCode: 402 } } }));
     break; // exit code 0 on purpose
@@ -73,6 +77,10 @@ switch (mode) {
   }
   case "env":
     writeFileSync("env.txt", JSON.stringify(process.env));
+    ok();
+    break;
+  case "inspect-home-skills":
+    writeFileSync("home-skills.json", JSON.stringify({ privateVisible: existsSync(`${process.env.HOME}/.claude/skills/private-skill`) }));
     ok();
     break;
   case "hang":
