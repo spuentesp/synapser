@@ -179,7 +179,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   }
   for (const profile of profiles) {
     if (profile.adapter !== "native") continue;
-    const provider = profile.provider ? providers[profile.provider] : undefined;
+    const provider = profile.provider && Object.hasOwn(providers, profile.provider) ? providers[profile.provider] : undefined;
     if (!provider) errors.push(`agent "${profile.id}" references unknown provider "${String(profile.provider)}"`);
     else if (!provider.models.some((model) => model.id === profile.model)) errors.push(`agent "${profile.id}" references model "${String(profile.model)}" not declared by provider "${profile.provider}"`);
   }

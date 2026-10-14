@@ -178,3 +178,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q2.5: instantánea de la biblioteca por corrida, copiada a sus artefactos; el manejador congelado es la única vía de lectura de la corrida. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.6: `/api/library` (lectura abierta; escritura con token y mismo origen); validación completa por tipo; guardia único; precios decimales en la biblioteca con la opción `decimals`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.7: `doctor` y `config show` leen la biblioteca con un manejador de solo lectura (sin sincronizar ni crear journal). |
+| 2026-10-14 | Claude Haiku 5.5 | Revisión del trabajo de GPT-5 Codex (Q2.2): el cargador buscaba `providers[id]` sin propiedad propia; `provider: "constructor"` lanzaba `TypeError` en vez de `ConfigError`. Corregido en `src/config/load.ts`. |
