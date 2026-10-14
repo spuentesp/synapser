@@ -266,7 +266,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (errors.length) return json(res, 400, { error: "INVALID_LIBRARY_DOCUMENT", errors });
       // a provider edit that would leave an agent unresolvable is refused, with the agents it breaks (plan 14 Q5.2)
       const broken = k === "providers" ? agentsBrokenBy(lib, key, body as LibraryDocument, policy) : [];
-      if (broken.length) return json(res, 409, { error: "REFERENCED", references: broken });
+      if (broken.length) return json(res, 409, { error: "REFERENCED", errors: broken });
       try {
         const r = lib.put(k, key, body as LibraryDocument, OPERATOR.id);
         return json(res, 200, { ...entryJson(r.entry), changed: r.changed });
@@ -277,7 +277,7 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (method === "DELETE") {
       // a referenced entry stays, and the references say why (plan 14 Q5.2)
       const references = k === "providers" ? usersOfProvider(lib, key, policy) : k === "agents" ? reviewers(key) : [];
-      if (references.length) return json(res, 409, { error: "REFERENCED", references });
+      if (references.length) return json(res, 409, { error: "REFERENCED", errors: references });
       try {
         return json(res, 200, { removed: lib.remove(k, key, OPERATOR.id) });
       } catch (e) {

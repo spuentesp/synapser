@@ -129,7 +129,8 @@ export function LibraryView({ token }: { token: string | null }) {
       reset()
       await load()
     } catch (e) {
-      setFailure(e instanceof ApiError ? e.code : (e as Error).message)
+      // a refused delete names what still uses the entry (plan 14 Q5.2)
+      setFailure(e instanceof ApiError ? (e.errors.length ? e.errors.join(' · ') : e.code) : (e as Error).message)
     } finally {
       setBusy(false)
     }

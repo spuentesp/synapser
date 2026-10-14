@@ -58,9 +58,9 @@ describe("library references (plan 14 Q5.2)", () => {
     assert.equal((await call("PUT", "/api/library/agents/lib-agent", AGENT)).status, 200);
     const r = await call("DELETE", "/api/library/providers/lib-provider");
     assert.equal(r.status, 409);
-    const body = (await r.json()) as { error: string; references: string[] };
+    const body = (await r.json()) as { error: string; errors: string[] };
     assert.equal(body.error, "REFERENCED");
-    assert.deepEqual(body.references, ["agent lib-agent runs on provider lib-provider"]);
+    assert.deepEqual(body.errors, ["agent lib-agent runs on provider lib-provider"]);
     assert.equal((await call("GET", "/api/library/providers/lib-provider")).status, 200);
   });
 
@@ -69,7 +69,7 @@ describe("library references (plan 14 Q5.2)", () => {
     await call("PUT", "/api/library/agents/lib-agent", AGENT);
     const cut = await call("PUT", "/api/library/providers/lib-provider", { ...PROVIDER, models: [{ id: "m1" }] });
     assert.equal(cut.status, 409);
-    assert.match(((await cut.json()) as { references: string[] }).references.join("\n"), /agent lib-agent would not resolve with this edit: .*model m2 is not declared by provider lib-provider/);
+    assert.match(((await cut.json()) as { errors: string[] }).errors.join("\n"), /agent lib-agent would not resolve with this edit: .*model m2 is not declared by provider lib-provider/);
     const kept = (await (await call("GET", "/api/library/providers/lib-provider")).json()) as { document: { models: { id: string }[] } };
     assert.deepEqual(kept.document.models.map((m) => m.id), ["m1", "m2"], "the refused edit changed nothing");
     assert.equal((await call("PUT", "/api/library/providers/lib-provider", { ...PROVIDER, baseUrl: "https://other.example/v1/" })).status, 200);
@@ -88,7 +88,7 @@ describe("library references (plan 14 Q5.2)", () => {
     assert.equal(created.ok, true, JSON.stringify(created));
     const blocked = await call("DELETE", "/api/library/agents/lib-agent");
     assert.equal(blocked.status, 409);
-    assert.deepEqual(((await blocked.json()) as { references: string[] }).references, ["workflow wf-ref reviews with lib-agent"]);
+    assert.deepEqual(((await blocked.json()) as { errors: string[] }).errors, ["workflow wf-ref reviews with lib-agent"]);
     assert.equal(mgr.cancel("wf-ref", OPERATOR).ok, true);
     assert.equal((await call("DELETE", "/api/library/agents/lib-agent")).status, 200);
   });
