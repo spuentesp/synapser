@@ -10,12 +10,14 @@ import { loadHistory } from "../orchestration/history.ts";
 import { QueryGuard, researchFromEnv, ResearchSession } from "../research/index.ts";
 import { ProductionEngine } from "../workflow/engine.ts";
 import { WorkflowManager } from "../workflow/manager.ts";
+import { LibraryStore } from "../library/store.ts";
 
 
 export interface Runtime {
   manager: WorkflowManager;
   catalog: () => ProfileCard[];
   serverJournal: Journal;
+  library: LibraryStore;
   chat: ChatService;
   close(): Promise<void>;
 }
@@ -52,6 +54,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     effectIdentity: cfg.identity,
   });
   const serverJournal = Journal.open(cfg.stateDir, "_server");
+  const library = new LibraryStore(cfg.stateDir, serverJournal);
   const chat = new ChatService({
     model: new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(serverJournal) }),
     manager,
@@ -68,6 +71,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
   return {
     manager,
     serverJournal,
+    library,
     chat,
     catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),
     close: async () => {

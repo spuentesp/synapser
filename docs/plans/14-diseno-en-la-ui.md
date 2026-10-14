@@ -107,6 +107,10 @@ Verificación y falsación de la inyección:
 - L5 se verifica extrayendo los flags de todas las variantes construidas por cada adaptador, exigiendo
   igualdad con `capabilities.cliFlags`, y buscando cada declaración en el `--help` del binario instalado.
   Se falsa al emitir un flag no declarado o al declarar uno que el binario real no reconoce.
+- L4 usa el journal `_server` como autoridad: cada versión de biblioteca se guarda primero como blob por
+  digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
+  almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes
+  auditados. La exigencia de token y mismo origen se verifica en Q2.6, en el límite HTTP.
 
 ## 8. Fases
 

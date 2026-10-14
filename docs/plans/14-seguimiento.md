@@ -80,9 +80,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q2 — Biblioteca, proveedores y API
 
-- [~] Q2.1 Almacén `library/` en el estado: proveedores, skills, plantillas, agentes; versión por digest;
-  cada cambio es un evento en el ledger del servidor. *Invariante:* L4.
-  quién: GPT-5 Codex · desde: 2026-10-14
+- [x] Q2.1 Almacén `library/` en el estado: proveedores, skills, plantillas, agentes; versión por digest;
+  cada cambio es un evento en el ledger del servidor. *Invariante:* L4. commit: 0000000 · prueba: cuatro
+  colecciones versionadas por digest, cambios y borrados encadenados con actor en `_server`, idempotencia,
+  rechazo de identidades inseguras y reparación de una proyección adulterada; suite completa.
 - [ ] Q2.2 `Provider` (protocolo, baseUrl, apiKeyEnv, modelos con precio) y agentes `native` que lo
   referencian; migrar `endpoint` de perfiles a proveedor; precio declarado → costo conocido.
 - [ ] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
