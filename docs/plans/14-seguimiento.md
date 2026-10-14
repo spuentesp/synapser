@@ -206,6 +206,14 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
   commit: 87a8403 · prueba: `docs/plans/14-probar-agente.md`: investigación con los hechos del código (copia desechable, tope de costo por adaptador, permisos, proveedor sin costo, registro) y sus preguntas al usuario. No construye nada, así que no hay código que falsar.
 
+### P16 — Spike, validación, curación y optimización (plan)
+
+- [~] P16.1 Plan 16: `docs/plans/16-spike-validacion-curacion-optimizacion.md`, con su entrada en el índice. Propuesto, sin código ni dependencias. quién: Claude Haiku 5.5; desde: 2026-10-14.
+- [ ] P16.2 Spike: servidor MCP con `@modelcontextprotocol/server` (versión exacta) en lugar del escrito a mano. *Invariantes:* M1 a M4 del plan. *Verificación:* catálogo idéntico a una instantánea previa, `test/mcp/` sin cambiar aserciones de herramientas, clientes MCP del host conectados, árbol de producción listado. *Falsación:* quitar una herramienta o cambiar un esquema. *Decisión previa:* aprobación del usuario para añadir la dependencia. Salida: adoptar, o no adoptar y mantener el servidor propio.
+- [ ] P16.3 Validación con zod de documentos de biblioteca y borradores de workflow; las reglas semánticas siguen en código. *Invariantes:* V1 a V3. *Verificación:* corpus de equivalencia (mismo veredicto y mismo campo antes y después). *Falsación:* quitar el esquema de un campo. *Depende de:* P16.2, o aprobación propia de zod si no se adopta.
+- [ ] P16.4 Curación de skills: casos de regresión `dev` y `holdout`, admisión antes de usar una versión, rollback por digest, y rúbrica de asignación, uso y resultado. *Invariantes:* C1 a C3. *Verificación:* un caso `holdout` fallido impide guardar la versión (409 con su id); el rollback registra actor y motivo. *Falsación:* admitir sin comprobar. *Decisiones previas:* dónde viven los casos y cómo se admite (plan 16, sección 8).
+- [ ] P16.5 Optimización offline de textos: prototipos de `gepa` (Python) y `@ax-llm/ax` (TypeScript) con criterios fijados antes; un candidato entra en la biblioteca solo por P16.4. *Invariantes:* O1 a O3. *Depende de:* P16.4. *Decisión previa:* Python como dependencia del operador, si gana `gepa`.
+
 ### Cierre
 
 - [x] C.1 Actualizar el docx (v0.5) con las secciones del plan 14 (script en el scratchpad de la sesión
@@ -264,3 +272,4 @@ Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.
 | 2026-10-14 | Claude Haiku 5.5 | P15.4 y P15.7: el token sale de la cookie HttpOnly; modo de confianza configurable, con código de un solo uso en modo adversario. Entorno: el PATH encontraba el wrapper npm de zoanthrope 0.1.6 (el lock pide el binario de cargo, que ya no está); reconstruido el commit fijado 37ecffa en el scratchpad, con sha256 igual al del lock, y las pruebas se corren con `ZOANTHROPE_BIN`. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.5: destinos de proveedores de biblioteca con `undici` 8.11.2 (dependencia aprobada) y búsqueda guardada; loopback sigue permitido para modelos locales. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.9 (prueba de concepto de D5): `pasta` no separa un puerto del loopback del host; `bwrap --unshare-net` con proxy en socket Unix aísla para HTTP. Bloqueada: el mecanismo aprobado no sirve tal cual. |
+| 2026-10-14 | Claude Haiku 5.5 | P16.1 reclamada: plan 16 (spike, validación, curación y optimización), antes de escribirlo. P16.2 a P16.5 registradas como pendientes. |
