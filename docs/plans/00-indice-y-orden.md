@@ -19,6 +19,7 @@ Objetivo de salida de la ventana (diseño §11): **S01–S07 pasan sin depender 
 | [11 Zoanthrope y estado vivo](11-enganche-zoanthrope-y-estado-vivo.md) | identidad/intención, colector, proyección determinista | 08 |
 | [12 Interfaz](12-interfaz.md) | vistas, API, invariantes U1–U5, guion de demo | 10, 11 |
 | [13 Centro de mando](13-centro-de-mando.md) | MCP, workflow/condiciones, compuertas de efectos, asesor, pools, chat | 08, 10, 11, 12 |
+| [14 Diseño desde la UI](14-diseno-en-la-ui.md) · [seguimiento](14-seguimiento.md) | adaptadores por agente, proveedores, skills, biblioteca, diseñadores | 13 |
 
 ## Decisiones tomadas en estos planes (para aprobar)
 
