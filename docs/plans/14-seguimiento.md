@@ -181,7 +181,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [ ] C.1 Actualizar el docx (v0.5) con las secciones del plan 14 (script en el scratchpad de la sesión
   anterior; si no está, regenerar con el mismo método: editar el XML sobre `design/Synapser_Diseno.docx`).
-- [ ] C.2 README: sección de configuración desde la UI.
+- [x] C.2 README: sección de configuración desde la UI. commit: PENDING · prueba: sección `Configure from the console` en README.md, revisada contra el estado real (la biblioteca aún no la leen las corridas, y se dice así).
 - [ ] C.3 Demo integrada y guion de vídeo (el usuario pidió **no** hacerla todavía).
 
 ## Decisiones abiertas del usuario (no resolver sin preguntar)

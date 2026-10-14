@@ -63,6 +63,24 @@ $ node src/audit/cli.ts --state <stateDir> --run <runId> verify | timeline | who
 $ node scripts/verify-export.ts <run>.ledger.json     # verifies an export with no database and no server
 ```
 
+## Configure from the console
+
+`synapser serve` (or `scripts/sandbox.sh`) opens the console at `http://127.0.0.1:<port>/`.
+
+- **Home** shows what is active, which gates wait for a person, which agents are enabled, and the accumulated model
+  cost. A call without a declared price is counted apart, never as zero.
+- **Workflows** has a form that builds a workflow. The draft is checked live by the server's own validator, which
+  writes nothing, and *Save* is enabled only for a document that validator accepts. Four built-in templates fill the
+  form from their parameters. The advisor's interventions and the requested effects are shown in the workflow's
+  detail; decisions are taken in Approvals.
+- **Library** holds providers, agents, skills and templates as versioned documents. A refused document lists every
+  problem at once. *Test connection* calls a stored provider's endpoint with its key; the report names the environment
+  variable the key came from and never shows the key.
+
+Library documents are not read by runs yet: the workflow engine still takes providers and agents from the
+configuration file. The system roles (planner, advisor, chat, worker, repair) are assigned in
+`synapser.config.json` under `roles`, and `synapser provider test <id>` checks a configured provider from the terminal.
+
 ## Layout
 
 - `src/zoo/` — MCP stdio transport and typed adapter; read-only collector; intent announcement.
