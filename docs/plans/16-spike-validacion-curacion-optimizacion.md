@@ -20,6 +20,8 @@ No se toca: `undici` (aprobado en P15.5); la canonicalización de digests (`src/
 3. **Forma con librería, reglas con código.** zod valida la forma. Las reglas que protegen la frontera de confianza (IC1, IC2, D3, referencias) siguen en el código, con sus pruebas actuales.
 4. **Resultados medidos fuera del repositorio.** Los resultados de los prototipos van a `evidence/` (ignorado). El seguimiento guarda solo la decisión y su prueba.
 
+Etiquetas de invariantes: X (spike), V (validación), CU (curación) y O (optimización). M y C ya las usa el plan 13 para el modelo de confianza de MCP y los workflows.
+
 ## 3. P16.2 — Spike: servidor MCP con el SDK oficial
 
 **Hechos del registro (consultados el 14 oct 2026).** `@modelcontextprotocol/server` tiene 2.3.1 como `latest`, publicada el 5 oct 2026, con licencia Apache-2.0. Sus dependencias directas son `zod` ^4.2.0 y `@modelcontextprotocol/core` 2.3.1, y exige Node ≥20. Su README en npm menciona el transporte stdio y la revisión `2026-07-28`. Las guías de terceros se contradicen sobre si la v2 es beta o estable, así que no se usan para eso.
@@ -34,14 +36,14 @@ No se toca: `undici` (aprobado en P15.5); la canonicalización de digests (`src/
 3. ¿Qué entra en el árbol de producción? Se lista completo con `npm ls --omit=dev`.
 
 **Invariantes y verificación.**
-- **M1 Catálogo idéntico.** Nombres, descripciones y esquemas de las herramientas coinciden con una instantánea del `tools/list` tomada antes del cambio. *Falsación:* quitar una herramienta o cambiar un esquema; la prueba falla.
-- **M2 Regresión de transporte.** `test/mcp/mcp.test.ts` y `test/mcp/stdio-e2e.test.ts` pasan sin cambiar aserciones de herramientas.
-- **M3 Clientes reales.** Cada cliente MCP instalado en el host lista las herramientas y llama a una. Es una prueba manual; el nombre y la versión del cliente se anotan en el seguimiento.
-- **M4 Dependencias.** El árbol de producción añade solo `@modelcontextprotocol/*` y `zod`. Cualquier otro paquete vuelve a decisión del usuario.
+- **X1 Catálogo idéntico.** Nombres, descripciones y esquemas de las herramientas coinciden con una instantánea del `tools/list` tomada antes del cambio. *Falsación:* quitar una herramienta o cambiar un esquema; la prueba falla.
+- **X2 Regresión de transporte.** `test/mcp/mcp.test.ts` y `test/mcp/stdio-e2e.test.ts` pasan sin cambiar aserciones de herramientas.
+- **X3 Clientes reales.** Cada cliente MCP instalado en el host lista las herramientas y llama a una. Es una prueba manual; el nombre y la versión del cliente se anotan en el seguimiento.
+- **X4 Dependencias.** El árbol de producción añade solo `@modelcontextprotocol/*` y `zod`. Cualquier otro paquete vuelve a decisión del usuario.
 
 **Criterio de salida.**
-- **Adoptar** si M1 a M4 se cumplen y los clientes de M3 conectan con la revisión que negocian.
-- **No adoptar** si un cliente de M3 necesita un handshake que el SDK no ofrece. Se mantiene el servidor escrito a mano, se anota el motivo y la tarea se cierra con esa decisión. La línea 1.x del SDK tiene 17 dependencias directas, así que no es una alternativa barata.
+- **Adoptar** si X1 a X4 se cumplen y los clientes de X3 conectan con la revisión que negocian.
+- **No adoptar** si un cliente de X3 necesita un handshake que el SDK no ofrece. Se mantiene el servidor escrito a mano, se anota el motivo y la tarea se cierra con esa decisión. La línea 1.x del SDK tiene 17 dependencias directas, así que no es una alternativa barata.
 - **Acotado.** El spike no cambia nada fuera de `src/mcp/server.ts` y sus pruebas.
 
 **Decisión previa.** Añadir `@modelcontextprotocol/server` requiere la aprobación del usuario, con versión exacta, como `undici` (ronda 3 del plan 14).
@@ -83,9 +85,9 @@ No se toca: `undici` (aprobado en P15.5); la canonicalización de digests (`src/
 Un caso sin comprobación de uso mide solo resultado. Eso se declara en el caso, no se supone.
 
 **Invariantes y verificación.**
-- **C1 Admisión.** Ninguna versión con un caso `holdout` fallido queda en la biblioteca. *Verificador:* un intento de guardarla devuelve 409 con el id del caso; con todos los casos en verde, guarda. *Falsación:* admitir sin comprobar; la prueba falla.
-- **C2 Rollback por digest.** Tras restaurar, la corrida siguiente registra el digest restaurado, y el evento tiene actor y motivo. *Falsación:* un rollback que solo cambia una etiqueta; la prueba falla.
-- **C3 Asignación visible.** La fila de cada corrida conserva id, digest y mecanismo de cada skill (prueba existente de Q5.4).
+- **CU1 Admisión.** Ninguna versión con un caso `holdout` fallido queda en la biblioteca. *Verificador:* un intento de guardarla devuelve 409 con el id del caso; con todos los casos en verde, guarda. *Falsación:* admitir sin comprobar; la prueba falla.
+- **CU2 Rollback por digest.** Tras restaurar, la corrida siguiente registra el digest restaurado, y el evento tiene actor y motivo. *Falsación:* un rollback que solo cambia una etiqueta; la prueba falla.
+- **CU3 Asignación visible.** La fila de cada corrida conserva id, digest y mecanismo de cada skill (prueba existente de Q5.4).
 
 **Dependencia.** P16.3, si el tipo nuevo de documento (`cases`) se valida con zod. Si no, se usan las tablas actuales.
 
@@ -117,7 +119,7 @@ Criterios:
 5. **Evidencia.** Los resultados del prototipo van a `evidence/`. El seguimiento guarda la decisión.
 
 **Invariantes y verificación.**
-- **O1 Única puerta.** Un candidato solo llega a la biblioteca por C1. *Verificador:* un candidato no admitido no aparece en la instantánea de ninguna corrida. *Falsación:* escribir el candidato directamente; la prueba falla.
+- **O1 Única puerta.** Un candidato solo llega a la biblioteca por CU1. *Verificador:* un candidato no admitido no aparece en la instantánea de ninguna corrida. *Falsación:* escribir el candidato directamente; la prueba falla.
 - **O2 Tope.** Sin tope, no arranca. Con tope, se detiene al alcanzarlo, y el recuento de llamadas coincide con el tope. *Falsación:* ignorar el tope; la prueba falla.
 - **O3 Retención.** Un candidato que mejora `dev` y empeora `holdout` se rechaza. *Verificador:* un modelo de prueba construido para sobreajustar. *Falsación:* decidir con `dev`; la prueba falla.
 
@@ -156,13 +158,13 @@ Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la
 
 | # | Decisión | Recomendación | Por qué requiere aprobación |
 |---|---|---|---|
-| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | sí, si M3 pasa | es dependencia nueva |
+| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | sí, si X3 pasa | es dependencia nueva |
 | 2 | zod en versión exacta, dentro de `^4.2.0` | sí, en P16.3 | es dependencia nueva, aunque el SDK la trae |
 | 3 | Dónde viven los casos de regresión | un tipo de documento `cases` en la biblioteca, enlazado por el id de la skill | cambia el modelo de la biblioteca |
 | 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | cambia la máquina de estados de la biblioteca |
 | 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | define qué cuenta como fallo |
 | 6 | Python como dependencia del operador, solo si gana `gepa` | decidir con el prototipo delante | añade un runtime |
-| 7 | Rollback: vuelve a evaluar, o solo registra | solo registra (C2) | cambia la garantía que se ofrece |
+| 7 | Rollback: vuelve a evaluar, o solo registra | solo registra (CU2) | cambia la garantía que se ofrece |
 
 ## 9. Lo que este plan no hace
 
