@@ -104,11 +104,11 @@ describe("API", () => {
     const before = readdirSync(env.ws).sort();
     const digest = currentPlanDigest(env.journal);
     requestApproval(env.journal, RUN, "t8", digest); // the gate (and its challenge) exist BEFORE the request under test
-    const entities = new Set(env.journal.listEvents().map((e) => e.entity));
+    const before = env.journal.listEvents().length;
     await fetch(`${base}/api/runs/${RUN}/approvals/t8`, { method: "POST", headers: { "content-type": "application/json", "x-synapser-token": api.token }, body: JSON.stringify({ decision: "APPROVED", planDigest: digest }) });
     assert.deepEqual(readdirSync(env.ws).sort(), before, "the workspace is untouched");
-    const added = new Set(env.journal.listEvents().map((e) => e.entity));
-    assert.deepEqual([...added].filter((e) => !entities.has(e)), ["approval"]);
+    const added = env.journal.listEvents().slice(before);
+    assert.deepEqual(added.map((e) => `${e.entity}:${e.toState}`), ["approval:APPROVED"], "the POST appended exactly the decision");
   });
 
   test("U5: no prompt text or file contents leave by default", async () => {
