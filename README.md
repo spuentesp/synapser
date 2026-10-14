@@ -41,6 +41,21 @@ $ node --env-file=.env scripts/demo-live.ts --mission billing
 $ node --env-file=.env scripts/demo-live.ts --mission currency   # needs sources retrieved in this run
 ```
 
+Connect an agent over MCP (stdio) and drive Synapser as a command centre:
+
+```console
+$ cat > synapser.config.json <<'JSON'
+{ "workspace": "/abs/path/to/repo", "stateDir": "/abs/path/to/.synapser-state",
+  "startRequiresApproval": true,
+  "commands": [ { "id": "tests", "argv": ["python3", "-m", "unittest", "discover"], "timeoutMs": 60000 } ] }
+JSON
+$ claude mcp add synapser -- node /abs/path/to/synapser/src/cli/main.ts mcp --config /abs/path/to/synapser.config.json
+# the agent now has workflow_create / workflow_start / workflow_status / gate_list / gate_approve / catalog_list …
+$ node src/cli/main.ts gate list            # you, in the console: what is waiting for a human
+$ node src/cli/main.ts gate show <wf> start # the one-time code you may give the agent to relay an approval
+$ node src/cli/main.ts gate approve <wf> start
+```
+
 Audit a finished run from the command line:
 
 ```console

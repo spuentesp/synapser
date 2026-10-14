@@ -333,3 +333,14 @@ MCP, workflow/condiciones, compuertas de efectos, `inject`, chat con borradores.
 | E4 | Revertir = acciones compensatorias; los efectos externos son irreversibles | sí |
 | E5 | MCP por **stdio primero**, HTTP local después | sí |
 | E6 | Nemotron en el chat **no puede** iniciar ni aprobar | sí |
+
+## 14. Estado de implementación
+
+**P1 (hecho):** `src/workflow/` (modelo, validación, *checkers*, invariantes C1/C3/C4, `WorkflowManager`,
+`ProductionEngine`), `src/mcp/server.ts` (stdio, roles, M1–M4, código de desafío E2), `src/cli/main.ts`
+(`mcp`, `workflow …`, `gate …`, `config show`), `src/config/load.ts` (K2). Pruebas: modelo y
+evaluación, ciclo de vida sobre el ejecutor y Zoanthrope reales (DONE por condiciones, no-objetivo
+violado, cancelación, revisión C2, compuerta de inicio con código), servidor MCP en proceso y el
+proceso real `synapser mcp` por stdio contra la CLI del operador. La planificación ve objetivos,
+no-objetivos y condiciones y debe declarar `serves` (C5). Pendiente de P1: endpoints de workflow en
+la API/UI (se entregan con el chat, P5).

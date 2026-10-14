@@ -106,7 +106,7 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (existsSync(stateDir)) {
       for (const n of readdirSync(stateDir)) {
         try {
-          if (RUN_ID.test(n) && statSync(join(stateDir, n)).isDirectory() && existsSync(join(stateDir, n, "journal.db"))) ids.add(n);
+          if (RUN_ID.test(n) && !n.startsWith("_") && statSync(join(stateDir, n)).isDirectory() && existsSync(join(stateDir, n, "journal.db"))) ids.add(n);
         } catch {
           /* ignore */
         }
