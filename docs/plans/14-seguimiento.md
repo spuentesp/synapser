@@ -51,7 +51,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
   commit: f8a043b. Prueba: construcción exacta de argv,
   validación de permisos/presupuesto, parser sobre salida capturada y suite completa verdes.
-- [ ] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
+- [~] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
+  quién: GPT-5 Codex · desde: 2026-10-13
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
