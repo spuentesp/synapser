@@ -140,7 +140,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
-- [!] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
+- [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
   motivo: bloqueada hasta Q5.2. El usuario decidió que las corridas leen la biblioteca (decisión 1, 14 oct), así que
   el diseñador de agentes espera a que esos agentes se consuman de verdad.
@@ -181,7 +181,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: 638b43e · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
   nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
 - [x] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), cada uno con su verificador y su falsación. commit: c736293 · prueba: IC1 `test/library/agent-rules.test.ts` (49 pruebas, una por campo rechazado y una por campo permitido); IC2 `test/config/provider-key-allowlist.test.ts`, `test/api/library.test.ts` y `test/library/read.test.ts`; IC3 `test/model/redirects.test.ts`; IC4 `test/api/host.test.ts`. Falsación hecha en los cuatro: IC1 con `argv` copiado y sin la regla de `enabled`, IC2 sin la lista de claves, IC3 con `redirect` por defecto, IC4 sin la comprobación de `Host`. Suite completa: 533 pruebas, 524 pasan, 9 omitidas, 0 fallan. Era prerrequisito de Q5.
-- [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.
+- [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.1 a Q5.3; Q5.4 espera a D6.
 
 ### Q5 — La biblioteca en las corridas
 
@@ -191,8 +191,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: 2dc2107 · prueba: `test/library/references.test.ts` (3 pruebas: proveedor en uso no se borra, una edición que quita un modelo en uso da 409 con el agente, un revisor de un workflow que aún puede arrancar da 409 y deja de contar al cancelarlo); `test/library/resolve.test.ts` (un revisor que la biblioteca no tiene hace fallar la corrida al arrancar; el pool se rechaza); `test/library/run-e2e.test.ts` (el planificador ve el agente de biblioteca en su catálogo y el revisor corre por el proveedor de biblioteca). Falsación hecha en cuatro sitios: sin 409 al borrar (2 pruebas fallan), sin 409 al editar (1 falla), sin revisión al arrancar (1 falla), y el pool sin rechazo (1 falla).
 - [x] Q5.3 Prueba de extremo a extremo por `ProductionEngine`: un agente y un proveedor de biblioteca hablan con un servidor local, y un revisor de biblioteca evalúa. Falsación en el punto de consumo: cambiar el `baseUrl` del proveedor a mitad de corrida y comprobar que la llamada sigue yendo a la URL original.
   commit: 04a58ad · prueba: `test/library/run-e2e.test.ts`: una corrida real con `ProductionEngine` (diario, Zoanthrope, ejecutor), con un servidor local que hace de endpoint. El revisor de biblioteca corre por el proveedor de biblioteca y el planificador ve al agente en su catálogo. Una edición posterior a la instantánea, y otra hecha mientras se planifica, no llegan a la corrida. Falsación: un `FrozenLibrary` que lee la biblioteca viva manda la revisión al endpoint posterior y la prueba falla.
-- [ ] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
-- [ ] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
+- [!] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
+  motivo: bloqueada por D6 (plan 15): quién puede adjuntar una skill a un agente y con qué límite de tamaño y de contenido. Es decisión del usuario. Alternativa provisional que no necesita decisión (no construida): el archivo decide qué skill recibe cada agente y la biblioteca solo aporta el contenido, el mismo patrón que IC2.
+- [~] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 
 ### Cierre
 
