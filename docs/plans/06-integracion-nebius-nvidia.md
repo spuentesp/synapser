@@ -265,35 +265,23 @@ Estado: SQLite + artefactos + workspace en disco del contenedor (uno nuevo por s
 
 ## 14. Resultados del spike S-A (13 oct 2026)
 
-`scripts/probe-models.ts` contra `https://api.tokenfactory.nebius.com/v1/` con la key de `.env`
-(variable `NEMOTRON_TOKEN`; el código acepta también `NEBIUS_API_KEY`). Evidencia cruda en
-`evidence/models.json` (ignorada por git). **n = 1 por prueba**: confirma que funciona, no mide
-fiabilidad.
+`scripts/probe-models.ts` contra la API de Token Factory, con la clave de `.env`. La evidencia cruda queda en `evidence/`, que no se versiona. Una muestra por prueba: confirma capacidades, no mide fiabilidad.
 
-| Modelo | Tool call forzado | `auto` (lee primero) | Paralelos | JSON schema | Límite RPM / TPM | USD / M tokens (in / out) |
-|---|---|---|---|---|---|---|
-| `nvidia/Nemotron-3_5-Lightning` | ok | ok | no | ok | 600 / 400 000 | 0,06 / 0,24 |
-| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | ok | ok | no | ok | 100 / 800 000 | 0,06 / 0,24 |
-| `nvidia/nemotron-3-super-120b-a12b` | ok | ok | no | ok | 300 / 200 000 | 0,30 / 0,90 |
-| `nvidia/Nemotron-3-Ultra-550b-a55b` | ok | ok | no | ok | 300 / 200 000 | 1,00 / 3,00 |
+| Modelo | Tool call forzado | `auto` (lee primero) | Paralelos | JSON schema |
+|---|---|---|---|---|
+| `nvidia/Nemotron-3_5-Lightning` | ok | ok | no | ok |
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | ok | ok | no | ok |
+| `nvidia/nemotron-3-super-120b-a12b` | ok | ok | no | ok |
+| `nvidia/Nemotron-3-Ultra-550b-a55b` | ok | ok | no | ok |
 
 Hallazgos que cambian el diseño:
 
-1. **El razonamiento viaja en un campo aparte** (`reasoning` y/o `reasoning_content` en el mensaje),
-   no en etiquetas `<think>` dentro de `content`. El adaptador debe **no** reinyectarlo al historial
-   y guardarlo sólo como traza.
-2. **Los tokens de razonamiento se cobran y cuentan**: "Reply with exactly: OK" costó 158 tokens de
-   salida en Lightning (21 de entrada). El presupuesto y `max_tokens` deben considerarlo; un
-   `max_tokens` bajo puede truncar antes de emitir la llamada.
+1. **El razonamiento viaja en un campo aparte** (`reasoning` y/o `reasoning_content` en el mensaje), no en etiquetas `<think>` dentro de `content`. El adaptador debe **no** reinyectarlo al historial y guardarlo sólo como traza.
+2. **Los tokens de razonamiento se cobran y cuentan**: una respuesta mínima consume más tokens de los que muestra el texto. El presupuesto y `max_tokens` deben considerarlo; un `max_tokens` bajo puede truncar antes de emitir la llamada.
 3. **El modelo servido coincide con el pedido** en los cuatro; igualmente se registran ambos.
-4. **Ningún modelo emitió llamadas paralelas** en esta prueba, lo que concuerda con la ejecución
-   secuencial del plan 02 (⚠ una muestra no lo garantiza: el ejecutor debe tolerar varias).
-5. **Los límites de la cuenta sobran** para 3 agentes + supervisor (≥ 100 RPM por modelo). El
-   limitador de concurrencia se queda como protección, no como cuello de botella.
-6. Latencias de 0,5–1,6 s por llamada corta; un JSON con esquema en Lightning tardó 2,4 s por
-   razonamiento largo (550 tokens de salida para 102 de entrada).
-7. ⚠ **Pendiente**: fiabilidad en bucles largos (n grande), si el razonamiento puede desactivarse
-   para el `worker`, y el comportamiento con 3 agentes concurrentes.
+4. **Ningún modelo emitió llamadas paralelas** en esta prueba, lo que concuerda con la ejecución secuencial del plan 02 (⚠ una muestra no lo garantiza: el ejecutor debe tolerar varias).
+5. **Los límites de la cuenta bastan** para tres agentes y un supervisor. El limitador de concurrencia se queda como protección, no como cuello de botella.
+6. ⚠ **Pendiente**: fiabilidad en bucles largos (n grande), si el razonamiento puede desactivarse para el `worker`, y el comportamiento con tres agentes concurrentes.
 
 Siguiente paso técnico de este plan: implementar `ModelPort` y `OpenAICompatibleProvider` con
 estas tres reglas (razonamiento aparte, presupuesto con tokens ocultos, registro de modelo

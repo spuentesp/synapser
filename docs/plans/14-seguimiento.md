@@ -215,7 +215,7 @@ Ronda 1 (14 oct): 1) hacer funcionar la biblioteca: las corridas la leen. 2) «p
 
 Ronda 2 (14 oct): D1 cookie HttpOnly (en modo adversario, además código de un solo uso). D2 lista de claves en el archivo, vacía. D3 destinos públicos y loopback para locales. D4 tarifas solo del archivo. D5 investigar primero el sandbox; LangSmith queda como vista opcional. D6 el archivo asigna las skills, 64 KiB y 5 por agente. D7 configurable, por defecto operador confiable. Precedencia sólo-añadir confirmada. Probar agente: tope de tiempo obligatorio, proveedor de prueba en el archivo, copia borrada con registro. Publicación: traducción al inglés antes de publicar; skills solo dentro del proyecto (sin -g); los resultados medidos de `docs/plans/05` y `06 §15` se quitan de los archivos, sin reescribir el historial.
 
-Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.7 y Q5.4. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §15` (14 oct); `05` no tiene ninguno; `06 §14` pendiente de decisión.
+Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.7 y Q5.4. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
 
 ## Bitácora de traspaso
 
