@@ -140,7 +140,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
 - [ ] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-- [ ] Q3.5 Editor de skills y de proveedores con prueba de conexión.
+- [~] Q3.5 Editor de skills y de proveedores con prueba de conexión.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
 
 ### Q4 — Inicio y pantallas sin datos
