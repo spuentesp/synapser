@@ -93,7 +93,9 @@ con un **inicio** (workflows activos, compuertas pendientes, agentes, costo acum
 dicen qué hacer y enlazan al diseñador, y la corrida del workflow seleccionado como contexto por defecto.
 Implementado: el inicio (`#home`) lee `GET /api/home`, que suma el costo solo de las llamadas con precio conocido y
 cuenta aparte las demás; cuando no hay corridas, las vistas por corrida explican qué hacer y enlazan al diseñador
-(antes mostraban esqueletos para siempre); y seleccionar un workflow fija su corrida como contexto.
+(antes mostraban esqueletos para siempre); y seleccionar un workflow fija su corrida como contexto. Las
+intervenciones del asesor y los efectos solicitados se leen en el detalle del workflow (`GET …/interventions`,
+`GET …/effects`), solo lectura: las decisiones se toman en Aprobaciones.
 
 ## 7. Invariantes (con verificador)
 

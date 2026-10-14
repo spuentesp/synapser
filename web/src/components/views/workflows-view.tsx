@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Empty, ErrorNote } from './common'
 import { WorkflowDesigner, type WorkflowDoc } from './workflow-designer'
+import { WorkflowNotes } from './workflow-notes'
 
 interface Item { id: string; title: string; state: string; revision: number; reason: string | null }
 interface Detail {
@@ -114,6 +115,7 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
                   ))}
                 </ul>
               </div>
+              <WorkflowNotes id={detail.id} />
             </CardContent>
           </Card>
         ) : null}

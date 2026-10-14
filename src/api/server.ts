@@ -304,6 +304,16 @@ export function createApi(opts: ApiOptions): ApiServer {
       }
       if (id && action === "start" && method === "POST") return asResult(m.start(id, OPERATOR));
       if (id && action === "cancel" && method === "POST") return asResult(m.cancel(id, OPERATOR));
+      // what the advisor proposed and what effects were requested, read-only (plan 14 Q4.4): the CLI and MCP already had them
+      if (id && action === "interventions" && method === "GET") {
+        const adv = m.advisorOf(id);
+        if (!adv) return m.status(id) ? json(res, 200, { advisor: false, interventions: [] }) : fail(res, 404, "UNKNOWN_WORKFLOW");
+        return json(res, 200, { advisor: true, interventions: adv.list().map((r) => ({ id: r.id, type: r.type, task: r.task, state: r.state, trigger: r.trigger, reason: r.reason })) });
+      }
+      if (id && action === "effects" && method === "GET") {
+        const b = m.effects(id);
+        return b ? json(res, 200, { effects: b.records().map((r) => ({ id: r.id, kind: r.kind, state: r.state, summary: r.summary, rule: r.rule, evidence: r.evidence })) }) : fail(res, 404, "UNKNOWN_WORKFLOW");
+      }
     }
     if (top === "chat" && c.chat) {
       if (!id && method === "GET") return json(res, 200, { conversations: c.chat.conversations() });
