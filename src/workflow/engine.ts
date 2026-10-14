@@ -29,8 +29,8 @@ import { zooIntentSink } from "../zoo/intent.ts";
 import { loadPin } from "../zoo/pin.ts";
 import { Advisor } from "../advisor/advisor.ts";
 import { PoolLimiter, type PoolSpec } from "../orchestration/pools.ts";
-import { modelConfigForEndpoint } from "../model/config.ts";
-import { journalRecorder } from "../model/recorder.ts";
+import { defaultModelConfig, modelConfigForProvider, type ProviderConfig } from "../model/config.ts";
+import { journalRecorder, priceResolverForProviders } from "../model/recorder.ts";
 import { OpenAICompatibleProvider } from "../model/openai-compatible-provider.ts";
 import { DelegationBroker } from "../orchestration/delegation.ts";
 import { approvalWaiter, baselineOf, evaluateWorkflow } from "./checkers.ts";
@@ -42,6 +42,8 @@ export interface EngineConfig {
   stateDir: string;
   commands: AllowedCommand[];
   profiles: AgentProfile[];
+  /** Provider definitions referenced by native agent profiles. */
+  providers?: Record<string, ProviderConfig>;
   /** One model port per run (so calls are recorded in THAT run's journal). */
   models: (journal: Journal) => ModelPort;
   research?: (journal: Journal, runId: string) => ResearchSession | undefined;
@@ -92,13 +94,23 @@ export class ProductionEngine implements WorkflowEngine {
       r.mark("RUNNING");
 
       const profileIds = new Set(c.profiles.map((p) => p.id));
-      // an `endpoint` agent brings its own brain (any OpenAI-compatible server); calls are recorded here
+      // A native agent can bring its own brain. Provider data is shared and credentials remain env names.
+      const providers = c.providers ?? defaultModelConfig().providers;
       const own = new Map<string, ModelPort>();
       const modelFor = (p: AgentProfile): ModelPort | null => {
-        if (!p.endpoint) return null;
+        if (!p.provider) return null;
         let m = own.get(p.id);
         if (!m) {
-          m = new OpenAICompatibleProvider({ config: modelConfigForEndpoint(p.endpoint), onCall: journalRecorder(journal) });
+          const provider = providers[p.provider];
+          if (!provider) throw new Error(`native agent ${p.id} references unknown provider ${p.provider}`);
+          if (!p.model || !provider.models.some((item) => item.id === p.model)) {
+            throw new Error(`native agent ${p.id} references undeclared model ${p.model ?? "(missing)"} on provider ${p.provider}`);
+          }
+          m = new OpenAICompatibleProvider({
+            config: modelConfigForProvider(p.provider, provider, p.model, p.temperature ?? 0),
+            // Bind accounting to the selected provider. Two providers may legally share URL/model.
+            onCall: journalRecorder(journal, priceResolverForProviders({ [p.provider]: provider })),
+          });
           own.set(p.id, m);
         }
         return m;

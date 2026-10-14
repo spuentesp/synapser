@@ -4,14 +4,47 @@
 // provider builds them from the payload, which has no auth header.
 
 import type { Journal } from "../journal/journal.ts";
-import { estimateCostUsd } from "./pricing.ts";
+import type { ProviderConfig } from "./config.ts";
+import { estimateCostUsd, type ModelPrice } from "./pricing.ts";
 import type { ModelCallRecord } from "./types.ts";
 
-export function journalRecorder(journal: Journal): (rec: ModelCallRecord) => void {
+export type PriceResolver = (baseUrl: string, model: string) => ModelPrice | null;
+
+/** Resolve declared prices by provider URL as well as model id (model ids are not globally unique). */
+export function priceResolverForProviders(providers: Readonly<Record<string, ProviderConfig>>): PriceResolver {
+  const normalized = (url: string) => url.replace(/\/+$/, "");
+  return (baseUrl, model) => {
+    const matches = Object.values(providers)
+      .filter((item) => normalized(item.baseUrl) === normalized(baseUrl))
+      .map((provider) => provider.models.find((item) => item.id === model))
+      .filter((item) => item !== undefined);
+    // ModelCallRecord predates provider ids. Refuse an ambiguous URL/model pair instead of
+    // attributing another provider's tariff; a future schema can carry provider identity directly.
+    const declared = matches.length === 1 ? matches[0] : undefined;
+    return declared?.usdPer1MIn !== undefined && declared.usdPer1MOut !== undefined
+      ? { inputPerMillionUsd: declared.usdPer1MIn, outputPerMillionUsd: declared.usdPer1MOut }
+      : null;
+  };
+}
+
+export function journalRecorder(journal: Journal, resolvePrice?: PriceResolver): (rec: ModelCallRecord) => void {
   return (rec) => {
     const requestBlob = rec.request === null ? null : journal.artifacts.put(Buffer.from(JSON.stringify(rec.request)));
     const responseBlob = rec.response === null ? null : journal.artifacts.put(Buffer.from(JSON.stringify(rec.response)));
-    const cost = rec.usage ? estimateCostUsd(rec.servedModel ?? rec.requestedModel, rec.usage) : null;
+    const model = rec.servedModel ?? rec.requestedModel;
+    // Some OpenAI-compatible gateways report a deployment or dated alias instead of the
+    // requested catalog id. Prefer a declared served model (important for real fallbacks), then
+    // bill the requested declaration when the response alias is not part of the provider catalog.
+    const declared = resolvePrice
+      ? resolvePrice(rec.baseUrl, model) ?? (model === rec.requestedModel ? null : resolvePrice(rec.baseUrl, rec.requestedModel))
+      : null;
+    const cost = rec.usage
+      ? resolvePrice
+        ? declared
+          ? (rec.usage.promptTokens * declared.inputPerMillionUsd + rec.usage.completionTokens * declared.outputPerMillionUsd) / 1_000_000
+          : null
+        : estimateCostUsd(model, rec.usage)
+      : null;
     journal.tx((t) =>
       t.insertModelCall({
         callId: rec.callId,

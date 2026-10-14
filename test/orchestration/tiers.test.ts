@@ -13,7 +13,7 @@ import { ConfigError, loadConfig } from "../../src/config/load.ts";
 import { doctor, type Probe } from "../../src/cli/doctor.ts";
 import { validatePlan } from "../../src/mission/plan.ts";
 import { runMission } from "../../src/mission/runner.ts";
-import { modelConfigForEndpoint } from "../../src/model/config.ts";
+import { modelConfigForProvider, type ProviderConfig } from "../../src/model/config.ts";
 import { OpenAICompatibleProvider } from "../../src/model/openai-compatible-provider.ts";
 import { journalRecorder } from "../../src/model/recorder.ts";
 import { buildCatalog, type ProfileCard } from "../../src/orchestration/catalog.ts";
@@ -164,12 +164,15 @@ describe("configurable agents", () => {
     return loadConfig({ path: p });
   };
 
-  test("extend a builtin, point an agent at ANY endpoint, wrap ANY CLI; pools assign members", () => {
+  test("extend a builtin, point native agents at reusable providers, wrap ANY CLI; pools assign members", () => {
     const c = load({
       profiles: ["codex-writer"],
+      providers: {
+        local: { protocol: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1/", apiKeyEnv: ["LOCAL_LLM_KEY"], models: [{ id: "llama3.1", usdPer1MIn: 0.1, usdPer1MOut: 0.2 }] },
+      },
       agents: [
         { id: "codex-fast", extends: "codex-writer", tier: "cheap", tags: ["boilerplate"] },
-        { id: "local-llama", adapter: "native", role: "writer", tier: "cheap", endpoint: { baseUrl: "http://127.0.0.1:11434/v1/", model: "llama3.1", apiKeyEnv: ["LOCAL_LLM_KEY"] } },
+        { id: "local-llama", adapter: "native", role: "writer", tier: "cheap", provider: "local", model: "llama3.1" },
         { id: "my-tool", adapter: "generic-cli", role: "writer", argv: ["mytool", "--task", "{prompt}"], tier: "standard" },
       ],
       pools: [{ id: "codex", members: ["codex-writer", "codex-fast"], maxConcurrent: 1 }],
@@ -177,12 +180,26 @@ describe("configurable agents", () => {
     const by = Object.fromEntries(c.profiles.map((p) => [p.id, p]));
     assert.equal(by["codex-fast"]!.tier, "cheap");
     assert.deepEqual(by["codex-fast"]!.argv, by["codex-writer"]!.argv, "inherits everything it does not override");
-    assert.equal(by["local-llama"]!.endpoint!.model, "llama3.1");
+    assert.equal(by["local-llama"]!.provider, "local");
+    assert.equal(by["local-llama"]!.model, "llama3.1");
+    assert.equal(c.providers["local"]!.models[0]!.usdPer1MOut, 0.2);
     assert.equal(by["my-tool"]!.parser, "plain", "a CLI without a known event format uses the plain parser");
     assert.equal(by["my-tool"]!.adapter, "generic-cli");
     assert.equal(by["codex-fast"]!.pool, "codex");
     assert.equal(by["codex-writer"]!.pool, "codex");
     assert.deepEqual(c.pools, [{ id: "codex", members: ["codex-writer", "codex-fast"], maxConcurrent: 1 }]);
+  });
+
+  test("an old inline endpoint migrates to a deterministic provider reference", () => {
+    const c = load({
+      agents: [{ id: "local-llama", adapter: "native", endpoint: { baseUrl: "http://127.0.0.1:11434/v1/", model: "llama3.1", apiKeyEnv: ["LOCAL_LLM_KEY"] } }],
+    });
+    const profile = c.profiles.find((item) => item.id === "local-llama")!;
+    assert.deepEqual([profile.provider, profile.model], ["legacy-local-llama", "llama3.1"]);
+    assert.deepEqual(c.providers["legacy-local-llama"], {
+      protocol: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1/", apiKeyEnv: ["LOCAL_LLM_KEY"], models: [{ id: "llama3.1" }],
+    });
+    assert.equal("endpoint" in profile, false, "the runtime representation no longer carries inline credentials metadata");
   });
 
   test("an invalid file is rejected WHOLE, each problem named (K2)", () => {
@@ -193,8 +210,15 @@ describe("configurable agents", () => {
             { id: "bad-tier", extends: "codex-writer", tier: "genius" },
             { id: "shell-string", adapter: "cli-oneshot", role: "writer", argv: ["sh -c rm -rf /", "{prompt}"] },
             { id: "remote-http", adapter: "native", endpoint: { baseUrl: "http://evil.example.com/v1/", model: "m", apiKeyEnv: ["K"] } },
+            { id: "unknown-provider", adapter: "native", provider: "missing", model: "m" },
+            { id: "unknown-model", adapter: "native", provider: "priced", model: "other" },
             { id: "codex-writer", adapter: "cli-oneshot", argv: ["x", "{prompt}"] },
           ],
+          providers: {
+            priced: { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["MODEL_KEY"], models: [{ id: "m" }] },
+            "bad-price": { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["MODEL_KEY"], models: [{ id: "m", usdPer1MIn: -1, usdPer1MOut: 1 }] },
+            broken: { protocol: "anthropic", baseUrl: "http://remote.example/v1/", apiKeyEnv: ["not-valid"], models: [] },
+          },
           pools: [{ id: "p", members: ["ghost"], maxConcurrent: 1 }],
         }),
       (e: unknown) => {
@@ -203,6 +227,10 @@ describe("configurable agents", () => {
         assert.match(m, /tier must be one of/);
         assert.match(m, /no spaces|shell strings/);
         assert.match(m, /must be https/);
+        assert.match(m, /unknown provider "missing"/);
+        assert.match(m, /not declared by provider "priced"/);
+        assert.match(m, /unsupported protocol/);
+        assert.match(m, /non-negative finite number/);
         assert.match(m, /already a profile/);
         assert.match(m, /unknown profile "ghost"/);
         return true;
@@ -235,12 +263,13 @@ describe("an agent backed by another OpenAI-compatible endpoint", () => {
     process.env["TEST_ENDPOINT_KEY"] = "sk-test-endpoint";
     try {
       const profile: AgentProfile = {
-        id: "local-llama", description: "x", role: "writer", adapter: "native", argv: [], parser: "plain", timeoutMs: 60_000, tags: [], enabled: true, tier: "cheap", model: "worker",
-        endpoint: { baseUrl: `http://127.0.0.1:${port}/v1/`, model: "llama3.1-8b", apiKeyEnv: ["TEST_ENDPOINT_KEY"] },
+        id: "local-llama", description: "x", role: "writer", adapter: "native", argv: [], parser: "plain", timeoutMs: 60_000, tags: [], enabled: true, tier: "cheap",
+        provider: "local", model: "llama3.1-8b", nativeRole: "worker",
       };
+      const provider: ProviderConfig = { protocol: "openai-compatible", baseUrl: `http://127.0.0.1:${port}/v1/`, apiKeyEnv: ["TEST_ENDPOINT_KEY"], models: [{ id: "llama3.1-8b" }] };
       const shared = new ScriptedModel(() => ({ calls: [call("finish", { summary: "SHOULD NOT BE USED" })] }));
-      const own = new OpenAICompatibleProvider({ config: modelConfigForEndpoint(profile.endpoint!), onCall: journalRecorder(env.journal) });
-      const runner = new NativeLoopRunner(shared, undefined, undefined, (p) => (p.endpoint ? own : null));
+      const own = new OpenAICompatibleProvider({ config: modelConfigForProvider("local", provider, profile.model!), onCall: journalRecorder(env.journal) });
+      const runner = new NativeLoopRunner(shared, undefined, undefined, (p) => (p.provider === "local" ? own : null));
       const out = await runner.run({
         profile, task: { taskId: "t1", objective: "do nothing at all", scope: ["app/schema.py"], criteria: ["c"], planRevision: 1 },
         workspaceRoot: env.ws, runId: RUN, journal: env.journal, executor: env.exec, generation: env.lock.generation,

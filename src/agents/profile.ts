@@ -26,8 +26,12 @@ export interface AgentProfile {
   adapter?: AdapterId;
   /** cli-oneshot only. `{prompt}`, `{cwd}` and `{model}` are substituted. argv[0] is a program, never a shell string. */
   argv: readonly string[];
-  /** native: the model ROLE in the model config ("worker" | "repair"); cli: informational. */
+  /** native: a model declared by `provider`; CLI: the CLI's own model selector. */
   model?: string;
+  /** Native agents select a library provider and one of its declared models. */
+  provider?: string;
+  temperature?: number;
+  nativeRole?: "worker" | "repair";
   /** cli-oneshot only: how to read the tool's own events. */
   parser: ParserId;
   timeoutMs: number;
@@ -51,11 +55,6 @@ export interface AgentProfile {
   steerable?: "turn" | "attempt";
   /** Pool this agent belongs to (limits concurrency across its members). */
   pool?: string;
-  /**
-   * A native-loop agent backed by ANY OpenAI-compatible endpoint (another model, a local server).
-   * `adapter` must be `native`. The key is read from the first set variable of `apiKeyEnv`.
-   */
-  endpoint?: { baseUrl: string; model: string; apiKeyEnv: readonly string[]; temperature?: number };
   /** Disabled profiles stay in the catalog (so the audit can name them) but are never scheduled. */
   enabled: boolean;
   disabledReason?: string;
@@ -70,7 +69,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     role: "writer",
     adapter: "native",
     argv: [],
-    model: "worker",
+    model: "nvidia/nemotron-3-super-120b-a12b",
+    provider: "tokenfactory",
+    nativeRole: "worker",
     parser: "codex-jsonl", // unused by the native adapter
     timeoutMs: 600_000,
     tags: ["code", "tests", "worker", "nvidia"],
@@ -83,7 +84,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     role: "writer",
     adapter: "native",
     argv: [],
-    model: "repair",
+    model: "nvidia/nemotron-3-super-120b-a12b",
+    provider: "tokenfactory",
+    nativeRole: "repair",
     parser: "codex-jsonl",
     timeoutMs: 600_000,
     tags: ["repair", "nvidia"],
@@ -212,11 +215,12 @@ export function validateProfile(p: AgentProfile): string[] {
   if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
   if (p.tier !== undefined && !TIERS.includes(p.tier)) errs.push(`tier must be one of ${TIERS.join(", ")}`);
-  if (p.endpoint) {
-    if (adapterOf(p) !== "native") errs.push("an endpoint agent must use the native adapter");
-    if (!/^https:\/\//.test(p.endpoint.baseUrl) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(p.endpoint.baseUrl)) errs.push("endpoint.baseUrl must be https (or loopback)");
-    if (!p.endpoint.model || p.endpoint.apiKeyEnv.length === 0) errs.push("endpoint needs a model and at least one apiKeyEnv variable name");
-  }
+  if (p.provider && adapterOf(p) !== "native") errs.push("only a native agent may reference a provider");
+  if (p.provider && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(p.provider)) errs.push("provider must be a lowercase slug");
+  if (adapterOf(p) === "native" && (!p.provider || !p.model)) errs.push("a native agent needs provider and model");
+  if (adapterOf(p) !== "native" && (p.temperature !== undefined || p.nativeRole !== undefined)) errs.push("temperature and nativeRole are only valid for a native agent");
+  if (p.temperature !== undefined && (!Number.isFinite(p.temperature) || p.temperature < 0 || p.temperature > 2)) errs.push("temperature must be between 0 and 2");
+  if (p.nativeRole !== undefined && p.nativeRole !== "worker" && p.nativeRole !== "repair") errs.push('nativeRole must be "worker" or "repair"');
   if (p.role === "advisor" && p.argv.some((a) => /dangerously|bypass|yolo|workspace-write|--auto\b/.test(a))) errs.push("an advisor profile must not carry write/bypass flags");
   if (p.role === "advisor" && p.permissions?.mode === "bypassPermissions") errs.push("an advisor profile must not bypass permissions");
   if (p.role === "advisor" && p.permissions?.mode === "yolo") errs.push("an advisor profile must not use yolo permissions");

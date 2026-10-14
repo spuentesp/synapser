@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { PARSERS } from "../agents/usage.ts";
+import { defaultModelConfig, type ProviderConfig, validateProviderConfig } from "../model/config.ts";
 import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
@@ -13,6 +14,7 @@ export interface SynapserConfig {
   workspace: string;
   stateDir: string;
   commands: AllowedCommand[];
+  providers: Record<string, ProviderConfig>;
   profiles: AgentProfile[];
   pools: PoolSpec[];
   startRequiresApproval: boolean;
@@ -81,6 +83,20 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     }
   }
 
+  const providers: Record<string, ProviderConfig> = Object.fromEntries(
+    Object.entries(defaultModelConfig().providers).map(([id, provider]) => [id, { ...provider, apiKeyEnv: [...provider.apiKeyEnv], models: provider.models.map((model) => ({ ...model })) }]),
+  );
+  if (raw["providers"] !== undefined) {
+    if (!raw["providers"] || typeof raw["providers"] !== "object" || Array.isArray(raw["providers"])) errors.push("providers must be an object keyed by provider id");
+    else {
+      for (const [id, value] of Object.entries(raw["providers"] as Record<string, unknown>)) {
+        const problems = validateProviderConfig(id, value);
+        if (problems.length) errors.push(...problems);
+        else providers[id] = value as ProviderConfig;
+      }
+    }
+  }
+
   let profiles: AgentProfile[] = BUILTIN_PROFILES.filter((p) => p.enabled);
   if (raw["profiles"] !== undefined) {
     if (!Array.isArray(raw["profiles"]) || raw["profiles"].some((p) => typeof p !== "string")) errors.push("profiles must be an array of profile ids");
@@ -114,20 +130,39 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
         if (!(parser in PARSERS)) return void errors.push(`${at}.parser "${parser}" is unknown (${Object.keys(PARSERS).join(", ")})`);
         const argv = (x["argv"] ?? base?.argv ?? []) as unknown;
         if (!Array.isArray(argv) || argv.some((q) => typeof q !== "string")) return void errors.push(`${at}.argv must be an array of strings`);
-        const ep = x["endpoint"] as AgentProfile["endpoint"] | undefined;
+        const endpoint = x["endpoint"] as { baseUrl?: unknown; model?: unknown; apiKeyEnv?: unknown; temperature?: unknown } | undefined;
+        let migratedProvider: string | undefined;
+        if (endpoint !== undefined) {
+          migratedProvider = `legacy-${String(x["id"])}`;
+          if (providers[migratedProvider]) return void errors.push(`${at}.endpoint cannot migrate: provider "${migratedProvider}" already exists`);
+          const legacy: ProviderConfig = {
+            protocol: "openai-compatible",
+            baseUrl: endpoint?.baseUrl as string,
+            apiKeyEnv: endpoint?.apiKeyEnv as string[],
+            models: [{ id: endpoint?.model as string }],
+          };
+          const problems = validateProviderConfig(migratedProvider, legacy);
+          if (problems.length) return void errors.push(...problems.map((problem) => `${at}.endpoint: ${problem.replace(`provider ${migratedProvider}: `, "")}`));
+          providers[migratedProvider] = legacy;
+        }
         const p: AgentProfile = {
           ...(base ?? { description: "", role: "writer", argv: [], parser: "plain", timeoutMs: 300_000, tags: [], enabled: true }),
           id: x["id"] as string,
           description: typeof x["description"] === "string" ? (x["description"] as string) : (base?.description ?? ""),
           role: (x["role"] === "advisor" || x["role"] === "writer" ? x["role"] : (base?.role ?? "writer")) as AgentProfile["role"],
-          adapter: (ep ? "native" : (x["adapter"] ?? base?.adapter ?? "generic-cli")) as NonNullable<AgentProfile["adapter"]>,
+          adapter: (endpoint ? "native" : (x["adapter"] ?? base?.adapter ?? "generic-cli")) as NonNullable<AgentProfile["adapter"]>,
           argv: argv as string[],
           parser: parser as AgentProfile["parser"],
           timeoutMs: typeof x["timeoutMs"] === "number" ? (x["timeoutMs"] as number) : (base?.timeoutMs ?? 300_000),
           tags: Array.isArray(x["tags"]) ? (x["tags"] as string[]) : (base?.tags ?? []),
           enabled: x["enabled"] === false ? false : true,
           ...(tier ? { tier: tier as AgentProfile["tier"] } : {}),
-          ...(ep ? { endpoint: ep } : {}),
+          ...(typeof x["model"] === "string" ? { model: x["model"] } : {}),
+          ...(typeof x["provider"] === "string" ? { provider: x["provider"] } : {}),
+          ...(migratedProvider ? { provider: migratedProvider, model: endpoint!.model as string } : {}),
+          ...(typeof x["temperature"] === "number" ? { temperature: x["temperature"] } : {}),
+          ...(endpoint && typeof endpoint.temperature === "number" ? { temperature: endpoint.temperature } : {}),
+          ...(x["nativeRole"] === "worker" || x["nativeRole"] === "repair" ? { nativeRole: x["nativeRole"] } : {}),
           ...(Array.isArray(x["homeOverlay"]) ? { homeOverlay: x["homeOverlay"] as string[] } : {}),
           ...(x["permissions"] && typeof x["permissions"] === "object" ? { permissions: x["permissions"] as AgentProfile["permissions"] } : {}),
           ...(typeof x["maxBudgetUsd"] === "number" ? { maxBudgetUsd: x["maxBudgetUsd"] } : {}),
@@ -138,6 +173,12 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
         profiles = [...profiles.filter((q) => q.id !== p.id), p];
       });
     }
+  }
+  for (const profile of profiles) {
+    if (profile.adapter !== "native") continue;
+    const provider = profile.provider ? providers[profile.provider] : undefined;
+    if (!provider) errors.push(`agent "${profile.id}" references unknown provider "${String(profile.provider)}"`);
+    else if (!provider.models.some((model) => model.id === profile.model)) errors.push(`agent "${profile.id}" references model "${String(profile.model)}" not declared by provider "${profile.provider}"`);
   }
   const pools: PoolSpec[] = [];
   if (raw["pools"] !== undefined) {
@@ -219,7 +260,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   };
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, profiles, pools, policy, identity, advisor,
+    workspace, stateDir, commands, providers, profiles, pools, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

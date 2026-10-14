@@ -5,6 +5,7 @@ import { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { type SynapserConfig } from "../config/load.ts";
 import { defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../model/index.ts";
+import { priceResolverForProviders } from "../model/recorder.ts";
 import { buildCatalog, type ProfileCard } from "../orchestration/catalog.ts";
 import { loadHistory } from "../orchestration/history.ts";
 import { QueryGuard, researchFromEnv, ResearchSession } from "../research/index.ts";
@@ -23,12 +24,15 @@ export interface Runtime {
 }
 
 export function createRuntime(cfg: SynapserConfig): Runtime {
+  const systemModels = defaultModelConfig();
+  const systemPrice = priceResolverForProviders(systemModels.providers);
   const engine = new ProductionEngine({
     workspaceRoot: cfg.workspace,
     stateDir: cfg.stateDir,
     commands: cfg.commands,
     profiles: cfg.profiles,
-    models: (journal) => new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(journal) }),
+    providers: cfg.providers,
+    models: (journal) => new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(journal, systemPrice) }),
     ...(cfg.research ? { research: (journal: Journal, runId: string) => new ResearchSession({ port: researchFromEnv(), journal, runId, guard: new QueryGuard(cfg.workspace) }) } : {}),
     knownUsdPerRun: cfg.knownUsdPerRun,
     history: (journal) => loadHistory(cfg.stateDir, journal.runId),
@@ -47,7 +51,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     ...(cfg.advisor.enabled
       ? {
           advisor: (journal: Journal, id: string, workflow: () => import("../workflow/model.ts").Workflow) =>
-            new Advisor({ journal, runId: id, model: new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(journal) }), workflow, limits: { maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } }),
+            new Advisor({ journal, runId: id, model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(journal, systemPrice) }), workflow, limits: { maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } }),
         }
       : {}),
     policy: () => cfg.policy,
@@ -56,7 +60,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
   const serverJournal = Journal.open(cfg.stateDir, "_server");
   const library = new LibraryStore(cfg.stateDir, serverJournal);
   const chat = new ChatService({
-    model: new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(serverJournal) }),
+    model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(serverJournal, systemPrice) }),
     manager,
     journal: serverJournal,
     catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),

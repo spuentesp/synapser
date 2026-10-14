@@ -89,7 +89,7 @@ export class NativeLoopRunner implements AgentRunner {
     const agentRunId = `ar-${randomUUID()}`;
     const before = new Set(journal.listModelCalls().map((c) => c.callId));
     const baseDigest = treeDigest(req.workspaceRoot);
-    const role = req.profile.model === "repair" ? "repair" : "worker";
+    const role = req.profile.nativeRole ?? "worker";
 
     const r = await runTask(
       {

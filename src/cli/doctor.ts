@@ -6,6 +6,7 @@ import { accessSync, constants, existsSync, mkdirSync } from "node:fs";
 import type { AgentProfile } from "../agents/profile.ts";
 import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
+import { defaultModelConfig } from "../model/config.ts";
 
 export interface Probe {
   /** Resolve a program on PATH; null when absent. */
@@ -76,7 +77,8 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   checks.push({ name: "zoanthrope", ok: Boolean(zoo), detail: zoo ? `${zoo} — ${(await probe.version(zoo, ["--version"])) ?? "?"}` : "set ZOANTHROPE_BIN to the pinned binary" });
   checks.push({ name: "workspace", ok: probe.exists(cfg.workspace), detail: cfg.workspace });
   checks.push({ name: "state dir", ok: probe.writable(cfg.stateDir), detail: cfg.stateDir });
-  const hasModelKey = ["NEBIUS_API_KEY", "NEBIUS_TOKEN", "NEMOTRON_TOKEN"].some((n) => probe.env(n));
+  const defaults = defaultModelConfig();
+  const hasModelKey = defaults.providers["tokenfactory"]!.apiKeyEnv.some((n) => probe.env(n));
   checks.push({ name: "model key (Nebius Token Factory)", ok: hasModelKey, detail: hasModelKey ? "set" : "none of NEBIUS_API_KEY / NEBIUS_TOKEN / NEMOTRON_TOKEN is set — Nemotron cannot plan or advise" });
   const hasSearch = ["TAVILY_API_KEY", "TAVILY_TOKEN"].some((n) => probe.env(n));
   checks.push({ name: "search key (Tavily)", ok: hasSearch, detail: hasSearch ? "set" : "not set — research and pushback are off (never simulated)" });
@@ -86,9 +88,18 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   const all = new Map<string, AgentProfile>([...BUILTIN_PROFILES, ...cfg.profiles].map((p) => [p.id, p]));
   for (const p of all.values()) {
     const enabledInConfig = cfg.profiles.some((q) => q.id === p.id);
-    if (p.endpoint) {
-      const key = p.endpoint.apiKeyEnv.some((n) => probe.env(n));
-      agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: "native (endpoint)", available: key, enabledInConfig, detail: key ? `${p.endpoint.model} @ ${p.endpoint.baseUrl}` : `no key in ${p.endpoint.apiKeyEnv.join(" / ")}` });
+    if ((p.adapter ?? "cli-oneshot") === "native" && p.provider) {
+      const provider = cfg.providers[p.provider];
+      const declared = provider?.models.some((model) => model.id === p.model) ?? false;
+      const key = provider?.apiKeyEnv.some((n) => probe.env(n)) ?? false;
+      const detail = !provider
+        ? `unknown provider ${p.provider}`
+        : !declared
+          ? `model ${p.model ?? "(missing)"} is not declared by ${p.provider}`
+          : key
+            ? `${p.model} @ ${provider.baseUrl}`
+            : `no key in ${provider.apiKeyEnv.join(" / ")}`;
+      agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: `native (${p.provider})`, available: key && declared, enabledInConfig, detail });
     } else if ((p.adapter ?? "cli-oneshot") === "native") {
       agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: "native", available: hasModelKey, enabledInConfig, detail: hasModelKey ? "Nemotron on Token Factory" : "needs a Nebius key" });
     } else {
