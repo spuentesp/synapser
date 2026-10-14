@@ -52,7 +52,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: f8a043b. Prueba: construcción exacta de argv,
   validación de permisos/presupuesto, parser sobre salida capturada y suite completa verdes.
 - [x] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
-  commit: 88efa10 (inicio; implementación y cierre en este commit). Prueba: argv y parser capturados,
+  commit: b794c1b. Prueba: argv y parser capturados,
   sandbox validado, `CODEX_HOME` descartable y suite completa verdes.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
