@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { listTree } from "../validation/snapshot.ts";
 import type { ChatMessage, ModelPort } from "../model/types.ts";
 import type { ProfileCard } from "../orchestration/catalog.ts";
+import type { Workflow } from "../workflow/model.ts";
 import { type Plan, validatePlan } from "./plan.ts";
 
 export const PLAN_SCHEMA = {
@@ -24,6 +25,7 @@ export const PLAN_SCHEMA = {
           context: { type: "array", items: { type: "string" } },
           deps: { type: "array", items: { type: "string" } },
           priority: { type: "integer" },
+          serves: { type: "array", items: { type: "string" } },
           kind: { type: "string", enum: ["write", "advise", "research", "review"] },
           profile: { type: "string" },
           tags: { type: "array", items: { type: "string" } },
@@ -45,6 +47,34 @@ Rules:
 - Do not create a validation task: the system always adds a final acceptance run.
 - Keep every task's scope inside the repository. Never include secrets, .git, or state directories.
 - Put the shared contract (names, signatures, formats) into the \`context\` of EVERY task that depends on it, verbatim, so agents agree without talking to each other. Keep each task's \`criteria\` limited to what must be true of the files in ITS scope: agents are told to implement only their own files.`;
+
+/** Conditions whose satisfaction needs WORK (a human or a reviewer decision does not). */
+export function conditionCoverage(w: Workflow): { known: ReadonlySet<string>; mustServe: ReadonlySet<string> } {
+  const needsWork = (k: string) => k === "command" || k === "diff" || k === "file" || k === "citations";
+  return {
+    known: new Set(w.conditions.map((c) => c.id)),
+    mustServe: new Set(w.conditions.filter((c) => c.required && !c.waivedBy && needsWork(c.checker.kind)).map((c) => c.id)),
+  };
+}
+
+/** The workflow, as the planner must see it: what is wanted, what is forbidden, what proves it. */
+export function workflowBlock(w: Workflow): string {
+  const chk = (c: Workflow["conditions"][number]): string => {
+    const k = c.checker;
+    const how =
+      k.kind === "command" ? `command ${k.commandId}` : k.kind === "citations" ? `${k.file} cites ≥${k.min} retrieved source(s)` : k.kind === "diff" ? `diff: require ${(k.require ?? []).join(",") || "—"}; forbid ${(k.forbid ?? []).join(",") || "—"}` : k.kind === "file" ? `${k.path} ${typeof k.assert === "string" ? k.assert : `contains "${k.assert.contains}"`}` : k.kind === "approval" ? `human approval: ${k.prompt}` : `review by ${k.profile}`;
+    return `- [${c.id}] ${c.statement} — checked by ${how}${c.required ? "" : " (informational)"}`;
+  };
+  return [
+    `WORKFLOW "${w.title}": ${w.description}`,
+    w.goals.length ? `GOALS:\n${w.goals.map((g) => `- ${g}`).join("\n")}` : "",
+    w.nonGoals.length ? `NON-GOALS (must NOT happen):\n${w.nonGoals.map((g) => `- ${g.statement}`).join("\n")}` : "",
+    `ACCEPTANCE CONDITIONS (the workflow ends when ALL required ones are met):\n${w.conditions.map(chk).join("\n")}`,
+    `Every task MUST declare \`serves\`: the ids of the conditions it works towards. Every required condition that needs work must be served by at least one task. Do not create tasks for approval or review conditions.`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 /** What the planner may suggest. It sees capabilities and cost BASIS, not secrets or commands. */
 export function catalogBlock(catalog: readonly ProfileCard[]): string {
@@ -83,13 +113,14 @@ function extractJson(text: string): unknown {
 
 export async function planMission(
   model: ModelPort,
-  input: { runId: string; objective: string; contract: string[]; workspaceRoot: string; maxTasks?: number; catalog?: readonly ProfileCard[]; budgetUsd?: number },
+  input: { runId: string; objective: string; contract: string[]; workspaceRoot: string; maxTasks?: number; catalog?: readonly ProfileCard[]; budgetUsd?: number; workflow?: Workflow },
   ctxExtra: { budget?: import("../model/budget.ts").BudgetManager } = {},
 ): Promise<{ plan: Plan; attempts: number }> {
   const user = [
     `MISSION: ${input.objective}`,
     `CONTRACT (copy it into every task that needs it):\n${input.contract.map((c) => `- ${c}`).join("\n")}`,
     `REPOSITORY FILES:\n${repoSummary(input.workspaceRoot)}`,
+    ...(input.workflow ? [workflowBlock(input.workflow)] : []),
     ...(input.catalog ? [catalogBlock(input.catalog)] : []),
     `Produce at most ${input.maxTasks ?? 5} tasks.`,
   ].join("\n\n");
@@ -116,6 +147,7 @@ export async function planMission(
       ...(input.maxTasks ? { maxTasks: input.maxTasks } : {}),
       ...(input.catalog ? { catalog: input.catalog } : {}),
       ...(input.budgetUsd !== undefined ? { budgetUsd: input.budgetUsd } : {}),
+      ...(input.workflow ? { conditions: conditionCoverage(input.workflow) } : {}),
     });
     if (check.ok) return { plan: check.plan, attempts: attempt };
     errors = check.errors;

@@ -22,6 +22,8 @@ export interface PlanTask {
   gates?: "approval"[];
   /** Capability tags the step asks for (matched against profile strengths). */
   tags?: string[];
+  /** Ids of the workflow conditions this task works towards (plan 13 §4.2). */
+  serves?: string[];
 }
 export interface Plan {
   tasks: PlanTask[];
@@ -39,6 +41,8 @@ export interface ValidateOptions {
   catalog?: readonly ProfileCard[];
   /** When given with a catalog: known + estimated(high) cost may not exceed it. */
   budgetUsd?: number;
+  /** Workflow conditions: `serves` must name known ids, and every id in `mustServe` needs ≥1 task. */
+  conditions?: { known: ReadonlySet<string>; mustServe: ReadonlySet<string> };
 }
 
 export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
@@ -101,6 +105,10 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
       if (Array.isArray(o["tags"]) && o["tags"].every((x) => typeof x === "string" && x.length <= 40)) task.tags = o["tags"] as string[];
       else errors.push(`${at}.tags must be an array of short strings`);
     }
+    if (o["serves"] !== undefined) {
+      if (Array.isArray(o["serves"]) && o["serves"].every((x) => typeof x === "string" && x.length <= 41)) task.serves = o["serves"] as string[];
+      else errors.push(`${at}.serves must be an array of condition ids`);
+    }
     if (o["gates"] !== undefined) {
       if (Array.isArray(o["gates"]) && o["gates"].every((g) => g === "approval")) task.gates = o["gates"] as "approval"[];
       else errors.push(`${at}.gates INVALID_GATE: only "approval" is supported`);
@@ -120,6 +128,16 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
       if (!ids.has(d)) errors.push(`task "${t.id}" depends on unknown task "${d}"`);
       if (d === t.id) errors.push(`task "${t.id}" depends on itself`);
     }
+  }
+  if (opts.conditions) {
+    const served = new Set<string>();
+    for (const t of tasks) {
+      for (const c of t.serves ?? []) {
+        if (!opts.conditions.known.has(c)) errors.push(`task "${t.id}".serves "${c}": UNKNOWN_CONDITION`);
+        served.add(c);
+      }
+    }
+    for (const c of opts.conditions.mustServe) if (!served.has(c)) errors.push(`CONDITION_UNSERVED: no task serves condition "${c}"`);
   }
   if (opts.catalog) {
     for (const t of tasks) {

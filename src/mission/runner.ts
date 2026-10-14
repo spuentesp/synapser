@@ -52,6 +52,8 @@ export interface MissionDeps {
     results: { id: string; statement: string; required: boolean; status: string; evidence: string; detail: string; checker: string; snapshot: string }[];
     snapshot: string;
     satisfied: boolean;
+    /** Extra fields for the `condition_round` event (e.g. the workflow revision judged). */
+    meta?: Record<string, unknown>;
   }>;
   /** Cooperative cancellation: stop admitting work, let running steps end, finish CANCELLED. */
   signal?: AbortSignal;
@@ -227,7 +229,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
             round, statement: c.statement, required: c.required, evidence: c.evidence, checker: c.checker, detail: c.detail.slice(0, 1500), snapshot: c.snapshot,
           });
         }
-        t.event(runId, "condition_round", String(round), null, r.satisfied ? "SATISFIED" : "UNSATISFIED", { snapshot: r.snapshot, conditions: r.results.length });
+        t.event(runId, "condition_round", String(round), null, r.satisfied ? "SATISFIED" : "UNSATISFIED", { snapshot: r.snapshot, conditions: r.results.length, ...(r.meta ?? {}) });
       });
       emit("conditions.evaluated", id, { round, satisfied: r.satisfied });
       if (!r.satisfied) {

@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify, waste, whoChanged, why } from "../audit/queries.ts";
 import { swarmState } from "../audit/state.ts";
 import { Journal } from "../journal/journal.ts";
-import { currentPlanDigest, decideApproval, pendingApprovals } from "../orchestration/gates.ts";
+import { currentPlanDigest, decideApproval, pendingApprovals, readChallenge } from "../orchestration/gates.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const TASK_ID = /^[A-Za-z0-9._-]{1,80}$/;
@@ -191,6 +191,14 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (method !== "GET") return fail(res, 405, "METHOD_NOT_ALLOWED");
 
     switch (what) {
+      case "challenge": {
+        // HUMAN channel only: the code an operator may hand to an agent so it can relay an approval by MCP
+        if (req.headers["x-synapser-token"] !== token) return fail(res, 401, "BAD_TOKEN");
+        const key = url.searchParams.get("key") ?? "";
+        const digest = currentPlanDigest(j);
+        const code = readChallenge(j, key, url.searchParams.get("digest") ?? digest);
+        return code ? json(res, 200, { key, code }) : fail(res, 404, "NO_CHALLENGE");
+      }
       case "state": {
         const atSeq = url.searchParams.get("seq");
         const st = swarmState(j, atSeq ? Number(atSeq) : undefined);
