@@ -73,7 +73,8 @@ export interface ManagerOptions {
   stateDir: string;
   workspaceRoot: string;
   commandIds: ReadonlySet<string>;
-  profileIds?: ReadonlySet<string>;
+  /** A function when the library can add agents: it is read at each check, so a written agent is a valid reference (plan 14 Q5.2). */
+  profileIds?: ReadonlySet<string> | (() => ReadonlySet<string>);
   engine: WorkflowEngine;
   /** When true, starting needs an explicit operator decision (a gate keyed `start`). */
   startRequiresApproval?: boolean;
@@ -193,10 +194,17 @@ export class WorkflowManager {
 
   // ---- API ---------------------------------------------------------------------------------------
 
+  /** The profile ids a workflow may name now. */
+  #profileIdsOption(): { profileIds?: ReadonlySet<string> } {
+    const ids = this.#o.profileIds;
+    const now = typeof ids === "function" ? ids() : ids;
+    return now ? { profileIds: now } : {};
+  }
+
   create(input: unknown, actor: Actor): Result<{ id: string }> {
     const raw = { ...(input as Record<string, unknown>) };
     if (raw["id"] === undefined) raw["id"] = newId();
-    const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...(this.#o.profileIds ? { profileIds: this.#o.profileIds } : {}) });
+    const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...this.#profileIdsOption() });
     if (!v.ok) return { ok: false, code: "INVALID_WORKFLOW", errors: v.errors };
     if (existsSync(join(this.#o.stateDir, v.workflow.id))) return { ok: false, code: "ALREADY_EXISTS" };
     const j = this.#journal(v.workflow.id, true)!;
@@ -209,7 +217,7 @@ export class WorkflowManager {
   check(input: unknown): { ok: true } | { ok: false; errors: string[] } {
     const raw = { ...(input as Record<string, unknown>) };
     if (raw["id"] === undefined) raw["id"] = "draft";
-    const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...(this.#o.profileIds ? { profileIds: this.#o.profileIds } : {}) });
+    const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...this.#profileIdsOption() });
     return v.ok ? { ok: true } : { ok: false, errors: v.errors };
   }
 
@@ -221,7 +229,7 @@ export class WorkflowManager {
     const { state } = this.#state(j);
     if (isTerminal(state)) return { ok: false, code: "TERMINAL" };
     const cur = this.#doc(j)!;
-    const v = validateWorkflow({ ...(input as Record<string, unknown>), id }, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...(this.#o.profileIds ? { profileIds: this.#o.profileIds } : {}) });
+    const v = validateWorkflow({ ...(input as Record<string, unknown>), id }, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...this.#profileIdsOption() });
     if (!v.ok) return { ok: false, code: "INVALID_WORKFLOW", errors: v.errors };
     const revision = cur.revision + 1;
     this.#writeDoc(j, v.workflow, revision, actor);

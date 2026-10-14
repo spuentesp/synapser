@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { type ApiServer, createApi } from "../../src/api/server.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { LibraryStore } from "../../src/library/store.ts";
+import { NO_LIBRARY_POLICY } from "../../src/library/validate.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
 
 // Plan 14 Q2.6: /api/library is versioned. Reads are open; writes need the token and the same origin; an
@@ -32,7 +33,7 @@ describe("API library (plan 14 Q2.6)", () => {
     lib = new LibraryStore(state, sj);
     mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
     allowedKeys = ["LIBRARY_TEST_KEY"];
-    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ providerKeyEnv: allowedKeys, bases: [] }) } });
+    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: allowedKeys }) } });
     base = `http://127.0.0.1:${await api.listen(0)}`;
     token = api.token;
   });

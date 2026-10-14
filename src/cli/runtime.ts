@@ -12,6 +12,7 @@ import { QueryGuard, researchFromEnv, ResearchSession } from "../research/index.
 import { ProductionEngine } from "../workflow/engine.ts";
 import { WorkflowManager } from "../workflow/manager.ts";
 import { LibraryStore } from "../library/store.ts";
+import { liveSource, resolveLibrary } from "../library/resolve.ts";
 
 
 export interface Runtime {
@@ -32,6 +33,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     commands: cfg.commands,
     profiles: cfg.profiles,
     providers: cfg.providers,
+    providerKeyEnv: cfg.providerKeyEnv,
     models: (journal) => new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(journal, systemPrice) }),
     ...(cfg.research ? { research: (journal: Journal, runId: string) => new ResearchSession({ port: researchFromEnv(), journal, runId, guard: new QueryGuard(cfg.workspace) }) } : {}),
     knownUsdPerRun: cfg.knownUsdPerRun,
@@ -43,11 +45,13 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
   });
   const serverJournal = Journal.open(cfg.stateDir, "_server");
   const library = new LibraryStore(cfg.stateDir, serverJournal);
+  // the profiles a person sees and may name now: the operator's file plus the library as it stands (runs read their snapshot)
+  const liveProfiles = () => resolveLibrary({ providers: cfg.providers, profiles: cfg.profiles, providerKeyEnv: cfg.providerKeyEnv }, liveSource(library)).profiles;
   const manager = new WorkflowManager({
     stateDir: cfg.stateDir,
     workspaceRoot: cfg.workspace,
     commandIds: new Set(cfg.commands.map((c) => c.id)),
-    profileIds: new Set(cfg.profiles.map((p) => p.id)),
+    profileIds: () => new Set(liveProfiles().map((p) => p.id)),
     engine,
     library,
     startRequiresApproval: cfg.startRequiresApproval,
@@ -64,7 +68,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(serverJournal, systemPrice) }),
     manager,
     journal: serverJournal,
-    catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),
+    catalog: () => buildCatalog(liveProfiles(), [], { knownUsdPerRun: cfg.knownUsdPerRun }),
     commandIds: () => cfg.commands.map((c) => c.id),
     advise: async (workflowId, question) => {
       const adv = manager.advisorOf(workflowId);
@@ -78,7 +82,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     serverJournal,
     library,
     chat,
-    catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),
+    catalog: () => buildCatalog(liveProfiles(), [], { knownUsdPerRun: cfg.knownUsdPerRun }),
     close: async () => {
       await manager.close();
       serverJournal.close();

@@ -8,6 +8,7 @@ import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
 import { readLibrary } from "../library/store.ts";
 import { libraryPolicyOf, validateLibraryDocument } from "../library/validate.ts";
+import type { ProviderConfig } from "../model/config.ts";
 
 export interface Probe {
   /** Resolve a program on PATH; null when absent. */
@@ -101,8 +102,10 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   } catch (e) {
     checks.push({ name: "library", ok: false, detail: `cannot be read: ${String((e as Error).message ?? e).slice(0, 200)}` });
   }
+  // an agent may name a library provider: its document is in the policy, so the agent is checked against it
+  const libraryProviders = Object.fromEntries(library.filter((e) => e.kind === "providers").map((e) => [e.id, e.document as unknown as ProviderConfig]));
   for (const entry of library) {
-    const problems = validateLibraryDocument(entry.kind, entry.id, entry.document, libraryPolicyOf(cfg));
+    const problems = validateLibraryDocument(entry.kind, entry.id, entry.document, libraryPolicyOf(cfg, libraryProviders));
     if (problems.length) checks.push({ name: `library ${entry.kind}/${entry.id}`, ok: false, detail: problems.join("; ") });
     const names = entry.document["apiKeyEnv"];
     if (entry.kind === "providers" && Array.isArray(names)) {

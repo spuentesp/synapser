@@ -27,6 +27,8 @@ const builtin = (id: string): AgentProfile => {
   return found;
 };
 
+const PROVIDER = { protocol: "openai-compatible" as const, baseUrl: "https://models.example/v1/", apiKeyEnv: ["LIB_KEY"], models: [{ id: "m1" }, { id: "m2" }] };
+
 const policy: LibraryPolicy = {
   providerKeyEnv: [],
   bases: [
@@ -34,6 +36,8 @@ const policy: LibraryPolicy = {
     { profile: builtin("claude-sonnet-writer"), enabledByFile: false },
     { profile: fileNative, enabledByFile: true },
   ],
+  providers: { "file-provider": PROVIDER, "lib-provider": PROVIDER },
+  reservedProviderIds: ["file-provider"],
 };
 
 const check = (id: string, document: unknown) => validateLibraryDocument("agents", id, document, policy);
@@ -90,7 +94,7 @@ describe("plan 15 IC1, case (a): an agent that extends a profile", () => {
   });
 
   test("a provider over a command-line base is refused by the profile rules, on the merged profile", () => {
-    assert.deepEqual(check("w1", { extends: "codex-writer", provider: "lib-provider" }), ["agents/w1: only a native agent may reference a provider"]);
+    assert.deepEqual(check("w1", { extends: "codex-writer", provider: "lib-provider", model: "m1" }), ["agents/w1: only a native agent may reference a provider"]);
   });
 
   test("enabled true is refused when the operator's file does not enable the base", () => {
@@ -148,7 +152,7 @@ describe("plan 15 IC1, case (b): a native agent of its own", () => {
 
 describe("libraryPolicyOf: what the operator's file makes a base", () => {
   test("a base is enabled by the file only where the file's list enables it", () => {
-    const p = libraryPolicyOf({ providerKeyEnv: ["K"], profiles: [builtin("codex-writer"), { ...builtin("claude-sonnet-writer"), enabled: false }] });
+    const p = libraryPolicyOf({ providers: {}, providerKeyEnv: ["K"], profiles: [builtin("codex-writer"), { ...builtin("claude-sonnet-writer"), enabled: false }] });
     const enabled = (id: string) => p.bases.find((b) => b.profile.id === id)?.enabledByFile;
     assert.equal(enabled("codex-writer"), true);
     assert.equal(enabled("claude-sonnet-writer"), false, "listed but disabled by the file");

@@ -1,10 +1,10 @@
-// Whole-document validation for library entries (plan 14 Q2.6; plan 15 IC1 and IC2). It reports EVERY problem, so an
-// invalid edit is refused whole, with the full list. The rules are data: the fields a library agent may set, and the
-// shape of each, are tables below. Semantic rules are not copied here: an agent is checked by validateProfile, the same
-// rule the operator's file meets. Nothing in this file is a dependency; the core has none (plan 14).
+// Library entries: what a document must hold to be written, and to be used by a run (plan 14 Q2.6 and Q5.1; plan 15).
+// It reports EVERY problem, so an invalid edit is refused whole, with the full list. The rules are data: the fields a
+// library agent may set, and the shape of each, are tables below. Semantic rules are not copied here: an agent is checked
+// as a profile, by validateProfile, the same rule the operator's file meets. Nothing here is a dependency (plan 14).
 
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
-import { validateProviderConfig } from "../model/config.ts";
+import { type ProviderConfig, validateProviderConfig } from "../model/config.ts";
 import type { LibraryKind } from "./store.ts";
 
 const MAX_SKILL_BYTES = 64 * 1024;
@@ -16,24 +16,33 @@ export interface LibraryBase {
   enabledByFile: boolean;
 }
 
-/** What the operator's file allows a library document to name (plan 15). */
+/** What the operator's file allows a library document to name, and what it already owns (plan 15, plan 14 Q5.1). */
 export interface LibraryPolicy {
   /** Key variable names a library provider may use (IC2). */
   providerKeyEnv: readonly string[];
   /** Profiles a library agent may extend: the built-in ones and the operator's file (IC1). */
   bases: readonly LibraryBase[];
+  /** Providers a native agent may name: the operator's file's, then the library's. */
+  providers: Readonly<Record<string, ProviderConfig>>;
+  /** Provider ids the operator's file owns. A library document may add an id, never take one (solo añadir). */
+  reservedProviderIds: readonly string[];
 }
 
 /** Allows nothing. The default for a caller that has not read the operator's file. */
-export const NO_LIBRARY_POLICY: LibraryPolicy = { providerKeyEnv: [], bases: [] };
+export const NO_LIBRARY_POLICY: LibraryPolicy = { providerKeyEnv: [], bases: [], providers: {}, reservedProviderIds: [] };
 
 /** The policy a loaded configuration implies. As in the loader, the operator's list replaces a built-in with the same id. */
-export function libraryPolicyOf(cfg: { providerKeyEnv: readonly string[]; profiles: readonly AgentProfile[] }): LibraryPolicy {
+export function libraryPolicyOf(
+  cfg: { providers: Readonly<Record<string, ProviderConfig>>; providerKeyEnv: readonly string[]; profiles: readonly AgentProfile[] },
+  libraryProviders: Readonly<Record<string, ProviderConfig>> = {},
+): LibraryPolicy {
   const onFile = new Map(cfg.profiles.map((p) => [p.id, p]));
   const effective = new Map([...BUILTIN_PROFILES, ...cfg.profiles].map((p) => [p.id, p]));
   return {
     providerKeyEnv: cfg.providerKeyEnv,
     bases: [...effective.values()].map((profile) => ({ profile, enabledByFile: onFile.get(profile.id)?.enabled === true })),
+    providers: { ...cfg.providers, ...libraryProviders },
+    reservedProviderIds: Object.keys(cfg.providers),
   };
 }
 
@@ -44,9 +53,9 @@ export function validateLibraryDocument(kind: LibraryKind, id: string, document:
   const idProblems = d["id"] !== undefined && d["id"] !== id ? [`${at}: document id ${JSON.stringify(d["id"])} does not match ${id}`] : [];
   switch (kind) {
     case "providers":
-      return [...idProblems, ...validateProviderConfig(id, d), ...keyNameProblems(at, d, policy)];
+      return [...idProblems, ...providerIdProblems(at, id, policy), ...validateProviderConfig(id, d), ...keyNameProblems(at, d, policy)];
     case "agents":
-      return [...idProblems, ...agentProblems(at, id, d, policy)];
+      return [...idProblems, ...resolveAgent(at, id, d, policy).problems];
     case "skills":
       return [...idProblems, ...skillProblems(at, d)];
     case "templates":
@@ -54,7 +63,14 @@ export function validateLibraryDocument(kind: LibraryKind, id: string, document:
   }
 }
 
-// ---- agents (plan 15 IC1) ------------------------------------------------------------------------------------------
+/** Q5.1: a library provider may add an id, never take one the operator's file owns. */
+function providerIdProblems(at: string, id: string, policy: LibraryPolicy): string[] {
+  return policy.reservedProviderIds.includes(id)
+    ? [`${at}: provider id ${id} belongs to the operator's file; a library document may add an id, not take one (plan 14 Q5.1)`]
+    : [];
+}
+
+// ---- agents (plan 15 IC1, plan 14 Q5.1) ----------------------------------------------------------------------------
 
 /** Case (a): an agent that extends a profile sets only these. Everything else is the base's. */
 const EXTENDING_FIELDS = ["id", "extends", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
@@ -86,12 +102,20 @@ const AGENT_SHAPES: Readonly<Record<string, { ok: (v: unknown) => boolean; says:
   nativeRole: { ok: (v) => v === "worker" || v === "repair", says: `"worker" or "repair"` },
 };
 
-function agentProblems(at: string, id: string, d: Record<string, unknown>, policy: LibraryPolicy): string[] {
+export interface ResolvedAgent {
+  /** The profile the document stands for; null when any problem holds. */
+  profile: AgentProfile | null;
+  problems: string[];
+}
+
+/** The profile a library agent stands for, or every reason it does not. The write and every run use this one rule. */
+export function resolveAgent(at: string, id: string, d: Record<string, unknown>, policy: LibraryPolicy): ResolvedAgent {
   const extendsId = d["extends"];
   const extending = extendsId !== undefined;
   const allowed = extending ? EXTENDING_FIELDS : NATIVE_FIELDS;
   const problems: string[] = [];
   if (extending && typeof extendsId !== "string") problems.push(`${at}: extends must be the id of a profile`);
+  if (policy.bases.some((b) => b.profile.id === id)) problems.push(`${at}: ${id} is a built-in or file profile; a library agent may add an id, not take one (plan 14 Q5.1)`);
   for (const key of Object.keys(d)) {
     if (allowed.includes(key)) continue;
     problems.push(
@@ -113,24 +137,36 @@ function agentProblems(at: string, id: string, d: Record<string, unknown>, polic
       if (d[key] === undefined) problems.push(`${at}: ${key} is required for a native library agent`);
     }
   }
-  if (problems.length) return problems;
-  return extending ? extendingProblems(at, id, String(extendsId), values, policy) : nativeProblems(at, id, values);
+  if (problems.length) return { profile: null, problems };
+  return extending ? extendedAgent(at, id, String(extendsId), values, policy) : nativeAgent(at, id, values, policy);
 }
 
 /** Case (a). The base is the operator's own profile, so what it executes is already decided; the document only tunes it. */
-function extendingProblems(at: string, id: string, baseId: string, values: Record<string, unknown>, policy: LibraryPolicy): string[] {
+function extendedAgent(at: string, id: string, baseId: string, values: Record<string, unknown>, policy: LibraryPolicy): ResolvedAgent {
   const base = policy.bases.find((b) => b.profile.id === baseId);
-  if (!base) return [`${at}: extends ${baseId}, which is neither a built-in profile nor one of the operator's file`];
-  if (values["enabled"] === true && !base.enabledByFile) return [`${at}: enabled true needs the operator's file to enable ${baseId} (plan 15 IC1)`];
+  if (!base) return { profile: null, problems: [`${at}: extends ${baseId}, which is neither a built-in profile nor one of the operator's file`] };
+  if (base.profile.pool) return { profile: null, problems: [`${at}: extends ${baseId}, which the operator's file pools: a library agent does not join a pool (plan 15 IC1)`] };
+  if (values["enabled"] === true && !base.enabledByFile) return { profile: null, problems: [`${at}: enabled true needs the operator's file to enable ${baseId} (plan 15 IC1)`] };
   // a document can switch its base off, never on: the file's enabling is the only one that counts
-  const merged = { ...base.profile, ...(values as Partial<AgentProfile>), id, enabled: base.enabledByFile && values["enabled"] !== false };
-  return validateProfile(merged as AgentProfile).map((p) => `${at}: ${p}`);
+  const profile = { ...base.profile, ...(values as Partial<AgentProfile>), id, enabled: base.enabledByFile && values["enabled"] !== false } as AgentProfile;
+  return checkAgent(at, profile, policy);
 }
 
 /** Case (b). A native agent runs no command, so argv and parser are the profile type's placeholders, not the document's. */
-function nativeProblems(at: string, id: string, values: Record<string, unknown>): string[] {
+function nativeAgent(at: string, id: string, values: Record<string, unknown>, policy: LibraryPolicy): ResolvedAgent {
   const profile = { id, argv: [], parser: "plain", enabled: true, ...(values as Partial<AgentProfile>) } as AgentProfile;
-  return validateProfile(profile).map((p) => `${at}: ${p}`);
+  return checkAgent(at, profile, policy);
+}
+
+/** The semantic rules: validateProfile on the whole profile, then the provider it names, which must exist and declare the model. */
+function checkAgent(at: string, profile: AgentProfile, policy: LibraryPolicy): ResolvedAgent {
+  const problems = validateProfile(profile).map((p) => `${at}: ${p}`);
+  if (profile.provider) {
+    const provider = policy.providers[profile.provider];
+    if (!provider) problems.push(`${at}: provider ${profile.provider} is defined neither by the operator's file nor by the library`);
+    else if (!provider.models.some((m) => m.id === profile.model)) problems.push(`${at}: model ${profile.model ?? "(missing)"} is not declared by provider ${profile.provider}`);
+  }
+  return { profile: problems.length ? null : profile, problems };
 }
 
 // ---- providers and skills --------------------------------------------------------------------------------------------

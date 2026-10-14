@@ -20,6 +20,7 @@ import { conditionCoverage, planMission } from "../mission/supervisor.ts";
 import { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import { buildCatalog, samplesFromJournal, type ProfileCard } from "../orchestration/catalog.ts";
+import { LibraryRunError, type LibraryView, runLibrary } from "../library/resolve.ts";
 import type { DelegationConfig } from "../orchestration/delegation.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { LocalRunner, type AllowedCommand } from "../validation/runner.ts";
@@ -44,6 +45,8 @@ export interface EngineConfig {
   profiles: AgentProfile[];
   /** Provider definitions referenced by native agent profiles. */
   providers?: Record<string, ProviderConfig>;
+  /** Key variable names library providers may use (plan 15 IC2), from the operator's file. Empty by default. */
+  providerKeyEnv?: readonly string[];
   /** One model port per run (so calls are recorded in THAT run's journal). */
   models: (journal: Journal) => ModelPort;
   research?: (journal: Journal, runId: string) => ResearchSession | undefined;
@@ -70,6 +73,15 @@ export class ProductionEngine implements WorkflowEngine {
 
   async run(r: EngineRun): Promise<EngineResult> {
     const c = this.#c;
+    // plan 14 Q5.1: the library this run reads is its snapshot, checked under the operator's file. A run whose library
+    // does not hold stops here, before it takes the workspace lock.
+    let library: LibraryView;
+    try {
+      library = runLibrary({ providers: c.providers ?? defaultModelConfig().providers, profiles: c.profiles, ...(c.providerKeyEnv ? { providerKeyEnv: c.providerKeyEnv } : {}) }, r.library);
+    } catch (e) {
+      if (e instanceof LibraryRunError) return { status: "FAILED", reason: e.message };
+      throw e;
+    }
     const { journal, runId } = r;
     const lock = acquireWorkspaceLock(c.stateDir, c.workspaceRoot);
     const zoo = await ZooAdapter.open(loadPin(), c.workspaceRoot);
@@ -78,7 +90,7 @@ export class ProductionEngine implements WorkflowEngine {
       const model = c.models(journal);
       const budget = new BudgetManager({ maxTokens: c.limits?.maxTokens ?? 800_000, maxCalls: 200 });
       const research = c.research?.(journal, runId);
-      const catalog = buildCatalog(c.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}) });
+      const catalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}) });
       const w0 = r.workflow();
 
       // ---- decompose -------------------------------------------------------------------------
@@ -93,9 +105,9 @@ export class ProductionEngine implements WorkflowEngine {
       journal.tx((t) => t.event(runId, "baseline", runId, null, "TAKEN", { files: baseline.size }));
       r.mark("RUNNING");
 
-      const profileIds = new Set(c.profiles.map((p) => p.id));
+      const profileIds = new Set(library.profiles.map((p) => p.id));
       // A native agent can bring its own brain. Provider data is shared and credentials remain env names.
-      const providers = c.providers ?? defaultModelConfig().providers;
+      const providers = library.providers;
       const own = new Map<string, ModelPort>();
       const modelFor = (p: AgentProfile): ModelPort | null => {
         if (!p.provider) return null;
@@ -192,7 +204,7 @@ export class ProductionEngine implements WorkflowEngine {
                 return rec ? { state: rec.state, reason: rec.reason, evidence: rec.evidence, summary: rec.summary } : { state: "UNKNOWN", reason: null, evidence: null, summary: "" };
               },
               review: async (profileId, rubric) => {
-                const profile = c.profiles.find((p) => p.id === profileId);
+                const profile = library.profiles.find((p) => p.id === profileId);
                 if (!profile || !profileIds.has(profileId)) return { verdict: "fail", text: `unknown reviewer ${profileId}` };
                 const run = await registry.for(profile).run({
                   profile, workspaceRoot: c.workspaceRoot, runId, journal, executor, generation: lock.generation, ...(budget ? { budget } : {}),
@@ -209,7 +221,7 @@ export class ProductionEngine implements WorkflowEngine {
             return { ...res, meta: { doc_revision: r.revision(), workflow: w.id } };
           },
           orchestration: {
-            catalog, profiles: c.profiles, registry, executor, workspaceRoot: c.workspaceRoot, generation: lock.generation,
+            catalog, profiles: library.profiles, registry, executor, workspaceRoot: c.workspaceRoot, generation: lock.generation,
             approval: { pollMs: c.pollMs ?? 250 },
             effects: r.effects,
             ...(pools ? { pools } : {}),

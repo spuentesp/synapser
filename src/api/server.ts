@@ -97,6 +97,12 @@ const sameOrigin = (req: IncomingMessage): boolean => {
   }
 };
 
+/** A library write is checked against the providers the library holds now, as well as the operator's (plan 14 Q5.1). */
+function withLibraryProviders(policy: LibraryPolicy, lib: LibraryStore): LibraryPolicy {
+  const providers = Object.fromEntries(lib.list("providers").map((e) => [e.id, e.document as unknown as ProviderConfig]));
+  return { ...policy, providers: { ...policy.providers, ...providers } };
+}
+
 export function createApi(opts: ApiOptions): ApiServer {
   const token = opts.token ?? randomBytes(16).toString("hex");
   const own = new Map<string, Journal>();
@@ -301,7 +307,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         runs: runs.length,
       });
     }
-    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, c.libraryPolicy?.() ?? NO_LIBRARY_POLICY);
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, withLibraryProviders(c.libraryPolicy?.() ?? NO_LIBRARY_POLICY, c.library));
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {
