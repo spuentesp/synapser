@@ -191,3 +191,50 @@ se escriben con el criterio de falsar el control: cada prueba debe fallar si el 
 - El servidor MCP toma su catálogo de la configuración de tiempo de ejecución (`src/mcp/server.ts`, función
   `catalog`), así que una restricción en el resolvedor llega también a MCP.
 - La prueba de conexión no sigue redirecciones (`connection.ts:92`); las llamadas de corrida sí (`openai-compatible-provider.ts:212`).
+
+## 10. Investigación de D5: red de los agentes CLI (14 oct)
+
+Pregunta: ¿cómo limitar la red de un agente CLI sin impedirle llamar a su modelo? El usuario decidió investigar primero
+(sección 6). Esta sección no construye nada ni mide nada.
+
+### Lo que se comprobó
+
+- **Documentación oficial de los Sandboxes de Nebius**
+  (`docs.tokenfactory.nebius.com/sandboxes/guides/configure-networking-and-secrets.md`, consultada el 14 oct). La red es un
+  interruptor: `networking.enabled` vale `true` por defecto, y con `false` la VM arranca sin interfaz de red. La página no
+  describe una lista de destinos y pide confirmar con el equipo de Sandboxes si hace falta "destination allowlists" antes
+  de desplegar.
+- **Plan 06, sección 1**: los Sandboxes están en beta y exigen solicitar acceso. Hoy el proyecto los prevé solo para las
+  validaciones (`SandboxRunner`), con la red apagada.
+- **Búsqueda pública**: no encontré documentación de salida limitada de los Sandboxes de Nebius (dos búsquedas, sin
+  resultados útiles).
+- **El host de desarrollo**: `unshare -rn` crea un espacio de red sin más interfaz que el loopback, y es lo que ya usa el
+  ejecutor local de validaciones (`src/validation/runner.ts`). Hay `pasta` y `bwrap`; no hay `nft`, `iptables` ni
+  `slirp4netns`. Es una comprobación del entorno, no un resultado de rendimiento.
+
+### Opciones
+
+- **A. Sandboxes de Nebius para los CLI.** Con `networking.enabled=false` el CLI no alcanza a su modelo, y el agente no
+  funciona. Con `true` la red es completa, sin lista documentada, así que no mejora el límite declarado. Solo sirve si
+  Nebius confirma destinos permitidos y concede el acceso beta. Depende de un tercero.
+- **B. Espacio de red local con un proxy de salida.** El agente corre en `unshare -rn`, sin ruta por defecto. Lo único
+  alcanzable es un proxy en el host que reenvía solo al host del modelo del perfil (el `baseUrl` del proveedor). Un
+  proceso que no use el proxy no tiene otra ruta, así que falla cerrado. Falta probar dos cosas: que `pasta` (o un par
+  veth) deje al espacio de nombres ver solo el proxy, y que los CLI reales respeten `HTTPS_PROXY`. Lo que no resuelve: el
+  host del modelo sigue recibiendo los prompts, que pueden contener contenido del workspace; el riesgo que queda es el
+  proveedor elegido, no la red. Solo Linux.
+- **C. Mantener el límite declarado.** Los CLI conservan su red, y la interfaz lo muestra. Es lo que hay hoy.
+
+LangSmith queda como vista opcional del registro (decisión D5). No participa en la contención.
+
+### Recomendación
+
+Mantener C mientras se decide. Probar B como prueba de concepto, con su falsación: desde dentro del espacio de red, (1) una
+petición al host del modelo, a través del proxy, debe funcionar; (2) una petición a cualquier otro destino, incluido un
+servidor local de prueba, debe fallar; (3) la resolución DNS directa debe fallar. Además, un CLI real debe funcionar a
+través del proxy. Preguntar a Nebius por destinos permitidos es una decisión del usuario, no una acción de este código.
+
+### Lo que queda por decidir
+
+- ¿Se hace la prueba de concepto B? Solo Linux, y depende de `pasta` o de un par veth.
+- ¿Se pregunta a Nebius por destinos permitidos? Lo decide el usuario.
