@@ -90,7 +90,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
   costo conocido por tarifa declarada y costo desconocido ante tarifa ausente o ambigua; suite completa.
 - [x] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
-  hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: PENDING · prueba:
+  hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: 74c8046 · prueba:
   `test/model/system-roles.test.ts` (sin bloque `roles` = predeterminados; un rol movido no hereda fallbacks;
   documento inválido con todos sus problemas; redefinir un proveedor usado por un rol por defecto falla al cargar;
   extremo a extremo por `createRuntime` y `chat.send` contra servidor local: petición, modelo, clave y tarifa;
