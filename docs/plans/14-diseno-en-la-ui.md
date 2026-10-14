@@ -115,7 +115,11 @@ Verificación y falsación de la inyección:
 - L4 usa el journal `_server` como autoridad: cada versión de biblioteca se guarda primero como blob por
   digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
   almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes
-  auditados. La exigencia de token y mismo origen se verifica en Q2.6, en el límite HTTP.
+  auditados. La exigencia de token y mismo origen se verifica en `test/api/library.test.ts` (Q2.6), en el límite
+  HTTP: escrituras sin token o con origen ajeno o malformado no cambian nada, y una configuración inválida se
+  rechaza entera con todos sus problemas. Se falsa quitando el guardia o la validación. Los documentos admiten
+  decimales (precios); la forma canónica de los digests de peticiones y journal sigue siendo solo enteros
+  (`digest/canonical.ts`, opción `decimals`).
 - L6 se verifica en `test/model/system-roles.test.ts`: sin bloque `roles` la configuración equivale a la
   predeterminada; un rol movido a otro proveedor no hereda fallbacks; un documento con varios problemas los
   lista todos juntos; redefinir un proveedor que usa un rol por defecto falla al cargar; y un `chat.send` a

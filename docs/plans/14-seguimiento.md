@@ -112,9 +112,13 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
   nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
   en el archivo); el manejador congelado queda como única vía cuando lo haga.
-- [~] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
-  entera con todos los problemas.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
+  entera con todos los problemas. commit: PENDING · prueba: `test/api/library.test.ts` (lecturas abiertas;
+  escrituras sin token, con origen ajeno o malformado rechazadas; escritura repetida sin cambio; documento inválido
+  con todos sus problemas y sin efecto; borrado con token; skills y agentes por sus reglas; plantillas solo objeto,
+  sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
+  guardia (`writeAllowed`) sustituye las tres copias. Precios decimales: `test/library/decimals.test.ts`, con la
+  opción `decimals` de la forma canónica solo para la biblioteca (ver decisiones abiertas). Suite completa.
 - [ ] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
 
 ### Q3 — Diseñadores y plantillas (UI)
@@ -147,7 +151,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 ## Decisiones abiertas del usuario (no resolver sin preguntar)
 
 precedencia de los proveedores de la biblioteca frente a los del archivo (¿solo añadir, o sobrescribir?; hoy ningún
-consumidor la necesita) · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
+consumidor la necesita) · excepción decimal en la forma canónica de la biblioteca (`digest/canonical.ts`, opción
+`decimals`, solo para documentos de biblioteca: ¿aceptable frente a la regla de solo enteros del plan 03 §2?) · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
 traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de
 `docs/plans/05` y `06 §15` y del historial git antes de publicar.
 
@@ -165,3 +170,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q2.3 tomada tras el reclamo de GPT-5 Codex (`29ff01e`, sin código). Roles del sistema configurables en `synapser.config.json` y validados enteros; runtime y `doctor` los usan. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.4: prueba de conexión por proveedor (`src/model/connection.ts`) y CLI `provider test`; la clave no aparece en el informe. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.5: instantánea de la biblioteca por corrida, copiada a sus artefactos; el manejador congelado es la única vía de lectura de la corrida. |
+| 2026-10-14 | Claude Haiku 5.5 | Q2.6: `/api/library` (lectura abierta; escritura con token y mismo origen); validación completa por tipo; guardia único; precios decimales en la biblioteca con la opción `decimals`. |

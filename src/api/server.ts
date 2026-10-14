@@ -9,6 +9,8 @@
 //   GET  /api/runs/:id/why?action=ID       declared chain + the agent's own words (labelled)
 //   GET  /api/runs/:id/events?since=SEQ    Server-Sent Events: the ledger as it grows
 //   POST /api/runs/:id/approvals/:task     { decision, actor, planDigest }  header x-synapser-token
+//   GET  /api/library[/:kind[/:id]]        the operator library, versioned (plan 14 Q2.6)
+//   PUT|DELETE /api/library/:kind/:id      token + same origin; an invalid document is refused whole
 
 import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -19,6 +21,8 @@ import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify
 import { swarmState } from "../audit/state.ts";
 import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
+import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
+import { validateLibraryDocument } from "../library/validate.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 
@@ -40,6 +44,8 @@ export interface ApiControl {
   chat?: ChatService;
   catalog?: () => unknown;
   config?: () => unknown;
+  /** The operator library (plan 14 Q2.6). Absent ⇒ /api/library answers NOT_FOUND. */
+  library?: LibraryStore;
 }
 
 const OPERATOR: Actor = { id: "ui:operator", role: "operator" };
@@ -71,6 +77,19 @@ const json = (res: ServerResponse, status: number, body: unknown): void => {
   res.end(text);
 };
 const fail = (res: ServerResponse, status: number, code: string, detail?: string): void => json(res, status, { error: code, ...(detail ? { detail } : {}) });
+
+const entryJson = (e: LibraryEntry) => ({ kind: e.kind, id: e.id, digest: e.digest, document: e.document, seq: e.seq, actor: e.actor });
+
+/** A request without an Origin header is not a cross-site browser call; any other origin must be this host. */
+const sameOrigin = (req: IncomingMessage): boolean => {
+  const origin = req.headers["origin"];
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === req.headers["host"];
+  } catch {
+    return false;
+  }
+};
 
 export function createApi(opts: ApiOptions): ApiServer {
   const token = opts.token ?? randomBytes(16).toString("hex");
@@ -137,6 +156,20 @@ export function createApi(opts: ApiOptions): ApiServer {
     });
   };
 
+  /** The ONE write guard: same origin, then the session token. Answers the refusal and returns false when refused. */
+  const tokenOk = (req: IncomingMessage): boolean => req.headers["x-synapser-token"] === token;
+  const writeAllowed = (req: IncomingMessage, res: ServerResponse): boolean => {
+    if (!sameOrigin(req)) {
+      fail(res, 403, "CROSS_ORIGIN");
+      return false;
+    }
+    if (!tokenOk(req)) {
+      fail(res, 401, "BAD_TOKEN");
+      return false;
+    }
+    return true;
+  };
+
   async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unknown | undefined> {
     let body = "";
     for await (const chunk of req) {
@@ -150,21 +183,60 @@ export function createApi(opts: ApiOptions): ApiServer {
     }
   }
 
+  /**
+   * The operator library (plan 14 Q2.6). Reads are open like the other GETs (no secrets live in a document:
+   * provider keys are environment NAMES, which validateProviderConfig enforces). Writes come through control().
+   */
+  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, kind: string | undefined, key: string | undefined, method: string, depth: number): Promise<void> {
+    if (depth > 3) return fail(res, 404, "NOT_FOUND");
+    if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
+    if (!(LIBRARY_KINDS as readonly string[]).includes(kind)) return fail(res, 404, "UNKNOWN_KIND");
+    const k = kind as LibraryKind;
+    if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
+    if (method === "GET") {
+      let entry: LibraryEntry | null;
+      try {
+        entry = lib.get(k, key);
+      } catch {
+        return fail(res, 400, "BAD_ID");
+      }
+      return entry ? json(res, 200, entryJson(entry)) : fail(res, 404, "UNKNOWN_ENTRY");
+    }
+    if (method === "PUT") {
+      const body = await readBody(req, res);
+      if (body === undefined) return;
+      // every problem at once: an invalid edit changes nothing
+      const errors = validateLibraryDocument(k, key, body);
+      if (errors.length) return json(res, 400, { error: "INVALID_LIBRARY_DOCUMENT", errors });
+      try {
+        const r = lib.put(k, key, body as LibraryDocument, OPERATOR.id);
+        return json(res, 200, { ...entryJson(r.entry), changed: r.changed });
+      } catch (e) {
+        return fail(res, 400, "INVALID_LIBRARY_ENTRY", String((e as Error).message ?? e).slice(0, 200));
+      }
+    }
+    if (method === "DELETE") {
+      try {
+        return json(res, 200, { removed: lib.remove(k, key, OPERATOR.id) });
+      } catch (e) {
+        return fail(res, 400, "INVALID_LIBRARY_ENTRY", String((e as Error).message ?? e).slice(0, 200));
+      }
+    }
+    return fail(res, 405, "METHOD_NOT_ALLOWED");
+  }
+
   /** Workflows, chat, catalog, config. Writes need the session token and same origin; the actor is fixed. */
   async function control(c: ApiControl, req: IncomingMessage, res: ServerResponse, path: string, method: string): Promise<void> {
     const parts = path.split("/").filter(Boolean).slice(1); // after "api"
     const [top, id, action] = parts as [string, string | undefined, string | undefined];
-    if (method !== "GET") {
-      const origin = req.headers["origin"];
-      if (origin && new URL(origin).host !== req.headers["host"]) return fail(res, 403, "CROSS_ORIGIN");
-      if (req.headers["x-synapser-token"] !== token) return fail(res, 401, "BAD_TOKEN");
-    }
+    if (method !== "GET" && !writeAllowed(req, res)) return;
     const asResult = <T>(r: { ok: true } & T | { ok: false; code: string; errors?: string[] }) =>
       r.ok ? json(res, 200, r) : json(res, 409, { error: (r as { code: string }).code, errors: (r as { errors?: string[] }).errors ?? [] });
     if (id !== undefined && !RUN_ID.test(id)) return fail(res, 400, "BAD_ID");
     const m = c.manager;
     if (top === "catalog" && method === "GET") return json(res, 200, { agents: c.catalog?.() ?? [] });
     if (top === "config" && method === "GET") return json(res, 200, c.config?.() ?? {});
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, id, action, method, parts.length);
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {
@@ -226,7 +298,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       return void res.end(readFileSync(file));
     }
 
-    if (opts.control && /^\/api\/(workflows|chat|catalog|config)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");
@@ -242,9 +314,7 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (method === "POST") {
       if (what !== "approvals" || !sub) return fail(res, 404, "NOT_FOUND");
       // same-origin only: a cross-site page can neither read the token nor pass this check
-      const origin = req.headers["origin"];
-      if (origin && new URL(origin).host !== req.headers["host"]) return fail(res, 403, "CROSS_ORIGIN");
-      if (req.headers["x-synapser-token"] !== token) return fail(res, 401, "BAD_TOKEN");
+      if (!writeAllowed(req, res)) return;
       if (!TASK_ID.test(sub)) return fail(res, 400, "BAD_TASK_ID");
       let body = "";
       for await (const chunk of req) {
@@ -275,7 +345,7 @@ export function createApi(opts: ApiOptions): ApiServer {
     switch (what) {
       case "challenge": {
         // HUMAN channel only: the code an operator may hand to an agent so it can relay an approval by MCP
-        if (req.headers["x-synapser-token"] !== token) return fail(res, 401, "BAD_TOKEN");
+        if (!tokenOk(req)) return fail(res, 401, "BAD_TOKEN");
         const key = url.searchParams.get("key") ?? "";
         const digest = currentPlanDigest(j);
         const code = readChallenge(j, key, url.searchParams.get("digest") ?? digest);

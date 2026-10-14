@@ -29,19 +29,29 @@ function cmpCodePoints(a: string, b: string): number {
   }
 }
 
-export function canonicalJson(value: unknown): string {
+export interface CanonicalOptions {
+  /**
+   * Allow finite non-integer numbers (library documents carry decimal prices). Their text is the shortest
+   * round-trip form (ECMAScript Number::toString): deterministic, and two different doubles never share it, so
+   * nothing collides the way a normalised value could. Off by default: request and journal digests stay integers-only.
+   */
+  decimals?: boolean;
+}
+
+export function canonicalJson(value: unknown, opts: CanonicalOptions = {}): string {
   if (value === null) return "null";
   switch (typeof value) {
     case "boolean":
       return value ? "true" : "false";
     case "number":
-      if (!Number.isSafeInteger(value)) throw new CanonicalError(`non-integer number: ${value}`);
-      return String(value);
+      if (Number.isSafeInteger(value)) return String(value);
+      if (opts.decimals && Number.isFinite(value)) return String(value);
+      throw new CanonicalError(`non-integer number: ${value}`);
     case "string":
       if (!value.isWellFormed()) throw new CanonicalError("string with lone surrogate");
       return JSON.stringify(value);
     case "object": {
-      if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+      if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item, opts)).join(",")}]`;
       const proto = Object.getPrototypeOf(value);
       if (proto !== Object.prototype && proto !== null) throw new CanonicalError("non-plain object");
       const obj = value as Record<string, unknown>;
@@ -50,7 +60,7 @@ export function canonicalJson(value: unknown): string {
       for (const k of keys) {
         if (obj[k] === undefined) throw new CanonicalError(`undefined value at key ${JSON.stringify(k)}`);
         if (!k.isWellFormed()) throw new CanonicalError("key with lone surrogate");
-        parts.push(`${JSON.stringify(k)}:${canonicalJson(obj[k])}`);
+        parts.push(`${JSON.stringify(k)}:${canonicalJson(obj[k], opts)}`);
       }
       return `{${parts.join(",")}}`;
     }

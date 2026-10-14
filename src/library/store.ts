@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalJson } from "../digest/canonical.ts";
+import { canonicalJson, type CanonicalOptions } from "../digest/canonical.ts";
 import { type Digest, isDigest, sha256Bytes } from "../digest/file.ts";
 import { fsyncDir, writeFileDurable } from "../journal/artifacts.ts";
 import type { EventRow, Journal } from "../journal/journal.ts";
@@ -38,6 +38,8 @@ export interface FrozenLibrary {
   get(kind: LibraryKind, id: string): LibraryDocument | null;
 }
 
+// library documents carry decimal prices; the request and journal digests stay integers-only (canonical.ts)
+const DOC_JSON: CanonicalOptions = { decimals: true };
 const SNAPSHOT_EVENT = "library_snapshot";
 const ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 
@@ -58,7 +60,7 @@ export class LibraryStore {
     if (!document || Array.isArray(document) || Object.getPrototypeOf(document) !== Object.prototype) throw new Error("library document must be a plain object");
     if (document["id"] !== undefined && document["id"] !== id) throw new Error(`document id does not match ${id}`);
     const normalized = { ...document, id };
-    const bytes = Buffer.from(canonicalJson(normalized), "utf8");
+    const bytes = Buffer.from(canonicalJson(normalized, DOC_JSON), "utf8");
     const digest = sha256Bytes(bytes);
     const current = this.get(kind, id);
     if (current?.digest === digest) {
@@ -166,7 +168,7 @@ export class LibraryStore {
     const base = join(this.root, entry.kind, entry.id);
     const hex = entry.digest.slice("sha256:".length);
     mkdirSync(join(base, "versions"), { recursive: true });
-    const bytes = Buffer.from(canonicalJson(entry.document), "utf8");
+    const bytes = Buffer.from(canonicalJson(entry.document, DOC_JSON), "utf8");
     durableOnce(join(base, "versions", `${hex}.json`), bytes);
     durableReplace(join(base, "current.json"), bytes);
     if (entry.kind === "skills") {
@@ -177,9 +179,9 @@ export class LibraryStore {
       const meta = { ...entry.document, content: undefined, digest: entry.digest };
       delete meta.content;
       durableOnce(join(versionDir, "SKILL.md"), Buffer.from(content, "utf8"));
-      durableOnce(join(versionDir, "meta.json"), Buffer.from(canonicalJson(meta), "utf8"));
+      durableOnce(join(versionDir, "meta.json"), Buffer.from(canonicalJson(meta, DOC_JSON), "utf8"));
       durableReplace(join(base, "SKILL.md"), Buffer.from(content, "utf8"));
-      durableReplace(join(base, "meta.json"), Buffer.from(canonicalJson(meta), "utf8"));
+      durableReplace(join(base, "meta.json"), Buffer.from(canonicalJson(meta, DOC_JSON), "utf8"));
     }
   }
 
