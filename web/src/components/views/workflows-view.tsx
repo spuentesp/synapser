@@ -18,7 +18,7 @@ interface Detail {
 }
 const STATE_TONE: Record<string, string> = { DONE: 'text-status-done', FAILED: 'text-destructive', CANCELLED: 'text-muted-foreground', RUNNING: 'text-status-running', AWAITING_START: 'text-status-waiting' }
 
-export function WorkflowsView({ token, tick, selected, onSelect }: { token: string | null; tick: number; selected: string | null; onSelect: (id: string | null) => void }) {
+export function WorkflowsView({ session, tick, selected, onSelect }: { session: boolean; tick: number; selected: string | null; onSelect: (id: string | null) => void }) {
   const { t } = useI18n()
   const [items, setItems] = useState<Item[]>([])
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -43,10 +43,10 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
   useEffect(() => { void load() }, [load, tick, pollTick])
 
   const call = async (method: string, path: string, body?: unknown) => {
-    if (!token) return
+    if (!session) return
     setErr(null)
     try {
-      const r = await api<{ id?: string }>(path, { method, headers: { 'content-type': 'application/json', 'x-synapser-token': token }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
+      const r = await api<{ id?: string }>(path, { method, headers: { 'content-type': 'application/json' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
       if (r.id) onSelect(r.id)
       await load()
     } catch (e) {
@@ -76,7 +76,7 @@ export function WorkflowsView({ token, tick, selected, onSelect }: { token: stri
         {design ? (
           <WorkflowDesigner
             key={design.editing?.id ?? 'new'}
-            token={token}
+            session={session}
             initial={design.editing}
             editingId={design.editing?.id ?? null}
             onSaved={(id) => { setDesign(null); onSelect(id); void load() }}

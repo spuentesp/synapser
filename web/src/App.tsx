@@ -10,6 +10,7 @@ import { ChatView } from '@/components/views/chat-view'
 import { WorkflowsView } from '@/components/views/workflows-view'
 import { LibraryView } from '@/components/views/library-view'
 import { HomeView } from '@/components/views/home-view'
+import { SessionGate } from '@/components/views/session-gate'
 import { ApprovalsView } from '@/components/views/approvals-view'
 import { Empty, ErrorNote, Loading } from '@/components/views/common'
 import { CoordinationView } from '@/components/views/coordination-view'
@@ -76,13 +77,15 @@ export default function App() {
   const labels: Record<View, Key> = { home: 'home', chat: 'chat', workflows: 'workflows', agents: 'agents', library: 'library', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
 
   const GLOBAL: View[] = ['home', 'chat', 'workflows', 'agents', 'library']
+  // adversarial mode: nothing works until the one-time code is redeemed (plan 15 D7)
+  const gated = !L.session && L.needsCode
   let body: React.ReactNode
   if (GLOBAL.includes(view)) {
     body = {
-      chat: <ChatView token={L.token} onOpen={(id) => { openWorkflow(id); go('workflows') }} />,
-      workflows: <WorkflowsView token={L.token} tick={L.tick} selected={wfId} onSelect={openWorkflow} />,
+      chat: <ChatView session={L.session} onOpen={(id) => { openWorkflow(id); go('workflows') }} />,
+      workflows: <WorkflowsView session={L.session} tick={L.tick} selected={wfId} onSelect={openWorkflow} />,
       agents: <AgentsView />,
-      library: <LibraryView token={L.token} />,
+      library: <LibraryView session={L.session} />,
       home: <HomeView onNavigate={(v) => go(v)} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
     }[view as 'home' | 'chat' | 'workflows' | 'agents' | 'library']
   } else if (L.error && !run) body = <ErrorNote code={L.error} />
@@ -95,7 +98,7 @@ export default function App() {
       why: <WhyView runId={id} tick={L.tick} />,
       cost: <CostView runId={id} tick={L.tick} />,
       coordination: <CoordinationView runId={id} tick={L.tick} />,
-      approvals: <ApprovalsView runId={id} state={L.state} token={L.token} onDecided={L.refresh} />,
+      approvals: <ApprovalsView runId={id} state={L.state} session={L.session} onDecided={L.refresh} />,
       integrity: <IntegrityView runId={id} tick={L.tick} onVerify={L.refresh} />,
     }[view as 'swarm']
   }
@@ -191,7 +194,7 @@ export default function App() {
               </div>
             </header>
             <h1 className="mb-4 text-xl font-bold">{t(labels[view])}</h1>
-            {body}
+            {gated ? <SessionGate onGranted={L.refreshSession} /> : body}
           </main>
         </div>
       </EvidenceProvider>

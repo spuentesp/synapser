@@ -168,7 +168,7 @@ interface Check {
 const guardsOf = (d: { nonGoals?: { statement: string; guard?: Record<string, unknown> }[] } | null): Map<string, Record<string, unknown>> =>
   new Map((d?.nonGoals ?? []).flatMap((n) => (n.guard ? [[n.statement, n.guard] as const] : [])))
 
-export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel }: { token: string | null; initial: WorkflowDoc | null; editingId: string | null; onSaved: (id: string) => void; onCancel: () => void }) {
+export function WorkflowDesigner({ session, initial, editingId, onSaved, onCancel }: { session: boolean; initial: WorkflowDoc | null; editingId: string | null; onSaved: (id: string) => void; onCancel: () => void }) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<Draft>(() => (initial ? draftOf(initial) : emptyDraft()))
   const [guards, setGuards] = useState<Map<string, Record<string, unknown>>>(() => guardsOf(initial))
@@ -198,11 +198,11 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
 
   // live check against the server's validator; a slower earlier answer never overwrites a newer one
   useEffect(() => {
-    if (!token || badParams.length > 0) return
+    if (!session || badParams.length > 0) return
     let stale = false
     setChecking(true)
     const timer = setTimeout(() => {
-      api<{ ok: boolean; errors?: string[] }>('/api/designer/check', { method: 'POST', headers: { 'content-type': 'application/json', 'x-synapser-token': token }, body: docJson })
+      api<{ ok: boolean; errors?: string[] }>('/api/designer/check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: docJson })
         .then((r) => { if (!stale) setCheck({ ok: r.ok, errors: r.errors ?? [] }) }, (e: Error) => { if (!stale) setCheck({ ok: false, errors: [e.message] }) })
         .finally(() => { if (!stale) setChecking(false) })
     }, 400)
@@ -210,7 +210,7 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
       stale = true
       clearTimeout(timer)
     }
-  }, [docJson, token, badParams.length])
+  }, [docJson, session, badParams.length])
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const setCond = (key: number, patch: Partial<CondDraft>) => setDraft((d) => ({ ...d, conditions: d.conditions.map((c) => (c.key === key ? { ...c, ...patch } : c)) }))
@@ -218,10 +218,10 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
   const removeCond = (key: number) => setDraft((d) => ({ ...d, conditions: d.conditions.filter((c) => c.key !== key) }))
 
   const save = () => {
-    if (!token) return
+    if (!session) return
     setSaving(true)
     setSaveError(null)
-    const headers = { 'content-type': 'application/json', 'x-synapser-token': token }
+    const headers = { 'content-type': 'application/json' }
     const saved = editingId
       ? api<{ ok: boolean }>(`/api/workflows/${encodeURIComponent(editingId)}`, { method: 'PUT', headers, body: JSON.stringify({ ...doc, id: editingId }) }).then(() => editingId)
       : api<{ ok: boolean; id: string }>('/api/workflows', { method: 'POST', headers, body: docJson }).then((r) => r.id)
@@ -229,7 +229,7 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
   }
 
   const problems = badParams.length > 0 ? [t('designerInvalidParams')] : check && !check.ok ? check.errors : []
-  const canSave = Boolean(token) && !saving && !checking && badParams.length === 0 && check?.ok === true
+  const canSave = session && !saving && !checking && badParams.length === 0 && check?.ok === true
 
   const kindFields = (c: CondDraft) => {
     switch (c.kind) {
@@ -475,7 +475,7 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
       <CardFooter className="flex flex-wrap items-center gap-2">
         <Button disabled={!canSave} onClick={save}>{t('saveDraft')}</Button>
         <Button variant="outline" onClick={onCancel}>{t('designerCancel')}</Button>
-        {!token ? <p className="text-xs text-destructive">{t('designerNoSession')}</p> : null}
+        {!session ? <p className="text-xs text-destructive">{t('designerNoSession')}</p> : null}
       </CardFooter>
     </Card>
   )

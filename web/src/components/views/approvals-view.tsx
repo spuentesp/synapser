@@ -13,7 +13,7 @@ import { Empty } from './common'
 
 const KIND: Record<SwarmState['gates'][number]['kind'], Key> = { start: 'gateStart', step: 'gateStep', condition: 'gateCondition', effect: 'gateEffect', intervention: 'gateIntervention' }
 
-export function ApprovalsView({ runId, state, token, onDecided }: { runId: string; state: SwarmState; token: string | null; onDecided: () => Promise<void> }) {
+export function ApprovalsView({ runId, state, session, onDecided }: { runId: string; state: SwarmState; session: boolean; onDecided: () => Promise<void> }) {
   const { t } = useI18n()
   const [actor, setActor] = useState(() => localStorage.getItem('actor') ?? '')
   const [msg, setMsg] = useState<string | null>(null)
@@ -35,7 +35,7 @@ export function ApprovalsView({ runId, state, token, onDecided }: { runId: strin
     try {
       await api(runPath(runId, `/approvals/${encodeURIComponent(key)}`), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-synapser-token': token ?? '' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ decision, actor: name, planDigest: digest }),
       })
       setMsg(t('decided'))
@@ -48,7 +48,7 @@ export function ApprovalsView({ runId, state, token, onDecided }: { runId: strin
   }
   const showCode = async (key: string, digest: string) => {
     try {
-      const r = await api<{ code: string }>(runPath(runId, `/challenge?key=${encodeURIComponent(key)}&digest=${encodeURIComponent(digest)}`), { headers: { 'x-synapser-token': token ?? '' } })
+      const r = await api<{ code: string }>(runPath(runId, `/challenge?key=${encodeURIComponent(key)}&digest=${encodeURIComponent(digest)}`))
       setCodes((c) => ({ ...c, [key]: r.code }))
     } catch (e) {
       setMsg(e instanceof ApiError ? e.code : String(e))
@@ -80,9 +80,9 @@ export function ApprovalsView({ runId, state, token, onDecided }: { runId: strin
                 </Alert>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                <Button disabled={busy} data-decide="APPROVED" onClick={() => void decide(g.key, g.digest, 'APPROVED')}><Check data-icon="inline-start" />{t('approve')}</Button>
-                <Button disabled={busy} variant="destructive" data-decide="REJECTED" onClick={() => void decide(g.key, g.digest, 'REJECTED')}><X data-icon="inline-start" />{t('reject')}</Button>
-                <Button disabled={busy} variant="outline" data-show-code onClick={() => void showCode(g.key, g.digest)}><KeyRound data-icon="inline-start" />{t('showCode')}</Button>
+                <Button disabled={!session || busy} data-decide="APPROVED" onClick={() => void decide(g.key, g.digest, 'APPROVED')}><Check data-icon="inline-start" />{t('approve')}</Button>
+                <Button disabled={!session || busy} variant="destructive" data-decide="REJECTED" onClick={() => void decide(g.key, g.digest, 'REJECTED')}><X data-icon="inline-start" />{t('reject')}</Button>
+                <Button disabled={!session || busy} variant="outline" data-show-code onClick={() => void showCode(g.key, g.digest)}><KeyRound data-icon="inline-start" />{t('showCode')}</Button>
               </div>
             </CardContent>
           </Card>

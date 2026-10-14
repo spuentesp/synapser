@@ -2,9 +2,9 @@
 // approval gate — NOT the executor: nothing here can touch the workspace (U1). The single write is an
 // approval decision, an event on the ledger bound to the current plan digest (U4).
 //
-//   GET  /api/session                      { token }          no CORS headers; a request without an Origin header gets the
-//                                                            token too, so the token guards against cross-site pages only
-//                                                            (a declared limit: the API is bound to 127.0.0.1)
+//   GET  /api/session                      { ok, mode, needsCode }; sets the session cookie (HttpOnly, SameSite=Strict).
+//                                          Never the token itself. In adversarial mode the cookie waits for the code.
+//   POST /api/session/redeem               { code }; adversarial mode only: one use, five failures at most, same origin
 //   GET  /api/runs                         runs found under the state dir
 //   GET  /api/runs/:id/state[?seq=N]       swarm state (replayable at any seq)
 //   GET  /api/runs/:id/{timeline,cost,waste,coordination,verify,export}
@@ -14,7 +14,7 @@
 //   GET  /api/library[/:kind[/:id]]        the operator library, versioned (plan 14 Q2.6)
 //   PUT|DELETE /api/library/:kind/:id      token + same origin; an invalid document is refused whole
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join, normalize, resolve, sep } from "node:path";
@@ -63,6 +63,8 @@ export interface ApiOptions {
   stateDir: string;
   /** Token required by POST. Generated when omitted. */
   token?: string;
+  /** operator: the page gets the session cookie at once. adversarial: only after the one-time code printed by serve (plan 15 D1, D7). */
+  trustMode?: "operator" | "adversarial";
   /** Open journals the caller already holds (e.g. a demo that runs the mission in-process). */
   journals?: Map<string, Journal>;
   /** Poll period of the SSE stream, ms. */
@@ -74,6 +76,8 @@ export interface ApiOptions {
 export interface ApiServer {
   server: Server;
   token: string;
+  /** The one-time code of adversarial mode while it is unused; null otherwise. */
+  readonly sessionCode: string | null;
   listen(port?: number, host?: string): Promise<number>;
   close(): Promise<void>;
 }
@@ -138,6 +142,12 @@ function libraryBases(policy: LibraryPolicy) {
 
 export function createApi(opts: ApiOptions): ApiServer {
   const token = opts.token ?? randomBytes(16).toString("hex");
+  // plan 15 D1 and D7: the session token travels in an HttpOnly cookie, never in a JSON body. In adversarial mode the
+  // cookie is handed out only after a one-time code, printed by serve in the terminal, has been redeemed.
+  const trustMode = opts.trustMode ?? "operator";
+  let pendingCode: string | null = trustMode === "adversarial" ? randomBytes(6).toString("base64url").slice(0, 8) : null;
+  let codeFailures = 0;
+  const sessionCookie = (): string => `synapser_session=${token}; Path=/; HttpOnly; SameSite=Strict`;
   const own = new Map<string, Journal>();
   const stateDir = resolve(opts.stateDir);
   const uiDir = resolve(opts.uiDir ?? DEFAULT_UI_DIR) + sep;
@@ -202,7 +212,24 @@ export function createApi(opts: ApiOptions): ApiServer {
   };
 
   /** The ONE write guard: same origin, then the session token. Answers the refusal and returns false when refused. */
-  const tokenOk = (req: IncomingMessage): boolean => req.headers["x-synapser-token"] === token;
+  // a header (tools and tests) or the session cookie (the page); every comparison runs in constant time
+  const sameSecret = (given: string | undefined, secret: string): boolean => {
+    if (given === undefined) return false;
+    const a = Buffer.from(given);
+    const b = Buffer.from(secret);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  const cookieOf = (req: IncomingMessage, name: string): string | undefined => {
+    for (const part of (req.headers.cookie ?? "").split(";")) {
+      const [key, ...value] = part.trim().split("=");
+      if (key === name) return value.join("=");
+    }
+    return undefined;
+  };
+  const tokenOk = (req: IncomingMessage): boolean => {
+    const header = req.headers["x-synapser-token"];
+    return sameSecret(typeof header === "string" ? header : undefined, token) || sameSecret(cookieOf(req, "synapser_session"), token);
+  };
   const writeAllowed = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!sameOrigin(req)) {
       fail(res, 403, "CROSS_ORIGIN");
@@ -425,7 +452,29 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (!m) return fail(res, 404, "NOT_FOUND");
     const [, top, runId, what, sub] = m as unknown as [string, string, string | undefined, string | undefined, string | undefined];
 
-    if (top === "session" && method === "GET") return json(res, 200, { token });
+    if (top === "session" && method === "GET") {
+      // the page learns whether it has the cookie and whether a code is needed; the token itself never leaves the cookie
+      if (trustMode === "operator" || tokenOk(req)) {
+        res.setHeader("set-cookie", sessionCookie());
+        return json(res, 200, { ok: true, mode: trustMode });
+      }
+      return json(res, 200, { ok: false, mode: trustMode, needsCode: true });
+    }
+    if (top === "session" && runId === "redeem" && method === "POST") {
+      if (trustMode !== "adversarial") return fail(res, 404, "NOT_FOUND");
+      if (!sameOrigin(req)) return fail(res, 403, "CROSS_ORIGIN");
+      const body = await readBody(req, res);
+      if (body === undefined) return;
+      if (codeFailures >= 5) return fail(res, 429, "TOO_MANY_ATTEMPTS");
+      const given = (body as { code?: unknown }).code;
+      if (pendingCode === null || typeof given !== "string" || !sameSecret(given, pendingCode)) {
+        codeFailures++;
+        return fail(res, 401, "BAD_CODE");
+      }
+      pendingCode = null; // one use: a second redemption finds no code
+      res.setHeader("set-cookie", sessionCookie());
+      return json(res, 200, { ok: true, mode: trustMode });
+    }
     if (top === "runs" && !runId && method === "GET") return json(res, 200, { runs: listRuns() });
     if (!runId) return fail(res, 404, "NOT_FOUND");
     if (!RUN_ID.test(runId)) return fail(res, 400, "BAD_RUN_ID");
@@ -568,6 +617,9 @@ export function createApi(opts: ApiOptions): ApiServer {
   return {
     server,
     token,
+    get sessionCode() {
+      return pendingCode;
+    },
     listen: (port = 0, host = "127.0.0.1") =>
       new Promise((ok, bad) => {
         server.once("error", bad);

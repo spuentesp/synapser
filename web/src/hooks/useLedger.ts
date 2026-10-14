@@ -12,7 +12,11 @@ export interface Ledger {
   seq: number | null
   setSeq: (s: number | null) => void
   live: boolean
-  token: string | null
+  /** The page has the session cookie (plan 15 D1). */
+  session: boolean
+  /** Adversarial mode: the one-time code is needed before anything works (plan 15 D7). */
+  needsCode: boolean
+  refreshSession: () => void
   refresh: () => Promise<void>
   /** Bumps whenever the ledger grew, so views can re-fetch. */
   tick: number
@@ -27,7 +31,8 @@ export function useLedger(): Ledger {
   const [runId, setRunIdState] = useState<string | null>(null)
   const [state, setState] = useState<SwarmState | null>(null)
   const [seq, setSeq] = useState<number | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const [session, setSession] = useState(false)
+  const [needsCode, setNeedsCode] = useState(false)
   const [tick, setTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -55,9 +60,13 @@ export function useLedger(): Ledger {
     }
   }, [runId, seq])
 
-  useEffect(() => {
-    api<{ token: string }>('/api/session').then((s) => setToken(s.token)).catch(() => {})
+  // the session is a cookie the server sets; the page learns only whether it has one (plan 15 D1)
+  const refreshSession = useCallback(() => {
+    api<{ ok: boolean; needsCode?: boolean }>('/api/session').then((s) => { setSession(s.ok); setNeedsCode(Boolean(s.needsCode)) }).catch(() => {})
   }, [])
+  useEffect(() => {
+    refreshSession()
+  }, [refreshSession])
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -87,6 +96,6 @@ export function useLedger(): Ledger {
 
   return {
     runs, run: runs.find((r) => r.id === runId) ?? null, runId, setRunId, state, head, seq, setSeq,
-    live: seq === null, token, refresh, tick, error, loaded,
+    live: seq === null, session, needsCode, refreshSession, refresh, tick, error, loaded,
   }
 }

@@ -98,10 +98,12 @@ async function main(): Promise<void> {
         const pi = argv.indexOf("--port");
         const api = createApi({
           stateDir: cfg.stateDir,
+          trustMode: cfg.trustMode,
           control: { manager: rt.manager, chat: rt.chat, library: rt.library, libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);
         console.log(`Synapser → http://127.0.0.1:${port}/  (workspace: ${cfg.workspace})`);
+        if (api.sessionCode) console.log(`Código de sesión (un solo uso, para la página): ${api.sessionCode}`);
         return await new Promise<void>(() => {});
     }
       case "mcp": {

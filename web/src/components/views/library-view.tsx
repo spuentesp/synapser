@@ -1,6 +1,6 @@
 // Library editor (plan 14 Q3.5). Providers, agents, skills and templates are versioned documents: the server accepts a
 // document whole or refuses it with every problem. A provider is tested against its STORED endpoint and key; the report
-// names the environment variable the key came from and never shows the key. Writes use the session token and the same
+// names the environment variable the key came from and never shows the key. Writes use the session cookie and the same
 // origin, like every other write.
 import { useCallback, useEffect, useState } from 'react'
 import { Plug, Plus, Trash2 } from 'lucide-react'
@@ -47,7 +47,7 @@ interface Report {
   call: { model: string; ok: boolean; latencyMs: number; detail: string; usage: { promptTokens: number; completionTokens: number } | null; costUsd: number | null } | null
 }
 
-export function LibraryView({ token }: { token: string | null }) {
+export function LibraryView({ session }: { session: boolean }) {
   const { t } = useI18n()
   const [kind, setKind] = useState<LibKind>('providers')
   const [entries, setEntries] = useState<Entry[]>([])
@@ -65,7 +65,7 @@ export function LibraryView({ token }: { token: string | null }) {
   const [fileOnly, setFileOnly] = useState<string[]>([])
   const [providerIds, setProviderIds] = useState<string[]>([])
 
-  const headers = (): Record<string, string> => ({ 'content-type': 'application/json', 'x-synapser-token': token ?? '' })
+  const headers = (): Record<string, string> => ({ 'content-type': 'application/json' })
   const reset = (): void => {
     setErrors([])
     setFailure(null)
@@ -111,7 +111,7 @@ export function LibraryView({ token }: { token: string | null }) {
   }
 
   const save = async () => {
-    if (!token || !selected) return
+    if (!session || !selected) return
     let doc: unknown
     try {
       doc = JSON.parse(text)
@@ -134,7 +134,7 @@ export function LibraryView({ token }: { token: string | null }) {
   }
 
   const remove = async () => {
-    if (!token || !selected) return
+    if (!session || !selected) return
     if (!confirming) {
       setConfirming(true)
       return
@@ -155,12 +155,12 @@ export function LibraryView({ token }: { token: string | null }) {
   }
 
   const test = async () => {
-    if (!token || !selected) return
+    if (!session || !selected) return
     setTesting(true)
     setReport(null)
     setFailure(null)
     try {
-      setReport(await api<Report>(`/api/library/providers/${encodeURIComponent(selected)}/test`, { method: 'POST', headers: { 'x-synapser-token': token } }))
+      setReport(await api<Report>(`/api/library/providers/${encodeURIComponent(selected)}/test`, { method: 'POST' }))
     } catch (e) {
       setFailure(e instanceof ApiError ? e.code : (e as Error).message)
     } finally {
@@ -220,20 +220,20 @@ export function LibraryView({ token }: { token: string | null }) {
                 {report ? <ReportView report={report} /> : null}
               </CardContent>
               <CardFooter className="flex flex-wrap items-center gap-2">
-                <Button disabled={!token || busy} onClick={() => void save()}>{t('librarySave')}</Button>
+                <Button disabled={!session || busy} onClick={() => void save()}>{t('librarySave')}</Button>
                 {stored ? (
-                  <Button variant="outline" disabled={!token || busy} onClick={() => void remove()}>
+                  <Button variant="outline" disabled={!session || busy} onClick={() => void remove()}>
                     <Trash2 data-icon="inline-start" />
                     {confirming ? t('libraryConfirmDelete') : t('libraryDelete')}
                   </Button>
                 ) : null}
                 {stored && kind === 'providers' ? (
-                  <Button variant="outline" disabled={!token || testing} onClick={() => void test()}>
+                  <Button variant="outline" disabled={!session || testing} onClick={() => void test()}>
                     <Plug data-icon="inline-start" />
                     {testing ? t('libraryTesting') : t('libraryTest')}
                   </Button>
                 ) : null}
-                {!token ? <p className="text-xs text-destructive">{t('designerNoSession')}</p> : null}
+                {!session ? <p className="text-xs text-destructive">{t('designerNoSession')}</p> : null}
               </CardFooter>
             </Card>
           ) : (

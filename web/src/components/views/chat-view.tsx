@@ -9,7 +9,7 @@ import { ErrorNote } from './common'
 
 interface Msg { role: 'user' | 'assistant'; content: string; drafts?: string[]; tools?: string[] }
 
-export function ChatView({ token, onOpen }: { token: string | null; onOpen: (workflowId: string) => void }) {
+export function ChatView({ session, onOpen }: { session: boolean; onOpen: (workflowId: string) => void }) {
   const { t } = useI18n()
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')
@@ -21,14 +21,14 @@ export function ChatView({ token, onOpen }: { token: string | null; onOpen: (wor
 
   const submit = async () => {
     const q = text.trim()
-    if (!q || busy || !token) return
+    if (!q || busy || !session) return
     setText('')
     setErr(null)
     setBusy(true)
     setMsgs((m) => [...m, { role: 'user', content: q }])
     try {
       const r = await api<{ conversationId: string; reply: string; drafts: string[]; trace: { tool: string }[] }>('/api/chat/send', {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-synapser-token': token }, body: JSON.stringify({ conversationId: conv, text: q }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ conversationId: conv, text: q }),
       })
       setConv(r.conversationId)
       setMsgs((m) => [...m, { role: 'assistant', content: r.reply, drafts: r.drafts, tools: r.trace.map((x) => x.tool) }])
@@ -65,7 +65,7 @@ export function ChatView({ token, onOpen }: { token: string | null; onOpen: (wor
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() } }}
         />
-        <Button onClick={() => void submit()} disabled={busy || !text.trim() || !token}><Send data-icon="inline-start" />{t('send')}</Button>
+        <Button onClick={() => void submit()} disabled={busy || !text.trim() || !session}><Send data-icon="inline-start" />{t('send')}</Button>
       </div>
     </div>
   )

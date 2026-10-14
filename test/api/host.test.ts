@@ -9,12 +9,12 @@ import { WorkflowManager } from "../../src/workflow/manager.ts";
 
 // P15 IC4: the API answers only to its own host names. A page that rebinds its name to 127.0.0.1 sends another Host.
 
-function raw(port: number, method: string, path: string, host: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+function raw(port: number, method: string, path: string, host: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string; setCookie: string }> {
   return new Promise((resolve, reject) => {
     const req = request({ host: "127.0.0.1", port, method, path, headers: { host, ...headers } }, (res) => {
       let body = "";
       res.on("data", (c) => (body += c));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body, setCookie: String(res.headers["set-cookie"] ?? "") }));
     });
     req.on("error", reject);
     req.end();
@@ -45,9 +45,13 @@ describe("the API answers only to its own host names (P15 IC4)", () => {
     const rebound = await raw(port, "GET", "/api/session", `evil.example:${port}`);
     assert.equal(rebound.status, 421);
     assert.equal(rebound.body.includes(api.token), false);
+    assert.equal(rebound.setCookie.includes(api.token), false, "a rebound name gets no cookie");
     const own = await raw(port, "GET", "/api/session", `127.0.0.1:${port}`);
     assert.equal(own.status, 200);
-    assert.equal(JSON.parse(own.body).token, api.token);
+    // plan 15 D1: the token travels in the HttpOnly cookie, never in the JSON body
+    assert.equal(JSON.parse(own.body).token, undefined);
+    assert.equal(own.body.includes(api.token), false);
+    assert.match(own.setCookie, new RegExp(`synapser_session=${api.token}; Path=/; HttpOnly; SameSite=Strict`));
     assert.equal((await raw(port, "GET", "/api/session", `localhost:${port}`)).status, 200);
   });
 

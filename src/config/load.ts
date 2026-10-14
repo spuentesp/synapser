@@ -20,6 +20,8 @@ export interface SynapserConfig {
   providerKeyEnv: string[];
   /** The library skills each agent id receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
   agentSkills: Record<string, string[]>;
+  /** operator (default): the page's session is granted at once. adversarial: only after serve's one-time code (plan 15 D7). */
+  trustMode: "operator" | "adversarial";
   /** The provider and model each system role (planner, worker, repair, advisor, chat) runs on. */
   roles: Record<Role, RoleConfig>;
   profiles: AgentProfile[];
@@ -300,6 +302,9 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     if (!Array.isArray(raw["providerKeyEnv"]) || raw["providerKeyEnv"].some((n) => typeof n !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(n))) errors.push("providerKeyEnv must be a list of environment variable names");
     else providerKeyEnv.push(...new Set(raw["providerKeyEnv"] as string[]));
   }
+  // plan 15 D7: the trust mode is the operator's choice; operator is the default
+  const trustMode = raw["trustMode"] === undefined ? "operator" : raw["trustMode"];
+  if (trustMode !== "operator" && trustMode !== "adversarial") errors.push("trustMode must be \"operator\" or \"adversarial\"");
   // plan 14 Q5.4 (decision D6): the operator's file decides which library skills each agent receives, at most five each
   const agentSkills: Record<string, string[]> = {};
   if (raw["agentSkills"] !== undefined) {
@@ -317,6 +322,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
 
   const cfg: SynapserConfig = {
     workspace, stateDir, commands, providers, roles, providerKeyEnv, agentSkills, profiles, pools, policy, identity, advisor,
+    trustMode: trustMode === "adversarial" ? "adversarial" : "operator",
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,
