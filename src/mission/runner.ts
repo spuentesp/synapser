@@ -43,12 +43,24 @@ export interface MissionDeps {
   delegation?: Partial<DelegationConfig> & { budgetUsd?: number };
   /** Web research for agents of the plain (non-orchestrated) path. */
   research?: import("../research/session.ts").ResearchSession;
+  /**
+   * Workflow conditions (plan 13): when present they REPLACE the command list as the acceptance
+   * decision. Called once per validation round with the validation node's id; judges every condition on
+   * one consistent snapshot and reports each result so a failure names the unmet statements.
+   */
+  conditions?: (taskId: string) => Promise<{
+    results: { id: string; statement: string; required: boolean; status: string; evidence: string; detail: string; checker: string; snapshot: string }[];
+    snapshot: string;
+    satisfied: boolean;
+  }>;
+  /** Cooperative cancellation: stop admitting work, let running steps end, finish CANCELLED. */
+  signal?: AbortSignal;
   /** Evidence checks beyond commands (e.g. citation provenance); run after the commands pass. */
   extraChecks?: { id: string; run: () => { ok: boolean; detail: string } | Promise<{ ok: boolean; detail: string }> }[];
   onEvent?: (e: { kind: string; taskId?: string; detail?: unknown }) => void;
 }
 
-export type MissionStatus = "DONE" | "FAILED" | "TIMED_OUT";
+export type MissionStatus = "DONE" | "FAILED" | "TIMED_OUT" | "CANCELLED";
 export interface MissionResult {
   status: MissionStatus;
   reason: string | null;
@@ -85,6 +97,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   let repairRounds = 0;
   let failure: string | null = null;
   let timedOut = false;
+  let cancelled = false;
 
   // ---- persist mission, plan revision and tasks in one transaction --------------------------
   journal.tx((t) => {
@@ -205,6 +218,29 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     if (pending.length) return { taskId: id, ok: false, label: "UNSETTLED_ACTIONS", detail: pending.map((a) => `${a.actionId}:${a.state}`).join(",") };
     let allOk = true;
     let last = "";
+    if (deps.conditions) {
+      const round = journal.listEvents().filter((e) => e.entity === "condition_round").length + 1;
+      const r = await deps.conditions(id);
+      journal.tx((t) => {
+        for (const c of r.results) {
+          t.event(runId, "condition", c.id, null, c.status, {
+            round, statement: c.statement, required: c.required, evidence: c.evidence, checker: c.checker, detail: c.detail.slice(0, 1500), snapshot: c.snapshot,
+          });
+        }
+        t.event(runId, "condition_round", String(round), null, r.satisfied ? "SATISFIED" : "UNSATISFIED", { snapshot: r.snapshot, conditions: r.results.length });
+      });
+      emit("conditions.evaluated", id, { round, satisfied: r.satisfied });
+      if (!r.satisfied) {
+        const unmet = r.results.filter((c) => c.required && c.status === "UNSATISFIED");
+        return {
+          taskId: id,
+          ok: false,
+          label: "ACCEPTANCE_FAILED",
+          detail: unmet.map((c) => `- [${c.id}] ${c.statement}\n  ${c.detail}`).join("\n").slice(0, 3000),
+        };
+      }
+      return { taskId: id, ok: true, label: "ACCEPTED" };
+    }
     for (const cmd of spec.acceptance) {
       const v = await deps.validation.run(cmd, { taskId: id });
       validations.push(v);
@@ -251,6 +287,10 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     if (!failure && !timedOut && Date.now() > deadline) {
       timedOut = true;
       failure = "mission time budget exhausted";
+    }
+    if (!failure && deps.signal?.aborted) {
+      cancelled = true;
+      failure = "cancelled by the operator";
     }
     const tasks = journal.listTasks();
     if (failure) {
@@ -381,7 +421,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   }
   const finalTasks = journal.listTasks();
   const accepted = finalTasks.find((t) => t.taskId === currentValidate)?.state === "DONE";
-  const status: MissionStatus = timedOut ? "TIMED_OUT" : accepted && !failure ? "DONE" : "FAILED";
+  const status: MissionStatus = cancelled ? "CANCELLED" : timedOut ? "TIMED_OUT" : accepted && !failure ? "DONE" : "FAILED";
   const reason = status === "DONE" ? null : (failure ?? "mission did not reach acceptance");
   journal.tx((t) => t.setMissionState(runId, "RUNNING", status === "DONE" ? "DONE" : "FAILED", { reason }));
   emit("mission.finished", undefined, { status, reason });
