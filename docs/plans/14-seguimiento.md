@@ -183,7 +183,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P15.3 Decisiones D1 a D7 del usuario, tomadas el 14 oct (plan 15, sección 6). Lo que falta son sus implementaciones: P15.4 a P15.7. commit: 48bff9a · prueba: decisiones registradas en el plan 15 y en este tracker.
 - [ ] P15.4 D1 implementación: el token sale de la cookie HttpOnly y no del JSON de `/api/session`. En modo de procesos adversarios (P15.7), además, código de un solo uso impreso por `serve`. Verificación: `/api/session` no devuelve el token; falsación: volver al JSON.
 - [ ] P15.5 D3 implementación: direcciones privadas y de metadatos de nube rechazadas tras resolver el nombre; el loopback sigue para proveedores locales. Verificación: un nombre que resuelve a una privada se rechaza; falsación: quitar la comprobación.
-- [ ] P15.6 D4 implementación: las tarifas que suman al costo vienen solo del archivo; una tarifa de biblioteca se muestra y no suma. Verificación: el costo no cambia con una tarifa de biblioteca; falsación: sumarla.
+- [~] P15.6 D4 implementación: las tarifas que suman al costo vienen solo del archivo; una tarifa de biblioteca se muestra y no suma. Verificación: el costo no cambia con una tarifa de biblioteca; falsación: sumarla.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
 - [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: 043b0ad · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
 
