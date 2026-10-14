@@ -14,6 +14,7 @@ export interface AgentState {
   kind: string | null;
   depth: number;
   requestedBy: string | null;
+  deps: string[];
   steps: number;
   tools: Record<string, number>;
   lastSeq: number;
@@ -50,7 +51,7 @@ export function swarmState(journal: Journal, atSeq = Number.POSITIVE_INFINITY): 
     let a = agents.get(id);
     if (!a) {
       a = {
-        taskId: id, status: "planned", profile: null, kind: null, depth: 0, requestedBy: null, steps: 0, tools: {}, lastSeq: 0,
+        taskId: id, status: "planned", profile: null, kind: null, depth: 0, requestedBy: null, deps: [], steps: 0, tools: {}, lastSeq: 0,
         currentAction: null, waitingOn: null, heldFiles: [], observedHeld: [],
         runs: { n: 0, inputTokens: 0, outputTokens: 0, usd: 0, usdUnknownRuns: 0 },
         modelCalls: { n: 0, promptTokens: 0, completionTokens: 0, usd: 0, unpricedCalls: 0 },
@@ -83,9 +84,16 @@ export function swarmState(journal: Journal, atSeq = Number.POSITIVE_INFINITY): 
       case "plan":
         if (e.toState === "ACCEPTED") planRevision = Math.max(planRevision, Number(e.entityId));
         break;
+      case "task_dep": {
+        const a = get(e.entityId);
+        const dep = String(d["depends_on"]);
+        if (!a.deps.includes(dep)) a.deps = [...a.deps, dep].sort();
+        break;
+      }
       case "task": {
         const a = get(e.entityId);
         a.lastSeq = e.seq;
+        if (e.fromState === null && Array.isArray(d["deps"])) a.deps = [...new Set([...a.deps, ...(d["deps"] as string[])])].sort();
         const t = e.toState;
         a.status =
           t === "RUNNING" ? "running" : t === "READY" ? "ready" : t === "VALIDATING" ? "validating" : t === "DONE" ? "done" : t === "FAILED" ? "failed" : t === "CANCELLED" ? "cancelled" : "planned";

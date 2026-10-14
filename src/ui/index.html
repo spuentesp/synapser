@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Synapser</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="side">
+      <div class="brand"><span class="logo" aria-hidden="true"></span><span>Synapser</span></div>
+      <label class="field"><span data-t="run">Corrida</span><select id="runSel"></select></label>
+      <div id="integrity" class="integrity" role="status"></div>
+      <nav id="nav" class="nav" aria-label="vistas"></nav>
+      <div class="side-foot">
+        <button id="langBtn" class="ghost" type="button"></button>
+        <button id="themeBtn" class="ghost" type="button"></button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="top">
+        <div id="missionLine" class="mission"></div>
+        <div class="replay">
+          <button id="liveBtn" class="pill live" type="button"></button>
+          <input id="seqRange" type="range" min="1" max="1" value="1" aria-label="seq">
+          <span id="seqLabel" class="mono"></span>
+        </div>
+      </header>
+      <section id="view" class="view" aria-live="polite"></section>
+    </main>
+    <div id="drawer" class="drawer" hidden></div>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

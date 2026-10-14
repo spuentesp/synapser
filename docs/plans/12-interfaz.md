@@ -58,3 +58,19 @@ rota se muestra como tal (insignia roja con el primer `seq` malo), no se oculta.
 Si una cifra de la UI no puede reconstruirse desde la API (U2), esa cifra se elimina. Si el costo de
 mantener la vista de "reproducción" supera su valor en la demo, se recorta a la línea de tiempo
 estática; las vistas 1, 3 y 7 no se recortan.
+
+## 7. Estado de implementación
+
+Implementado: `src/api/server.ts` (HTTP sin dependencias, `127.0.0.1`; GET de solo lectura con
+**evidencia citada** en agregados, SSE con reanudación por `Last-Event-ID`, una sola escritura:
+`POST …/approvals/:task` con token de sesión, comprobación de origen y digest vigente) y
+`src/ui/` (HTML + CSS + JS sin dependencias, CSP `default-src 'self'`, todo texto dinámico escapado,
+ES/EN, tema claro/oscuro, rutas por `#vista`). Vistas: enjambre (grafo por niveles con esperas y
+retenciones), línea de tiempo (filtro), por qué (cadena declarada + afirmación rotulada), costo y
+desperdicio (lo desconocido marcado), coordinación, aprobaciones e integridad (verificación y
+exportación; `scripts/verify-export.ts` la verifica sin conexión). Reproducción por `seq` con el
+deslizador. `scripts/demo.ts` levanta una misión determinista completa con la interfaz;
+`scripts/serve.ts` sirve un directorio de estado existente.
+
+Pruebas: contrato de la API (U1–U5, SSE, entradas hostiles) y la interfaz en un navegador real por
+CDP (render, clic en *Aprobar* ⇒ evento en el ledger con actor, texto hostil inerte).

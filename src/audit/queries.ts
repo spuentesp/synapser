@@ -54,6 +54,28 @@ const summarize = (e: Ev): string => {
       return `validation ${e.entityId} ${e.toState}`;
     case "model_call":
       return `model call ${e.entityId} ${d.role}/${d.served_model ?? d.requested_model} ${e.toState} tokens=${d.prompt_tokens ?? "?"}+${d.completion_tokens ?? "?"}`;
+    case "dispatch":
+      return `${e.entityId} routed to ${d.profile} (${d.kind}, ${d.reason}${d.suggested && d.suggested !== d.profile ? `, suggested ${d.suggested} overridden` : ""}; cost ${d.cost_basis})`;
+    case "delegation":
+      return e.toState === "ACCEPTED"
+        ? `${d.requester} requested subtask ${e.entityId} (depth ${d.depth}, scope ${(d.scope ?? []).join(",")})`
+        : `${d.requester} subtask request REFUSED: ${d.code}${d.detail ? ` — ${d.detail}` : ""}`;
+    case "approval":
+      return `approval for ${e.entityId}: ${e.toState}${d.actor ? ` by ${d.actor}` : ""}${d.reason ? ` (${d.reason})` : ""}`;
+    case "alert":
+      return `alert ${e.toState} on ${e.entityId}${d.profile ? ` (${d.profile})` : ""}`;
+    case "intent":
+      return `intention of ${e.entityId} ${e.toState === "POSTED" ? "announced to Zoanthrope" : `could not be announced: ${d.error}`}`;
+    case "zoo_observation":
+      return `zoanthrope: ${d.agent} ${d.action}${d.path ? ` ${d.path}` : ""}${d.purpose ? ` — ${d.purpose}` : ""}`;
+    case "zoo_gap":
+      return e.toState === "GAP" ? `zoanthrope audit ring wrapped: events between ts ${d.since_ts} and ${d.oldest_ts} may be unaccounted for` : `zoanthrope observation ${e.toState}${d.error ? `: ${d.error}` : ""}`;
+    case "research_call":
+      return `search ${e.toState}${d.query ? `: "${String(d.query).slice(0, 80)}"` : " (refused)"} → ${(d.urls ?? []).length} source(s)${d.cached ? " [cached]" : ""}${d.error ? ` — ${d.error}` : ""}`;
+    case "acceptance_check":
+      return `check ${d.check}: ${e.toState} — ${d.detail}`;
+    case "task_dep":
+      return `${e.entityId} now also waits for ${d.depends_on}`;
     case "agent_step":
       return `step ${d.step} of ${e.entityId}: ${d.tool ?? "—"} ${e.toState}${d.detail ? ` (${d.detail})` : ""}`;
     default:
