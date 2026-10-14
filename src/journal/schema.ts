@@ -81,6 +81,12 @@ CREATE TABLE model_calls(
   finish_reason TEXT, fallback_used INTEGER NOT NULL DEFAULT 0, cost_usd REAL, error TEXT,
   request_blob TEXT, response_blob TEXT) STRICT;
 
+CREATE TABLE research_calls(
+  call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT, role TEXT NOT NULL,
+  provider TEXT NOT NULL, query TEXT, query_sha256 TEXT NOT NULL, params_json TEXT NOT NULL,
+  started_at INTEGER NOT NULL, latency_ms INTEGER, credits_used INTEGER, cached INTEGER NOT NULL DEFAULT 0,
+  result_blob TEXT, error TEXT, urls_json TEXT NOT NULL DEFAULT '[]') STRICT;
+
 CREATE TABLE agent_runs(
   agent_run_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT, profile_id TEXT NOT NULL,
   role TEXT NOT NULL, adapter TEXT NOT NULL,

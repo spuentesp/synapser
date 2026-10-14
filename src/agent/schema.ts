@@ -14,6 +14,8 @@ export interface Schema {
   maxItems?: number;
   minLength?: number;
   maxLength?: number;
+  minimum?: number;
+  maximum?: number;
 }
 
 export function validate(value: unknown, schema: Schema, path = "$"): string[] {
@@ -39,6 +41,8 @@ export function validate(value: unknown, schema: Schema, path = "$"): string[] {
     if (schema.maxLength !== undefined && value.length > schema.maxLength) errs.push(`${path}: too long`);
   } else if (t === "integer") {
     if (typeof value !== "number" || !Number.isInteger(value)) return [`${path}: expected integer`];
+    if (schema.minimum !== undefined && value < schema.minimum) errs.push(`${path}: must be at least ${schema.minimum}`);
+    if (schema.maximum !== undefined && value > schema.maximum) errs.push(`${path}: must be at most ${schema.maximum}`);
   } else if (t === "boolean") {
     if (typeof value !== "boolean") return [`${path}: expected boolean`];
   }

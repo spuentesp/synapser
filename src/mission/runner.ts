@@ -30,6 +30,10 @@ export interface MissionDeps {
   budget?: BudgetManager;
   /** When present, steps are routed to profiles and run through the AgentRunner port (plan 10). */
   orchestration?: OrchestrationDeps;
+  /** Web research for agents of the plain (non-orchestrated) path. */
+  research?: import("../research/session.ts").ResearchSession;
+  /** Evidence checks beyond commands (e.g. citation provenance); run after the commands pass. */
+  extraChecks?: { id: string; run: () => { ok: boolean; detail: string } | Promise<{ ok: boolean; detail: string }> }[];
   onEvent?: (e: { kind: string; taskId?: string; detail?: unknown }) => void;
 }
 
@@ -133,6 +137,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         journal,
         runId,
         ...(deps.budget ? { budget: deps.budget } : {}),
+        ...(deps.research ? { research: deps.research } : {}),
         role: isRepair ? "repair" : "worker",
         deadlineMs: deadline,
         ...(L.loop ? { limits: L.loop } : {}),
@@ -157,6 +162,18 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         allOk = false;
         last = `${cmd}: exit=${v.exitCode}${v.timedOut ? " (timeout)" : ""}${v.valid ? "" : ` [${v.note}]`}\n${(v.stdout + v.stderr).slice(-3000)}`;
         break;
+      }
+    }
+    if (allOk) {
+      for (const c of deps.extraChecks ?? []) {
+        const r = await c.run();
+        journal.tx((t) => t.event(runId, "acceptance_check", id, null, r.ok ? "PASSED" : "FAILED", { check: c.id, detail: r.detail }));
+        emit("check.finished", id, { check: c.id, ok: r.ok });
+        if (!r.ok) {
+          allOk = false;
+          last = `${c.id}: ${r.detail}`;
+          break;
+        }
       }
     }
     return { taskId: id, ok: allOk, label: allOk ? "ACCEPTED" : "ACCEPTANCE_FAILED", ...(allOk ? {} : { detail: last }) };

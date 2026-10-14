@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { runTask } from "../agent/loop.ts";
 import { taskPrompt } from "../agent/prompts.ts";
 import type { ModelPort } from "../model/types.ts";
+import type { ResearchSession } from "../research/session.ts";
 import { treeDigest } from "../validation/snapshot.ts";
 import type { AgentRunOutput, AgentRunRequest, AgentRunner } from "./port.ts";
 import { runAgent } from "./runner.ts";
@@ -59,9 +60,11 @@ export class NativeLoopRunner implements AgentRunner {
   readonly adapter = "native" as const;
   readonly #model: ModelPort;
   readonly #limits: Partial<LoopLimits> | undefined;
-  constructor(model: ModelPort, limits?: Partial<LoopLimits>) {
+  readonly #research: ResearchSession | undefined;
+  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession) {
     this.#model = model;
     this.#limits = limits;
+    this.#research = research;
   }
 
   async run(req: AgentRunRequest): Promise<AgentRunOutput> {
@@ -82,6 +85,7 @@ export class NativeLoopRunner implements AgentRunner {
         role,
         ...(req.deadlineMs !== undefined ? { deadlineMs: req.deadlineMs } : {}),
         ...(this.#limits ? { limits: this.#limits } : {}),
+        ...(this.#research ? { research: this.#research } : {}),
       },
       {
         taskId: req.task.taskId,
@@ -94,7 +98,8 @@ export class NativeLoopRunner implements AgentRunner {
     );
 
     // Usage comes from the model_calls this run made: exact, recorded by the provider.
-    const calls = journal.listModelCalls().filter((c) => !before.has(c.callId) && c.role === role);
+    // attributed by TASK as well as role: concurrent tasks share a role and must not share a bill
+    const calls = journal.listModelCalls().filter((c) => !before.has(c.callId) && c.role === role && c.taskId === req.task.taskId);
     const sum = (f: (c: (typeof calls)[number]) => number | null) => calls.reduce((a, c) => a + (f(c) ?? 0), 0);
     const anyUnpriced = calls.some((c) => c.costUsd === null);
     const usage: UsageRecord = calls.length

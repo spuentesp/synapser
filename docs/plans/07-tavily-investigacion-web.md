@@ -126,3 +126,15 @@ contenido (reproducción sin gastar créditos).
    comprobable. Cambia el fixture y el oracle.
 3. Si prefieres no tocar el fixture, Tavily queda en U1–U3 y el bono depende de que el panel de
    fuentes y las citas verificadas se vean en la demo.
+
+## 10. Estado de implementación
+
+Implementado en `src/research/`: `ResearchPort` y sus tres adaptadores (`TavilyResearch`,
+`ReplayResearch`, `NullResearch`), `QueryGuard` (longitud, multilínea, patrones de credenciales,
+valores de credenciales propias y texto copiado del repositorio), `ResearchSession` (guarda →
+presupuesto por tarea y misión → caché → proveedor, con un reintento y todo en el ledger; una
+consulta rechazada se registra solo por hash), tabla `research_calls`, `verifyCitations`, la
+herramienta `web_search` del bucle y la variante T0 (`fixtures/currency`, `citationCheck`). La
+decisión de §9.2 se resolvió incluyendo T0 como variante: el fixture de facturación no cambia.
+La clave se lee de `TAVILY_API_KEY` o `TAVILY_TOKEN`; sin clave la investigación queda
+explícitamente desactivada (`NullResearch`), nunca simulada.

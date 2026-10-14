@@ -168,6 +168,40 @@ export interface TransitionData {
 
 type Row = Record<string, unknown>;
 
+export interface ResearchCallInsert {
+  callId: string;
+  runId: string;
+  taskId: string | null;
+  role: string;
+  provider: string;
+  /** null when the query was refused by the guard: its text is not stored, only its hash. */
+  query: string | null;
+  querySha256: string;
+  params: Record<string, unknown>;
+  startedAt: number;
+  latencyMs: number | null;
+  creditsUsed: number | null;
+  cached: boolean;
+  resultBlob: string | null;
+  error: string | null;
+  urls: string[];
+}
+export interface ResearchCallRow {
+  callId: string;
+  taskId: string | null;
+  role: string;
+  provider: string;
+  query: string | null;
+  querySha256: string;
+  startedAt: number;
+  latencyMs: number | null;
+  creditsUsed: number | null;
+  cached: boolean;
+  resultBlob: string | null;
+  error: string | null;
+  urls: string[];
+}
+
 export class Tx {
   readonly #db: DatabaseSync;
   readonly #now: () => number;
@@ -399,6 +433,29 @@ export class Tx {
     });
   }
 
+  insertResearchCall(c: ResearchCallInsert): void {
+    this.#db
+      .prepare(
+        `INSERT INTO research_calls(call_id,run_id,task_id,role,provider,query,query_sha256,params_json,started_at,latency_ms,credits_used,cached,result_blob,error,urls_json)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        c.callId, c.runId, c.taskId, c.role, c.provider, c.query, c.querySha256, JSON.stringify(c.params), c.startedAt, c.latencyMs,
+        c.creditsUsed, c.cached ? 1 : 0, c.resultBlob, c.error, JSON.stringify(c.urls),
+      );
+    this.event(c.runId, "research_call", c.callId, null, c.error ? "FAILED" : "OK", {
+      task_id: c.taskId,
+      role: c.role,
+      provider: c.provider,
+      query: c.query,
+      query_sha256: c.querySha256,
+      urls: c.urls,
+      credits_used: c.creditsUsed,
+      cached: c.cached,
+      ...(c.error ? { error: c.error } : {}),
+    });
+  }
+
   registerChild(c: ChildRow): void {
     this.#db
       .prepare("INSERT OR REPLACE INTO children(pid,kind,run_id,task_id,proc_start_ticks,pgid,started_at,generation) VALUES(?,?,?,?,?,?,?,?)")
@@ -566,6 +623,24 @@ export class Journal {
       })),
     };
   }
+  listResearchCalls(): ResearchCallRow[] {
+    return (this.#db.prepare("SELECT * FROM research_calls WHERE run_id=? ORDER BY started_at, call_id").all(this.runId) as Row[]).map((r) => ({
+      callId: r["call_id"] as string,
+      taskId: (r["task_id"] as string | null) ?? null,
+      role: r["role"] as string,
+      provider: r["provider"] as string,
+      query: (r["query"] as string | null) ?? null,
+      querySha256: r["query_sha256"] as string,
+      startedAt: r["started_at"] as number,
+      latencyMs: (r["latency_ms"] as number | null) ?? null,
+      creditsUsed: (r["credits_used"] as number | null) ?? null,
+      cached: (r["cached"] as number) === 1,
+      resultBlob: (r["result_blob"] as string | null) ?? null,
+      error: (r["error"] as string | null) ?? null,
+      urls: JSON.parse(r["urls_json"] as string) as string[],
+    }));
+  }
+
   listModelCalls(): { callId: string; taskId: string | null; startedAt: number; latencyMs: number | null; role: string; requestedModel: string; servedModel: string | null; promptTokens: number | null;
     completionTokens: number | null; costUsd: number | null; error: string | null; requestBlob: string | null; responseBlob: string | null; fallbackUsed: boolean; retries: number }[] {
     return (this.#db.prepare("SELECT * FROM model_calls WHERE run_id=? ORDER BY started_at, call_id").all(this.runId) as Row[]).map((r) => ({
