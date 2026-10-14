@@ -13,6 +13,8 @@ export interface InjectedProvider {
   apiKeyEnv: string;
   /** Upstream model id the provider declares. */
   model: string;
+  /** The wire protocol the endpoint speaks; each CLI accepts only its own. */
+  protocol: "openai-compatible" | "anthropic";
 }
 
 export interface InjectionPlan {
@@ -22,6 +24,8 @@ export interface InjectionPlan {
   argv: string[];
   /** A JSON object the adapter merges into its own home configuration file (path relative to HOME). */
   homeJson?: { path: string; value: Record<string, unknown> };
+  /** Text files the adapter writes under the run HOME. They hold names of variables, never key values. */
+  homeFiles?: { path: string; content: string }[];
 }
 
 /** K6: variables Synapser reserves for itself (the operator token and its own credentials). */
@@ -50,6 +54,10 @@ export function checkInjectedProvider(p: InjectedProvider): void {
   if (METADATA_HOSTS.has(url.hostname.replace(/^\[|\]$/g, ""))) throw new Error("baseUrl points at a cloud metadata address (plan 17 K7)");
 }
 
+function need(p: InjectedProvider, protocol: InjectedProvider["protocol"], adapterId: string): void {
+  if (p.protocol !== protocol) throw new Error(`${adapterId} needs an ${protocol} provider; ${p.id} speaks ${p.protocol}`);
+}
+
 /** Builds what one run needs to talk to the provider through the named CLI. */
 export function planInjection(adapterId: string, p: InjectedProvider, source: NodeJS.ProcessEnv): InjectionPlan {
   checkInjectedProvider(p);
@@ -57,7 +65,36 @@ export function planInjection(adapterId: string, p: InjectedProvider, source: No
   if (!value) throw new Error(`${p.apiKeyEnv} is not set in the operator's environment`);
   const env: Record<string, string> = { [p.apiKeyEnv]: value };
   switch (adapterId) {
+    case "claude-code": {
+      need(p, "anthropic", adapterId);
+      // Claude Code appends /v1/messages itself, so the endpoint is given without it.
+      return { env: { ...env, ANTHROPIC_BASE_URL: p.baseUrl, ANTHROPIC_API_KEY: value }, argv: ["--model", p.model] };
+    }
+    case "kimi": {
+      need(p, "anthropic", adapterId);
+      // kimi resolves -m against the models its config.toml declares, so the file declares the provider and the model.
+      const alias = `${p.id}/${p.model}`;
+      const toml = [
+        `default_model = ${JSON.stringify(alias)}`,
+        "",
+        `[providers.${p.id}]`,
+        `base_url = ${JSON.stringify(p.baseUrl)}`,
+        `type = "anthropic"`,
+        `api_key_env = ${JSON.stringify(p.apiKeyEnv)}`,
+        "",
+        `[models.${JSON.stringify(alias)}]`,
+        `provider = ${JSON.stringify(p.id)}`,
+        `model = ${JSON.stringify(p.model)}`,
+        "max_context_size = 100000",
+        "max_output_size = 4096",
+        "capabilities = []",
+        `display_name = ${JSON.stringify(p.model)}`,
+        "",
+      ].join("\n");
+      return { env, argv: ["-m", alias], homeFiles: [{ path: ".kimi-code/config.toml", content: toml }] };
+    }
     case "codex":
+      need(p, "openai-compatible", adapterId);
       // codex runs with --ignore-user-config, so the provider travels as -c overrides, not as a file.
       return {
         env,
@@ -68,6 +105,7 @@ export function planInjection(adapterId: string, p: InjectedProvider, source: No
         ],
       };
     case "mimo":
+      need(p, "openai-compatible", adapterId);
       return {
         env,
         argv: ["--model", `${p.id}/${p.model}`],
@@ -85,9 +123,6 @@ export function planInjection(adapterId: string, p: InjectedProvider, source: No
           },
         },
       };
-    case "claude-code":
-    case "kimi":
-      throw new Error(`${adapterId} speaks the Anthropic protocol, and the provider schema has only openai-compatible (plan 17, decision pending)`);
     default:
       throw new Error(`no provider injection for adapter ${adapterId}`);
   }

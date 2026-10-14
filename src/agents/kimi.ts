@@ -33,8 +33,11 @@ export class KimiAdapter implements AgentAdapter {
       argv.push(`--${mode}`);
       template.push(`--${mode}`);
     }
-    // Kimi resolves -m against the models declared in its config.toml; that file must declare the model (P17.5).
-    if (profile.model) {
+    // Kimi resolves -m against the models declared in its config.toml; an injected provider writes that file (P17.5).
+    if (task.injection) {
+      argv.push(...task.injection.argv);
+      template.push(...task.injection.argv);
+    } else if (profile.model) {
       argv.push("-m", profile.model);
       template.push("-m", profile.model);
     }
@@ -46,9 +49,12 @@ export class KimiAdapter implements AgentAdapter {
     return {
       argv,
       argvTemplate: template,
-      env: buildAgentEnv(profile, task.envSource, task.home),
+      env: { ...buildAgentEnv(profile, task.envSource, task.home), ...(task.injection?.env ?? {}) },
       resetDirs: [{ root: "home", path: ".local/share/synapser/skills" }],
-      files: skillFiles(injected.skills, "home", ".local/share/synapser/skills"),
+      files: [
+        ...skillFiles(injected.skills, "home", ".local/share/synapser/skills"),
+        ...(task.injection?.homeFiles ?? []).map((f) => ({ root: "home" as const, path: f.path, content: f.content })),
+      ],
     };
   }
 

@@ -217,7 +217,7 @@ describe("configurable agents", () => {
           providers: {
             priced: { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["MODEL_KEY"], models: [{ id: "m" }] },
             "bad-price": { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["MODEL_KEY"], models: [{ id: "m", usdPer1MIn: -1, usdPer1MOut: 1 }] },
-            broken: { protocol: "anthropic", baseUrl: "http://remote.example/v1/", apiKeyEnv: ["not-valid"], models: [] },
+            broken: { protocol: "grpc", baseUrl: "http://remote.example/v1/", apiKeyEnv: ["not-valid"], models: [] },
           },
           pools: [{ id: "p", members: ["ghost"], maxConcurrent: 1 }],
         }),

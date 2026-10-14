@@ -3,7 +3,8 @@ import type { ModelPrice } from "./pricing.ts";
 import { ModelError, type Role } from "./types.ts";
 
 export interface ProviderConfig {
-  protocol: "openai-compatible";
+  /** openai-compatible serves roles and native agents; anthropic is reserved for CLI injection (plan 17 P17.5). */
+  protocol: "openai-compatible" | "anthropic";
   baseUrl: string;
   /** Environment variable names tried in order; the key itself is never in a config file. */
   apiKeyEnv: string[];
@@ -107,6 +108,7 @@ export function validateRoleConfig(role: string, value: unknown, providers: Read
   const provider = typeof r.provider === "string" && Object.hasOwn(providers, r.provider) ? providers[r.provider] : undefined;
   if (typeof r.provider !== "string" || !r.provider) errors.push(`${at}: provider is required`);
   else if (!provider) errors.push(`${at}: unknown provider ${r.provider}`);
+  if (provider && provider.protocol !== "openai-compatible") errors.push(`${at}: provider ${r.provider} speaks ${provider.protocol}; roles need an openai-compatible provider`);
   if (typeof r.model !== "string" || !r.model) errors.push(`${at}: model is required`);
   else if (provider && !provider.models.some((model) => model.id === r.model)) errors.push(`${at}: model ${r.model} is not declared by provider ${r.provider}`);
   if (r.temperature !== undefined && (typeof r.temperature !== "number" || !Number.isFinite(r.temperature) || r.temperature < 0 || r.temperature > 2)) {
@@ -138,7 +140,7 @@ export function validateProviderConfig(name: string, provider: unknown): string[
   const p = provider as Partial<ProviderConfig>;
   const errors: string[] = [];
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) errors.push(`${at}: id must be a lowercase slug`);
-  if (p.protocol !== "openai-compatible") errors.push(`${at}: unsupported protocol ${String(p.protocol)}`);
+  if (p.protocol !== "openai-compatible" && p.protocol !== "anthropic") errors.push(`${at}: unsupported protocol ${String(p.protocol)}`);
   if (typeof p.baseUrl !== "string" || (!/^https:\/\//.test(p.baseUrl) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(p.baseUrl))) {
     errors.push(`${at}: baseUrl must be https (or loopback for tests)`);
   }

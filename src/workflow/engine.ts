@@ -122,6 +122,7 @@ export class ProductionEngine implements WorkflowEngine {
         if (!m) {
           const provider = providers[p.provider];
           if (!provider) throw new Error(`native agent ${p.id} references unknown provider ${p.provider}`);
+          if (provider.protocol !== "openai-compatible") throw new Error(`native agent ${p.id} needs an openai-compatible provider; ${p.provider} speaks ${provider.protocol}`);
           if (!p.model || !provider.models.some((item) => item.id === p.model)) {
             throw new Error(`native agent ${p.id} references undeclared model ${p.model ?? "(missing)"} on provider ${p.provider}`);
           }

@@ -31,13 +31,15 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       argv.push(...args);
       template.push(...args);
     };
-    if (profile.model) add("--model", profile.model);
+    // An injected provider carries its own model flag; the profile's model is then not used.
+    if (task.injection) add(...task.injection.argv);
+    else if (profile.model) add("--model", profile.model);
     if (profile.permissions?.allowedTools?.length) add("--allowedTools", profile.permissions.allowedTools.join(","));
     if (profile.permissions?.disallowedTools?.length) add("--disallowedTools", profile.permissions.disallowedTools.join(","));
     if (profile.permissions?.mode) add("--permission-mode", profile.permissions.mode);
     if (profile.maxBudgetUsd !== undefined) add("--max-budget-usd", String(profile.maxBudgetUsd));
     return {
-      argv, argvTemplate: template, env: buildAgentEnv(profile, task.envSource, task.home),
+      argv, argvTemplate: template, env: { ...buildAgentEnv(profile, task.envSource, task.home), ...(task.injection?.env ?? {}) },
       resetDirs: [{ root: "worktree", path: ".claude/skills" }, { root: "home", path: ".claude/skills" }],
       files: skillFiles(injected.skills, "worktree", ".claude/skills"),
     };

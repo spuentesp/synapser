@@ -2,15 +2,18 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { NO_INJECTED_SKILLS, type AgentInvocation } from "../../src/agents/adapter.ts";
 import { checkInjectedProvider, planInjection, type InjectedProvider } from "../../src/agents/inject.ts";
+import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { BUILTIN_PROFILES, type AgentProfile } from "../../src/agents/profile.ts";
+import { validateProviderConfig, validateRoleConfig } from "../../src/model/config.ts";
 
 // Plan 17 P17.5 and P17.3. The key value is a fake; it must reach the child's environment and nowhere else (K1).
 const SECRET = "sk-test-SECRET-VALUE-0001";
-const provider: InjectedProvider = { id: "p1", baseUrl: "https://models.example/v1", apiKeyEnv: "P1_KEY", model: "m-large" };
-const source = { PATH: "/bin", P1_KEY: SECRET };
+const provider: InjectedProvider = { id: "p1", baseUrl: "https://models.example/v1", apiKeyEnv: "P1_KEY", model: "m-large", protocol: "openai-compatible" };
+const anthropic: InjectedProvider = { id: "a1", baseUrl: "https://anthropic.example", apiKeyEnv: "A1_KEY", model: "claude-x", protocol: "anthropic" };
+const source = { PATH: "/bin", P1_KEY: SECRET, A1_KEY: SECRET };
 const profile = (id: string): AgentProfile => BUILTIN_PROFILES.find((p) => p.id === id)!;
 const task = (injection?: ReturnType<typeof planInjection>) => ({ prompt: "p", cwd: "/w", home: "/h", envSource: source, ...(injection ? { injection } : {}) });
 
@@ -55,6 +58,31 @@ describe("P17.5: mimo keeps the key in its environment and names it as {env:...}
   });
 });
 
+describe("P17.5: claude-code receives an Anthropic-protocol provider through its environment", () => {
+  test("the endpoint and the key go in the environment; the model flag replaces the profile's model", () => {
+    const invocation = CLAUDE_CODE_ADAPTER.build(profile("claude-sonnet-writer"), task(planInjection("claude-code", anthropic, source)), NO_INJECTED_SKILLS);
+    assert.equal(invocation.env["ANTHROPIC_BASE_URL"], "https://anthropic.example");
+    assert.equal(invocation.env["ANTHROPIC_API_KEY"], SECRET);
+    assert.equal(invocation.argv[invocation.argv.indexOf("--model") + 1], "claude-x");
+    assert.equal(invocation.argv.filter((a) => a === "--model").length, 1);
+    assertNoSecret(invocation);
+  });
+});
+
+describe("P17.5: kimi receives an Anthropic-protocol provider through its config.toml", () => {
+  test("the file declares the provider and the model by variable name; -m selects the alias", () => {
+    const invocation = KIMI_ADAPTER.build(profile("kimi-writer"), task(planInjection("kimi", anthropic, source)), NO_INJECTED_SKILLS);
+    const file = invocation.files.find((f) => f.path === ".kimi-code/config.toml");
+    assert.ok(file, "the kimi configuration is written under the run HOME");
+    assert.ok(file.content.includes('default_model = "a1/claude-x"'));
+    assert.ok(file.content.includes('type = "anthropic"'));
+    assert.ok(file.content.includes('api_key_env = "A1_KEY"'));
+    assert.equal(invocation.argv[invocation.argv.indexOf("-m") + 1], "a1/claude-x");
+    assert.equal(invocation.env["A1_KEY"], SECRET);
+    assertNoSecret(invocation);
+  });
+});
+
 describe("P17.3: kimi passes the profile's model as -m", () => {
   test("a profile with a model adds -m; a profile without one does not", () => {
     const withModel = KIMI_ADAPTER.build({ ...profile("kimi-writer"), model: "m1" }, task(), NO_INJECTED_SKILLS);
@@ -66,6 +94,13 @@ describe("P17.3: kimi passes the profile's model as -m", () => {
 });
 
 describe("P17.5: what is refused", () => {
+  test("each CLI accepts only the protocol it speaks", () => {
+    assert.throws(() => planInjection("claude-code", provider, source), /claude-code needs an anthropic provider/);
+    assert.throws(() => planInjection("kimi", provider, source), /kimi needs an anthropic provider/);
+    assert.throws(() => planInjection("codex", anthropic, source), /codex needs an openai-compatible provider/);
+    assert.throws(() => planInjection("mimo", anthropic, source), /mimo needs an openai-compatible provider/);
+  });
+
   test("a reserved Synapser variable cannot hold a provider key (K6)", () => {
     assert.throws(() => checkInjectedProvider({ ...provider, apiKeyEnv: "SYNAPSER_OPERATOR_TOKEN" }), /reserved by Synapser/);
   });
@@ -86,14 +121,8 @@ describe("P17.5: what is refused", () => {
     assert.throws(() => planInjection("codex", provider, { PATH: "/bin" }), /P1_KEY is not set/);
   });
 
-  test("claude-code and kimi are refused until the provider schema speaks the Anthropic protocol", () => {
-    for (const adapter of ["claude-code", "kimi"]) {
-      assert.throws(() => planInjection(adapter, provider, source), /Anthropic protocol/);
-    }
-  });
-
   test("no refusal message carries the key value", () => {
-    for (const run of [() => planInjection("kimi", provider, source), () => planInjection("codex", provider, { PATH: "/bin" })]) {
+    for (const run of [() => planInjection("kimi", provider, source), () => planInjection("codex", anthropic, source)]) {
       try {
         run();
         assert.fail("expected a refusal");
@@ -101,5 +130,27 @@ describe("P17.5: what is refused", () => {
         assert.equal(String(error).includes(SECRET), false);
       }
     }
+  });
+});
+
+describe("plan 17: the protocol is accepted in the schema and kept off the OpenAI-compatible path", () => {
+  const base = { baseUrl: "https://anthropic.example", apiKeyEnv: ["A1_KEY"], models: [{ id: "claude-x" }] };
+
+  test("the provider validator accepts the anthropic protocol and still refuses unknown ones", () => {
+    assert.deepEqual(validateProviderConfig("a1", { protocol: "anthropic", ...base }), []);
+    assert.match(validateProviderConfig("a1", { protocol: "grpc", ...base }).join(" "), /unsupported protocol/);
+  });
+
+  test("a role cannot run on an anthropic-protocol provider", () => {
+    const providers = { a1: { protocol: "anthropic" as const, ...base } };
+    assert.match(validateRoleConfig("supervisor", { provider: "a1", model: "claude-x" }, providers).join(" "), /roles need an openai-compatible provider/);
+  });
+});
+
+describe("plan 17: library providers stay openai-compatible", () => {
+  test("a library document cannot declare the anthropic protocol", async () => {
+    const { validateLibraryDocument } = await import("../../src/library/validate.ts");
+    const problems = validateLibraryDocument("providers", "a1", { protocol: "anthropic", baseUrl: "https://anthropic.example", apiKeyEnv: ["A1_KEY"], models: [{ id: "claude-x" }] });
+    assert.match(problems.join(" "), /provider a1: unsupported protocol anthropic/);
   });
 });
