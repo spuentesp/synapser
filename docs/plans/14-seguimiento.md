@@ -113,7 +113,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
   en el archivo); el manejador congelado queda como única vía cuando lo haga.
 - [x] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
-  entera con todos los problemas. commit: PENDING · prueba: `test/api/library.test.ts` (lecturas abiertas;
+  entera con todos los problemas. commit: ab89118 · prueba: `test/api/library.test.ts` (lecturas abiertas;
   escrituras sin token, con origen ajeno o malformado rechazadas; escritura repetida sin cambio; documento inválido
   con todos sus problemas y sin efecto; borrado con token; skills y agentes por sus reglas; plantillas solo objeto,
   sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
