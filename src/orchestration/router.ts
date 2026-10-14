@@ -42,9 +42,11 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
 
   const want = new Set(req.tags ?? []);
   const fit = (c: ProfileCard) => c.strengths.filter((s) => want.has(s)).length;
-  // lexicographic: capability fit, then how well the cost is known, then cost, then track record,
-  // then the model's suggestion, then id (total order ⇒ deterministic)
-  const key = (c: ProfileCard): (number | string)[] => [-fit(c), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
+  // a profile built for repair rounds does not win ordinary work just by sorting first
+  const misfit = (c: ProfileCard): number => (c.strengths.includes("repair") && !want.has("repair") ? 1 : 0);
+  // lexicographic: capability fit, then not-a-misfit, then how well the cost is known, then cost, then
+  // track record, then the model's suggestion, then id (total order ⇒ deterministic)
+  const key = (c: ProfileCard): (number | string)[] => [-fit(c), misfit(c), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
   const cmp = (a: ProfileCard, b: ProfileCard): number => {
     const ka = key(a);
     const kb = key(b);

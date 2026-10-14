@@ -1,47 +1,60 @@
-# synapser
+# Synapser
 
-Supervised multi-agent execution on top of [Zoanthrope](https://github.com/spuentesp/zoanthrope).
-Design: `design/Synapser_Diseno.docx` (v0.2).
+Supervised multi-agent execution on top of [Zoanthrope](https://github.com/spuentesp/zoanthrope):
+a coordinator that lets several agents — Nemotron loops and third-party CLIs — work on one repository
+**without losing each other's work**, and an audit layer that can answer *what did each agent do, when,
+why, and at what cost* with a hash-chained, deterministic ledger.
 
-## Status (day 17: digests + journal done; plans in `docs/plans/`)
+Design: `design/Synapser_Diseno.docx` (v0.3) and `docs/plans/` (contracts, invariants, proof obligations).
 
-| Piece | State |
+## What it does
+
+| Capability | Where |
 |---|---|
-| G0 pinned binary (0.1.3 @ 37ecffa, SHA-256) | `npm run gate:g0` |
-| G1 adapter vs. real binary | `test/zoo/g1-adapter.test.ts` |
-| S13 timeout → quarantine → reconcile | `test/zoo/s13-timeout.test.ts` |
-| S15 path containment (before any claim) | `test/workspace/paths.test.ts` |
-| Mission fixture + independent oracle | `fixtures/billing`, `test/fixture-oracle.test.ts` |
-| Digests (file, request, state, edits) | `src/digest/`, `test/digest/` |
-| Journal SQLite, transitions, artifacts, workspace lock (S17, S17b) | `src/journal/`, `test/journal/` |
-| Action protocol + executor, crash recovery, startup sequence | `src/executor/`, `src/recovery/`, `src/startup.ts` |
-| Model port (Token Factory / Nemotron), budget, call journal | `src/model/`, `test/live` |
-| Agent loop (tools ↔ executor, bounded, injection-safe) | `src/agent/`, `test/agent`, `test/live` |
-| Supervisor/planner, scheduler, local validation runner (no network) | `src/mission/`, `src/validation/` |
-| AgentRunner port + adapters (native Nemotron loop, CLI one-shot), patch broker, usage extractors, `agent_runs` ledger | `src/agents/`, `test/agents` |
-| Hash-chained ledger, deterministic audit queries + CLI, optional LangSmith exporter (coding-agent-v1, content off by default) | `src/audit/`, `test/audit` |
-| Tavily research port, Sandboxes runner, Zoanthrope hooks/MCP wiring, workflow engine, UI, A/B evaluation | not started |
+| Sole-writer **executor**: claims via Zoanthrope, content digests, atomic apply, crash recovery (roll-forward only) | `src/executor/`, `src/journal/`, `src/recovery/` |
+| **Orchestration**: agent catalog with known / estimated / unknown cost, deterministic router (the model only suggests), approval gates bound to the plan digest, agent-requested subtasks as additive plan revisions | `src/orchestration/` |
+| **Agents behind one port**: native Nemotron loop on Nebius Token Factory, one-shot CLIs (claude, codex, kimi) in isolated copies landed by a patch broker | `src/agents/`, `src/agent/` |
+| **Research**: Tavily port with an outbound query guard and "no citation without retrieval" | `src/research/` |
+| **Audit**: hash-chained ledger, deterministic queries (who changed / why / cost / waste / coordination), offline-verifiable export, optional LangSmith exporter | `src/audit/` |
+| **Observation**: read-only Zoanthrope collector with declared gaps, declared intentions, live swarm state reproducible by `seq` | `src/zoo/`, `src/audit/state.ts` |
+| **UI + API**: React + Tailwind + shadcn/ui over a dependency-free HTTP API (SSE) | `web/`, `src/api/` |
+| **Executable invariants** (I1–I5, W1–W5, Z3–Z4, U1–U5) and a no-coordination control behind the same port | `src/audit/invariants.ts`, `src/orchestration/invariants.ts`, `src/bench/` |
 
 ## Run
 
+Node ≥ 24 (TypeScript runs through native type stripping; the core has no runtime dependencies).
+
 ```console
 $ npm install
-$ export ZOANTHROPE_BIN=/abs/path/to/zoanthrope   # real binary, not the npm wrapper
+$ export ZOANTHROPE_BIN=/abs/path/to/zoanthrope      # the real binary, not the npm wrapper
 $ npm run typecheck && npm test
+
+# the UI (React + Tailwind + shadcn/ui) is a build artifact served by the API
+$ npm run web:install && npm run web:build
+
+# offline demo: a full mission with scripted agents, a human gate and the UI
+$ node scripts/demo.ts --port 4173
+
+# live demo: Nemotron plans and works, a real CLI reviews, Tavily is available
+$ cp .env.example .env   # NEBIUS_API_KEY (alias NEBIUS_TOKEN), TAVILY_API_KEY
+$ node --env-file=.env scripts/demo-live.ts --mission billing
+$ node --env-file=.env scripts/demo-live.ts --mission currency   # needs sources retrieved in this run
 ```
 
-Node ≥ 24 (TypeScript runs via native type stripping; no build step, no runtime deps).
+Audit a finished run from the command line:
 
-## Live results (13 Oct 2026, small n)
-
-Discount mission, 3 concurrent agents sharing one file, accepted only by unit tests + an independent oracle:
-Super 120B as worker (no fallback) completed 4/5 runs earlier and 3/3 at commit `5a3fbdd` (~$0.03, ~28 s); a supervisor-planned run completed in 49.7 s (~$0.028). The shipped default falls back to Lightning on provider failure; a mid-mission fallback is recorded in the journal and makes a run non-comparable.
-Details and failure modes: `docs/plans/06-integracion-nebius-nvidia.md` §15. Reproduce: `node --env-file=.env scripts/mission-bench.ts --runs 5`.
+```console
+$ node src/audit/cli.ts --state <stateDir> --run <runId> verify | timeline | who-changed <path> | why <actionId> | cost | waste | coordination
+$ node scripts/verify-export.ts <run>.ledger.json     # verifies an export with no database and no server
+```
 
 ## Layout
 
-- `src/zoo/` — MCP stdio transport (one call in flight, kill-and-confirm on timeout) and typed adapter.
-- `src/digest/` — one module for every content hash, canonical JSON, edit resolution.
-- `src/journal/` — SQLite journal (CAS transitions, append-only events, DB-enforced invariants), blob store, workspace lock.
-- `src/workspace/paths.ts` — `WorkspacePath` brand; the adapter only accepts values from `resolveInWorkspace`.
-- `fixtures/billing/` — baseline repo, acceptance oracle, reference solution (proves the oracle is satisfiable).
+- `src/zoo/` — MCP stdio transport and typed adapter; read-only collector; intent announcement.
+- `src/digest/`, `src/journal/`, `src/executor/` — content identity, SQLite journal, the sole writer.
+- `src/model/`, `src/agent/`, `src/agents/` — model port with role routing, the agent loop, runners and broker.
+- `src/mission/`, `src/orchestration/`, `src/validation/` — planner, scheduler, router, gates, delegation, isolated validation.
+- `src/research/` — research port, guard, session, citations.
+- `src/audit/`, `src/api/` — ledger, queries, invariants, state projection, HTTP API.
+- `web/` — the observation UI. `fixtures/` — missions with independent oracles.
+- `.claude/skills/` — project skills for the UI stack (shadcn/ui, React, Tailwind), pinned by `skills-lock.json`.

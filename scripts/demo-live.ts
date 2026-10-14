@@ -2,7 +2,9 @@
 // implement it on the real executor/journal/Zoanthrope, a real CLI advisor reviews the result, Tavily is
 // available to the workers, a human approves the gated step in the UI, and the ledger is auditable.
 //   node --env-file=.env scripts/demo-live.ts [--port 4173] [--advisor codex-advisor|claude-opus-advisor|none]
-//        [--approve-after SECONDS] [--history <stateDir>:<runId>]
+//        [--approve-after SECONDS] [--history <stateDir>:<runId>] [--mission billing|currency]
+//   billing  : Nemotron plans a multi-agent change (contention, review, human gate)
+//   currency : a mission that cannot be accepted without sources Tavily returned in THIS run
 import { cpSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,6 +16,7 @@ import { Executor } from "../src/executor/executor.ts";
 import { Journal } from "../src/journal/journal.ts";
 import { acquireWorkspaceLock } from "../src/journal/lock.ts";
 import { BILLING_CONTRACT, BILLING_OBJECTIVE, billingAcceptance } from "../src/mission/billing-fixture.ts";
+import { citationCheck, CURRENCY_CONTRACT, CURRENCY_OBJECTIVE, currencyAcceptance, currencyPlan } from "../src/mission/currency-fixture.ts";
 import type { Plan } from "../src/mission/plan.ts";
 import { runMission } from "../src/mission/runner.ts";
 import { planMission } from "../src/mission/supervisor.ts";
@@ -34,7 +37,10 @@ const PORT = Number(arg("port", "4173"));
 const APPROVE_AFTER = Number(arg("approve-after", "0"));
 const ADVISOR_ID = arg("advisor", "codex-advisor");
 const HISTORY = arg("history", "");
-const FX = resolve("fixtures/billing");
+const MISSION = arg("mission", "billing") as "billing" | "currency";
+const FX = resolve(`fixtures/${MISSION}`);
+const OBJECTIVE = MISSION === "currency" ? CURRENCY_OBJECTIVE : BILLING_OBJECTIVE;
+const CONTRACT = MISSION === "currency" ? CURRENCY_CONTRACT : BILLING_CONTRACT;
 
 const ws = realpathSync(mkdtempSync(join(tmpdir(), "live-ws-")));
 cpSync(join(FX, "baseline"), ws, { recursive: true });
@@ -63,19 +69,23 @@ const catalog = buildCatalog(PROFILES, samples);
 
 // ---- the plan: Nemotron decomposes the mission seeing the catalog; the router assigns profiles
 console.log(`planning with ${catalog.filter((c) => c.enabled).map((c) => `${c.id}[${c.cost.basis}]`).join(", ")} …`);
-const planned = await planMission(model, { runId, objective: BILLING_OBJECTIVE, contract: BILLING_CONTRACT, workspaceRoot: ws, maxTasks: 5, catalog }, { budget });
+// currency has a fixed two-step plan (research → implement); billing is planned by Nemotron
+const planned =
+  MISSION === "currency"
+    ? { plan: currencyPlan(), attempts: 1 }
+    : await planMission(model, { runId, objective: OBJECTIVE, contract: CONTRACT, workspaceRoot: ws, maxTasks: 5, catalog }, { budget });
 const plan: Plan = { tasks: [...planned.plan.tasks] };
 const ids = new Set(plan.tasks.map((t) => t.id));
-if (advisor && !ids.has("review")) {
+if (advisor && !ids.has("review") && MISSION === "billing") {
   plan.tasks.push({
     id: "review", objective: "Review the combined change for mismatches with the contract and list concrete findings", scope: ["app/", "tests/"],
     criteria: ["a list of findings, or an explicit statement that there are none"], deps: plan.tasks.map((t) => t.id), kind: "advise", profile: advisor.id,
   });
 }
 // a human decision point: whichever step touches the README waits for an approval in the UI
-const readme = plan.tasks.find((t) => t.scope.includes("README.md"));
+const readme = MISSION === "billing" ? plan.tasks.find((t) => t.scope.includes("README.md")) : undefined;
 if (readme) readme.gates = ["approval"];
-if (!readme && !ids.has("docs")) {
+if (MISSION === "billing" && !readme && !ids.has("docs")) {
   plan.tasks.push({
     id: "docs", objective: "Document the discount parameter of checkout() in the README", scope: ["README.md"], criteria: ["README documents discount_bps"],
     deps: advisor ? ["review"] : plan.tasks.map((t) => t.id), gates: ["approval"], tags: ["code"],
@@ -103,14 +113,15 @@ const result = await runMission(
   {
     executor, journal, model, budget, research, collector: new ZooCollector({ source: zoo, journal, runId }), collectEveryMs: 400,
     intent: zooIntentSink(zoo), delegation: { maxDepth: 2 },
-    validation: new LocalRunner({ journal, runId, workspaceRoot: ws, commands: billingAcceptance(FX), generation: lock.generation }),
+    validation: new LocalRunner({ journal, runId, workspaceRoot: ws, commands: MISSION === "currency" ? currencyAcceptance(FX) : billingAcceptance(FX), generation: lock.generation }),
+    ...(MISSION === "currency" ? { extraChecks: [citationCheck(journal, ws)] } : {}),
     orchestration: {
       catalog, profiles: PROFILES, executor, workspaceRoot: ws, generation: lock.generation,
       registry: new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research), new CliOneShotRunner()]),
       approval: { pollMs: 300 },
     },
   },
-  { runId, objective: BILLING_OBJECTIVE, plan, acceptance: ["unit", "oracle"], limits: { concurrency: 3, maxRepairRounds: 1, missionMs: 10 * 60_000, loop: { maxSteps: 25, maxTokensPerCall: 6000 } } },
+  { runId, objective: OBJECTIVE, plan, acceptance: MISSION === "currency" ? ["oracle"] : ["unit", "oracle"], limits: { concurrency: 3, maxRepairRounds: 1, missionMs: 10 * 60_000, loop: { maxSteps: 25, maxTokensPerCall: 6000 } } },
 );
 const usd = journal.listModelCalls().reduce((a, c) => a + (c.costUsd ?? 0), 0);
 console.log(`\nmission ${result.status}${result.reason ? ` — ${result.reason}` : ""} in ${((Date.now() - t0) / 1000).toFixed(0)}s · model $${usd.toFixed(4)} · ${journal.listResearchCalls().length} searches`);

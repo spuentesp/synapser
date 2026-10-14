@@ -90,6 +90,14 @@ describe("router", () => {
     assert.ok(d.ok && d.profileId === "fit");
   });
 
+  test("a repair-specialised profile is not chosen for ordinary work, and is for repair work", () => {
+    const c = [card("nemotron-repair", { strengths: ["repair"] }), card("nemotron-worker", { strengths: ["code"] })];
+    const ordinary = route({ kind: "write" }, c);
+    assert.ok(ordinary.ok && ordinary.profileId === "nemotron-worker", "alphabetical order must not decide this");
+    const repair = route({ kind: "write", tags: ["repair"] }, c);
+    assert.ok(repair.ok && repair.profileId === "nemotron-repair");
+  });
+
   test("W6: the router is a function — any permutation of the catalog gives the same answer", () => {
     let seed = 12345;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
