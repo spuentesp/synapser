@@ -118,7 +118,7 @@ Se implementan **antes** de que las corridas lean la biblioteca. Sólo restringe
 Se rechazan `argv`, `env`, `homeOverlay`, `permissions`, `maxBudgetUsd`, `parser`, `pool`, `steerable` y
 `disabledReason` en los dos casos, y `adapter`, `role` y `nativeRole` en el caso (a), con el motivo en la respuesta.
 Las reglas de forma son tablas en `src/library/validate.ts`. Las semánticas las decide `validateProfile` sobre el
-perfil fusionado, la misma regla que el archivo. Sin dependencias: el núcleo no añade ninguna (plan 14).
+perfil fusionado, la misma regla que el archivo. Sin dependencias nuevas.
 *Verificación*: un test por campo rechazado y uno por cada campo permitido (`test/library/agent-rules.test.ts`).
 *Falsación*: copiar `argv` de la biblioteca debe fallar el test de (a); quitar la regla de `enabled` también.
 

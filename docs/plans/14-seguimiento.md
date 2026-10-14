@@ -9,8 +9,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 
 ## Cómo trabajar aquí (leer antes de tocar nada)
 
-- Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
-  plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
+- Repo `/data/agents/orca/synapser`, rama `main`. Node 24, baja superficie de dependencias: cada dependencia de ejecución la justifica el plan que la añade (decisión del usuario, 14 oct). La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
   Estado al traspaso: 466 pasan, 0 fallan, 9 omitidas (475 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
@@ -181,12 +180,16 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
 - [x] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), cada uno con su verificador y su falsación. commit: c736293 · prueba: IC1 `test/library/agent-rules.test.ts` (49 pruebas, una por campo rechazado y una por campo permitido); IC2 `test/config/provider-key-allowlist.test.ts`, `test/api/library.test.ts` y `test/library/read.test.ts`; IC3 `test/model/redirects.test.ts`; IC4 `test/api/host.test.ts`. Falsación hecha en los cuatro: IC1 con `argv` copiado y sin la regla de `enabled`, IC2 sin la lista de claves, IC3 con `redirect` por defecto, IC4 sin la comprobación de `Host`. Suite completa: 533 pruebas, 524 pasan, 9 omitidas, 0 fallan. Era prerrequisito de Q5.
 - [x] P15.3 Decisiones D1 a D7 del usuario, tomadas el 14 oct (plan 15, sección 6). Lo que falta son sus implementaciones: P15.4 a P15.7. commit: 48bff9a · prueba: decisiones registradas en el plan 15 y en este tracker.
-- [ ] P15.4 D1 implementación: el token sale de la cookie HttpOnly y no del JSON de `/api/session`. En modo de procesos adversarios (P15.7), además, código de un solo uso impreso por `serve`. Verificación: `/api/session` no devuelve el token; falsación: volver al JSON.
-- [ ] P15.5 D3 implementación: direcciones privadas y de metadatos de nube rechazadas tras resolver el nombre; el loopback sigue para proveedores locales. Verificación: un nombre que resuelve a una privada se rechaza; falsación: quitar la comprobación.
+- [~] P15.4 D1 implementación: el token sale de la cookie HttpOnly y no del JSON de `/api/session`. En modo de procesos adversarios (P15.7), además, código de un solo uso impreso por `serve`. Verificación: `/api/session` no devuelve el token; falsación: volver al JSON.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [~] P15.5 D3 implementación: direcciones privadas y de metadatos de nube rechazadas tras resolver el nombre; el loopback sigue para proveedores locales. Verificación: un nombre que resuelve a una privada se rechaza; falsación: quitar la comprobación.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [x] P15.6 D4 implementación: las tarifas que suman al costo vienen solo del archivo; una tarifa de biblioteca se muestra y no suma. Verificación: el costo no cambia con una tarifa de biblioteca; falsación: sumarla.
   commit: 127cd40 · prueba: `test/library/run-e2e.test.ts`: el proveedor de biblioteca declara tarifas, y sus llamadas quedan sin costo (`costUsd` nulo). Falsación hecha: con la ruta anterior, la prueba falla («una tarifa de biblioteca llegó al costo»). La tabla de prueba de conexión sigue mostrando el costo estimado con la tarifa del documento: se muestra, no suma. Suite completa: 559 pruebas, 550 pasan, 9 omitidas, 0 fallan.
-- [ ] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
+- [~] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: 043b0ad · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
+- [~] P15.9 Prueba de concepto de D5 con `pasta`: un agente dentro de un espacio de red sin salida, salvo a un proxy del host que solo reenvía al host del modelo. Verificación: el host permitido responde, y cualquier otro destino falla (también el DNS y la IP directa). quién: Claude Haiku 5.5 · desde: 2026-10-14
 
 ### Q5 — La biblioteca en las corridas
 
@@ -217,6 +220,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 Ronda 1 (14 oct): 1) hacer funcionar la biblioteca: las corridas la leen. 2) «probar agente» se diseña al final, tras investigar. 3) excepción decimal aprobada. 4) riesgo de claves: plan 15. 5) el resto de la lista sigue igual.
 
 Ronda 2 (14 oct): D1 cookie HttpOnly (en modo adversario, además código de un solo uso). D2 lista de claves en el archivo, vacía. D3 destinos públicos y loopback para locales. D4 tarifas solo del archivo. D5 investigar primero el sandbox; LangSmith queda como vista opcional. D6 el archivo asigna las skills, 64 KiB y 5 por agente. D7 configurable, por defecto operador confiable. Precedencia sólo-añadir confirmada. Probar agente: tope de tiempo obligatorio, proveedor de prueba en el archivo, copia borrada con registro. Publicación: traducción al inglés antes de publicar; skills solo dentro del proyecto (sin -g); los resultados medidos de `docs/plans/05` y `06 §15` se quitan de los archivos, sin reescribir el historial.
+
+Ronda 3 (14 oct): dependencias con baja superficie, no cero (la regla de cero dependencias era mía, leída de la documentación y sin preguntar). P15.5 usa `undici` (versión exacta 8.11.2). Orden: P15.4 y P15.7 primero, después P15.5. P15.8 (D5) con `pasta`. Lo demás, aprobado.
 
 Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.7 y Q5.4. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
 

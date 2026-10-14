@@ -1,7 +1,7 @@
 // Library entries: what a document must hold to be written, and to be used by a run (plan 14 Q2.6 and Q5.1; plan 15).
 // It reports EVERY problem, so an invalid edit is refused whole, with the full list. The rules are data: the fields a
 // library agent may set, and the shape of each, are tables below. Semantic rules are not copied here: an agent is checked
-// as a profile, by validateProfile, the same rule the operator's file meets. Nothing here is a dependency (plan 14).
+// as a profile, by validateProfile, the same rule the operator's file meets. This file adds no dependency.
 
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { type ProviderConfig, validateProviderConfig } from "../model/config.ts";

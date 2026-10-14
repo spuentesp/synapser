@@ -22,7 +22,7 @@ Design: `design/Synapser_Diseno.docx` (v0.3) and `docs/plans/` (contracts, invar
 
 ## Run
 
-Node ≥ 24 (TypeScript runs through native type stripping; the core has no runtime dependencies).
+Node ≥ 24 (TypeScript runs through native type stripping). The runtime dependencies are few, and the plan that adds each one justifies it; today there is one, `undici`, for the outbound calls of library providers (plan 15, P15.5).
 
 ```console
 $ npm install
