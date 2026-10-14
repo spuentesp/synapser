@@ -217,13 +217,13 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### P17 — Inyección de configuración a los CLIs (plan)
 
-- [~] P17.1 Plan 17: `docs/plans/17-inyeccion-de-configuracion-a-los-clis.md`, con su entrada en el índice. Propuesto, sin código. quién: Claude Haiku 5.5; desde: 2026-10-14.
+- [x] P17.1 Plan 17: `docs/plans/17-inyeccion-de-configuracion-a-los-clis.md`, con su entrada en el índice. Propuesto, sin código. commit: 907e046 · prueba: cada referencia `archivo:línea` del plan se comprobó contra el código de ese commit.
 - [ ] P17.2 Inventario verificado por CLI (claude-code, codex, kimi, mimo): mecanismo de endpoint, de clave y de modelo, con el comando que lo demuestra. *Invariantes:* K1 a K5 del plan. *Verificación:* tabla completa en el plan, sin llamadas a modelos ni sesiones creadas sin aprobación. *Decisión previa:* aprobación del plan.
-- [ ] P17.3 Modelo en el adaptador de kimi: `profile.model` pasa a `-m`. *Verificación:* argv con y sin modelo. *Falsación:* quitar `-m` y la prueba falla.
+- [ ] P17.3 Modelo en el adaptador de kimi: `profile.model` pasa a `-m` (alias de `config.toml`, por invocación; con `-p`, por confirmar en P17.2). *Verificación:* argv con y sin modelo. *Falsación:* quitar `-m` y la prueba falla.
 - [ ] P17.4 Proveedores del operador con endpoint y variable de clave, sin valores en la configuración, la API, el ledger ni los logs. *Verificación:* una clave de prueba no aparece en ninguna de esas superficies. *Falsación:* imprimir la clave en un error y la prueba falla.
 - [ ] P17.5 Inyección por CLI: configuración temporal de la corrida, o sesión ACP con `mcpServers` y `setSessionModel`. *Invariantes:* K1, K2 y K4. *Verificación:* un servidor local falso recibe el modelo y la clave correctos, y la clave no queda en disco fuera de la corrida. *Falsación:* escribir la clave en la configuración persistente. *Decisiones previas:* decisiones 3 y 4 del plan 17.
-- [ ] P17.6 Proveedor y modelo por agente y por rol, con `roles.supervisor` en Nemotron como caso. *Verificación:* extremo a extremo con un servidor local. *Falsación:* ignorar el rol y la prueba falla.
-- [ ] P17.7 Superficie de escritura: UI y CLI del operador con token y mismo origen; MCP solo de lectura. *Verificación:* un iniciador MCP no cambia proveedores ni roles. *Falsación:* exponer una herramienta de escritura y la prueba falla.
+- [ ] P17.6 Proveedor y modelo por agente y por rol. *Verificación:* `roles.supervisor` en un modelo distinto del por defecto y de los demás roles; un servidor local recibe ese modelo. *Falsación:* ignorar el rol o enviar el modelo por defecto, y la prueba falla.
+- [ ] P17.7 Superficie de escritura: UI y CLI del operador con token y mismo origen; ninguna herramienta MCP escribe configuración (K3). *Verificación:* con cada rol MCP, ninguna herramienta cambia proveedores, roles ni claves. *Falsación:* añadir una herramienta de escritura de configuración y la prueba falla.
 
 ### Cierre
 
@@ -297,3 +297,4 @@ Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (di
 | 2026-10-14 | Claude Haiku 5.5 | Corrección del registro: kimi sí es cliente MCP. Su CLI no tiene subcomando ni flag MCP, pero el runtime carga `mcp.json` y `.mcp.json` y acepta `mcpServers` por ACP. Comprobado por ACP con el permiso de una sola vez: `workflow_list` respondió `{"workflows":[]}`. Quedan efectos en `~/.kimi-code/sessions` y en `workspaces.json`. |
 | 2026-10-14 | Claude Haiku 5.5 | Mimo por ACP: la sesión con el servidor de Synapser se acepta, pero la llamada no ocurrió: el proveedor respondió 402 (saldo insuficiente). Queda una sesión en su base de datos; sus archivos de autenticación y de workspaces de confianza no cambiaron. Pendiente: saldo y repetir el chequeo. |
 | 2026-10-14 | Claude Haiku 5.5 | P17.1 reclamada: plan 17 (inyección de configuración a los CLIs), antes de escribirlo. P17.2 a P17.7 registradas como pendientes. |
+| 2026-10-14 | Claude Haiku 5.5 | P17.1 hecha: plan 17 escrito y registrado en el índice (commit 907e046). Decisiones 1, 4 y 5 pendientes de confirmación del operador. |
