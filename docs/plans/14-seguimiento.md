@@ -178,9 +178,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### P15 — Amenazas de la biblioteca y de las claves (plan)
 
-- [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: PENDING · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
+- [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: 638b43e · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
   nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
-- [ ] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), uno a uno, cada uno con su verificador y su falsación. Bloquea Q5.
+- [~] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), uno a uno, cada uno con su verificador y su falsación. Bloquea Q5.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.
 
 ### Q5 — La biblioteca en las corridas
