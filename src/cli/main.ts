@@ -13,6 +13,7 @@
 //   synapser advisor release <workflow> <task> release a held task
 //   synapser effect list <workflow>           effects requested, with state and what they would do
 //   synapser policy show                      the effect policy in force
+//   synapser serve [--port 4173]              the UI + API + chat over this config (127.0.0.1 only)
 //   synapser doctor [--json]                  what is installed and usable, and what to enable
 //   synapser config show
 // Global: --config FILE  --workspace DIR  --state DIR
@@ -72,6 +73,17 @@ async function main(): Promise<void> {
   const m = rt.manager;
   try {
     switch (cmd) {
+      case "serve": {
+        const { createApi } = await import("../api/server.ts");
+        const pi = argv.indexOf("--port");
+        const api = createApi({
+          stateDir: cfg.stateDir,
+          control: { manager: rt.manager, chat: rt.chat, catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
+        });
+        const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);
+        console.log(`Synapser → http://127.0.0.1:${port}/  (workspace: ${cfg.workspace})`);
+        return await new Promise<void>(() => {});
+    }
       case "mcp": {
         const srv = new McpServer({ manager: m, serverJournal: rt.serverJournal, catalog: rt.catalog });
         process.stderr.write(`synapser mcp: workspace=${cfg.workspace} state=${cfg.stateDir}\n`);

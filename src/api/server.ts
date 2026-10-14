@@ -17,7 +17,9 @@ import { join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify, waste, whoChanged, why } from "../audit/queries.ts";
 import { swarmState } from "../audit/state.ts";
+import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
+import type { Actor, WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -29,7 +31,22 @@ const MIME: Record<string, string> = {
 };
 const MAX_EVIDENCE = 40;
 
+/**
+ * What the server may DO besides reading the ledger. Injected: the server itself holds no path to the
+ * executor or the workspace (U1). Every call is made as the fixed human `ui:operator` actor.
+ */
+export interface ApiControl {
+  manager: WorkflowManager;
+  chat?: ChatService;
+  catalog?: () => unknown;
+  config?: () => unknown;
+}
+
+const OPERATOR: Actor = { id: "ui:operator", role: "operator" };
+
 export interface ApiOptions {
+  /** Workflows, chat, catalog and config. Without it the server is read-only plus approvals. */
+  control?: ApiControl;
   stateDir: string;
   /** Token required by POST. Generated when omitted. */
   token?: string;
@@ -120,6 +137,68 @@ export function createApi(opts: ApiOptions): ApiServer {
     });
   };
 
+  async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unknown | undefined> {
+    let body = "";
+    for await (const chunk of req) {
+      body += chunk;
+      if (body.length > 200_000) return void fail(res, 413, "TOO_LARGE");
+    }
+    try {
+      return body ? JSON.parse(body) : {};
+    } catch {
+      return void fail(res, 400, "BAD_JSON");
+    }
+  }
+
+  /** Workflows, chat, catalog, config. Writes need the session token and same origin; the actor is fixed. */
+  async function control(c: ApiControl, req: IncomingMessage, res: ServerResponse, path: string, method: string): Promise<void> {
+    const parts = path.split("/").filter(Boolean).slice(1); // after "api"
+    const [top, id, action] = parts as [string, string | undefined, string | undefined];
+    if (method !== "GET") {
+      const origin = req.headers["origin"];
+      if (origin && new URL(origin).host !== req.headers["host"]) return fail(res, 403, "CROSS_ORIGIN");
+      if (req.headers["x-synapser-token"] !== token) return fail(res, 401, "BAD_TOKEN");
+    }
+    const asResult = <T>(r: { ok: true } & T | { ok: false; code: string; errors?: string[] }) =>
+      r.ok ? json(res, 200, r) : json(res, 409, { error: (r as { code: string }).code, errors: (r as { errors?: string[] }).errors ?? [] });
+    if (id !== undefined && !RUN_ID.test(id)) return fail(res, 400, "BAD_ID");
+    const m = c.manager;
+    if (top === "catalog" && method === "GET") return json(res, 200, { agents: c.catalog?.() ?? [] });
+    if (top === "config" && method === "GET") return json(res, 200, c.config?.() ?? {});
+    if (top === "workflows") {
+      if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
+      if (!id && method === "POST") {
+        const b = await readBody(req, res);
+        return b === undefined ? undefined : asResult(m.create(b, OPERATOR));
+      }
+      if (id && !action && method === "GET") {
+        const v = m.status(id);
+        return v ? json(res, 200, v) : fail(res, 404, "UNKNOWN_WORKFLOW");
+      }
+      if (id && !action && method === "PUT") {
+        const b = await readBody(req, res);
+        return b === undefined ? undefined : asResult(m.edit(id, b, OPERATOR));
+      }
+      if (id && action === "start" && method === "POST") return asResult(m.start(id, OPERATOR));
+      if (id && action === "cancel" && method === "POST") return asResult(m.cancel(id, OPERATOR));
+    }
+    if (top === "chat" && c.chat) {
+      if (!id && method === "GET") return json(res, 200, { conversations: c.chat.conversations() });
+      if (id === "send" && method === "POST") {
+        const b = (await readBody(req, res)) as { conversationId?: string; text?: string } | undefined;
+        if (b === undefined) return;
+        if (!b.text || typeof b.text !== "string") return fail(res, 400, "TEXT_REQUIRED");
+        try {
+          return json(res, 200, await c.chat.send(b.conversationId ?? null, b.text, OPERATOR));
+        } catch (e) {
+          return fail(res, 502, "CHAT_FAILED", String((e as Error).message ?? e).slice(0, 200));
+        }
+      }
+      if (id && method === "GET") return json(res, 200, { messages: c.chat.history(id) });
+    }
+    return fail(res, method === "GET" || method === "POST" || method === "PUT" ? 404 : 405, method === "GET" || method === "POST" || method === "PUT" ? "NOT_FOUND" : "METHOD_NOT_ALLOWED");
+  }
+
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -146,6 +225,8 @@ export function createApi(opts: ApiOptions): ApiServer {
       });
       return void res.end(readFileSync(file));
     }
+
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");

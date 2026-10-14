@@ -1,6 +1,7 @@
 // Wiring shared by the CLI and the MCP process: config → manager (with the production engine).
 
 import { Advisor } from "../advisor/advisor.ts";
+import { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { type SynapserConfig } from "../config/load.ts";
 import { defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../model/index.ts";
@@ -15,6 +16,7 @@ export interface Runtime {
   manager: WorkflowManager;
   catalog: () => ProfileCard[];
   serverJournal: Journal;
+  chat: ChatService;
   close(): Promise<void>;
 }
 
@@ -50,9 +52,23 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     effectIdentity: cfg.identity,
   });
   const serverJournal = Journal.open(cfg.stateDir, "_server");
+  const chat = new ChatService({
+    model: new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(serverJournal) }),
+    manager,
+    journal: serverJournal,
+    catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),
+    commandIds: () => cfg.commands.map((c) => c.id),
+    advise: async (workflowId, question) => {
+      const adv = manager.advisorOf(workflowId);
+      if (!adv) return null;
+      const out = await adv.consult({ kind: "ask", question }, false);
+      return { assessment: out.assessment, proposals: out.records.map((r) => ({ id: r.id, type: r.type, task: r.task, state: r.state, why: (r.body as { why?: string }).why ?? "" })) };
+    },
+  });
   return {
     manager,
     serverJournal,
+    chat,
     catalog: () => buildCatalog(cfg.profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }),
     close: async () => {
       await manager.close();
