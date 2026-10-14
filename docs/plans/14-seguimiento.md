@@ -154,7 +154,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
   Costo, Coordinación, Aprobaciones, Integridad).
-- [ ] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
+- [~] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP).
 
 ### Cierre
