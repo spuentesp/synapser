@@ -119,7 +119,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
   guardia (`writeAllowed`) sustituye las tres copias. Precios decimales: `test/library/decimals.test.ts`, con la
   opción `decimals` de la forma canónica solo para la biblioteca (ver decisiones abiertas). Suite completa.
-- [ ] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
+- [~] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 
 ### Q3 — Diseñadores y plantillas (UI)
 
