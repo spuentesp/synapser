@@ -78,6 +78,18 @@ const summarize = (e: Ev): string => {
       return e.fromState === null
         ? `effect ${e.entityId} (${d.kind}) requested by ${d.requested_by}: ${e.toState}${d.rule ? ` [rule ${d.rule}]` : ""}${d.summary ? ` — ${String(d.summary).slice(0, 160)}` : ""}`
         : `effect ${e.entityId} ${e.fromState} → ${e.toState}${d.reason ? ` (${String(d.reason).slice(0, 120)})` : ""}${d.evidence ? ` evidence=${JSON.stringify(d.evidence).slice(0, 120)}` : ""}`;
+    case "intervention":
+      return e.fromState === null
+        ? `advisor ${d.body?.type ?? "?"} on ${d.body?.task ?? "?"}: ${e.toState}${d.reason ? ` (${String(d.reason).slice(0, 120)})` : ""} — ${String(d.body?.why ?? d.body?.text ?? "").slice(0, 140)}`
+        : `intervention ${e.entityId} ${e.fromState} → ${e.toState}${d.reason ? ` (${String(d.reason).slice(0, 120)})` : ""}`;
+    case "advisor_consult":
+      return `advisor consulted (${d.trigger}): ${e.toState}${d.assessment ? ` — ${String(d.assessment).slice(0, 140)}` : ""}${d.error ? ` — ${d.error}` : ""}`;
+    case "hold":
+      return `${e.entityId} ${e.toState === "HELD" ? "HELD" : "released"} (${d.reason ?? d.by})`;
+    case "rollback":
+      return `rollback of ${e.entityId}: ${e.toState} — ${(d.files ?? []).map((f: { path: string; result: string }) => `${f.path}:${f.result}`).join(", ")}`;
+    case "task_superseded":
+      return `${e.entityId} replaced by ${(d.by ?? []).join(", ")}`;
     case "policy":
       return `effect policy ${e.entityId.slice(7, 19)}… in force (${d.rules} rules, default ${d.default})`;
     case "mcp_call":

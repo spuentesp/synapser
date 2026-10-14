@@ -239,6 +239,43 @@ export class McpServer {
         run: () => this.#o.policy?.() ?? { error: "NO_POLICY" },
       },
       {
+        name: "advise", roles: ["initiator"], readOnly: false,
+        description: "Ask Synapser's advisor (Nemotron) about a workflow. It answers and may PROPOSE interventions (inject a note, hold, escalate, replan, rollback). Nothing is applied by asking.",
+        inputSchema: { type: "object", required: ["workflow_id", "question"], properties: { workflow_id: wfId, question: str("What you want to know or decide.") } },
+        run: async (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          const adv = m.advisorOf(id);
+          if (!adv) return { error: "ADVISOR_UNAVAILABLE" };
+          const out = await adv.consult({ kind: "ask", question: String(a["question"]).slice(0, 600) }, false);
+          return {
+            assessment: out.assessment,
+            proposals: out.records.map((r) => ({ intervention_id: r.id, type: r.type, task: r.task, state: r.state, why: (r.body as { why?: string }).why ?? "", reason: r.reason })),
+          };
+        },
+      },
+      {
+        name: "intervention_list", roles: ["initiator"], readOnly: true,
+        description: "The advisor's interventions on a workflow and their state.",
+        inputSchema: { type: "object", required: ["workflow_id"], properties: { workflow_id: wfId } },
+        run: (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          return { interventions: (m.advisorOf(id)?.list() ?? []).map((r) => ({ intervention_id: r.id, type: r.type, task: r.task, state: r.state, trigger: r.trigger, reason: r.reason })) };
+        },
+      },
+      {
+        name: "intervention_apply", roles: ["initiator"], readOnly: false,
+        description: "Apply a PROPOSED intervention. A rollback is destructive: it opens a human gate (code required) instead of running.",
+        inputSchema: { type: "object", required: ["workflow_id", "intervention_id"], properties: { workflow_id: wfId, intervention_id: str("iv-…") } },
+        run: async (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          const r = await m.advisorOf(id)?.applyProposed(String(a["intervention_id"]), `${s.client}#${s.id}`);
+          return r?.ok ? { ok: true } : { error: r?.reason ?? "ADVISOR_UNAVAILABLE" };
+        },
+      },
+      {
         name: "catalog_list", roles: ["initiator"], readOnly: true,
         description: "The agents Synapser can use: what each can do, its cost basis and availability.",
         inputSchema: { type: "object", properties: {} },

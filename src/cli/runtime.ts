@@ -1,5 +1,6 @@
 // Wiring shared by the CLI and the MCP process: config → manager (with the production engine).
 
+import { Advisor } from "../advisor/advisor.ts";
 import { Journal } from "../journal/journal.ts";
 import { type SynapserConfig } from "../config/load.ts";
 import { defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../model/index.ts";
@@ -27,6 +28,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     knownUsdPerRun: cfg.knownUsdPerRun,
     limits: cfg.limits,
     delegation: cfg.delegation,
+    ...(cfg.advisor.enabled ? { advisor: { enabled: true, pushback: cfg.advisor.pushback, maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } } : {}),
   });
   const manager = new WorkflowManager({
     stateDir: cfg.stateDir,
@@ -35,6 +37,12 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     profileIds: new Set(cfg.profiles.map((p) => p.id)),
     engine,
     startRequiresApproval: cfg.startRequiresApproval,
+    ...(cfg.advisor.enabled
+      ? {
+          advisor: (journal: Journal, id: string, workflow: () => import("../workflow/model.ts").Workflow) =>
+            new Advisor({ journal, runId: id, model: new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(journal) }), workflow, limits: { maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } }),
+        }
+      : {}),
     policy: () => cfg.policy,
     effectIdentity: cfg.identity,
   });

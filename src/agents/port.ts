@@ -44,6 +44,8 @@ export interface AgentRunRequest {
   delegation?: import("../orchestration/delegation.ts").DelegationPort;
   /** Native agents may ASK for side effects here; CLI agents cannot (they have no channel back). */
   effects?: import("../effects/port.ts").EffectPort;
+  /** Advisor channel for a native loop: guidance between turns and holds. */
+  control?: { notes(taskId: string): string[]; held(taskId: string): boolean };
 }
 
 export type IntegrationMode =

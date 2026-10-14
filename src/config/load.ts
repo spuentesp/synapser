@@ -18,6 +18,8 @@ export interface SynapserConfig {
   /** Identity Synapser commits with when the repository has none configured. */
   identity: { name: string; email: string };
   research: boolean;
+  /** The advisor (plan 13 §6). `pushback: "writes"` critiques write tasks with web evidence before they run. */
+  advisor: { enabled: boolean; pushback: "off" | "writes"; maxConsults: number; maxPerTask: number };
   knownUsdPerRun: Record<string, number>;
   limits: { concurrency: number; maxRepairRounds: number; maxTaskAttempts: number; missionMs: number };
   delegation: { maxDepth: number; maxTasks: number; maxPerTask: number };
@@ -136,8 +138,19 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   const id = raw["identity"] as { name?: unknown; email?: unknown } | undefined;
   const identity = id && typeof id.name === "string" && typeof id.email === "string" ? { name: id.name, email: id.email } : { name: "Synapser", email: "synapser@localhost" };
 
+  const adv = (raw["advisor"] ?? {}) as { enabled?: unknown; pushback?: unknown; maxConsults?: unknown; maxPerTask?: unknown };
+  if (adv.enabled !== undefined && typeof adv.enabled !== "boolean") errors.push("advisor.enabled must be a boolean");
+  if (adv.pushback !== undefined && adv.pushback !== "off" && adv.pushback !== "writes") errors.push('advisor.pushback must be "off" or "writes"');
+  for (const k of ["maxConsults", "maxPerTask"] as const) if (adv[k] !== undefined && (typeof adv[k] !== "number" || (adv[k] as number) < 1)) errors.push(`advisor.${k} must be a positive number`);
+  const advisor = {
+    enabled: adv.enabled === false ? false : true,
+    pushback: adv.pushback === "writes" ? ("writes" as const) : ("off" as const),
+    maxConsults: typeof adv.maxConsults === "number" ? adv.maxConsults : 6,
+    maxPerTask: typeof adv.maxPerTask === "number" ? adv.maxPerTask : 3,
+  };
+
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, profiles, policy, identity,
+    workspace, stateDir, commands, profiles, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

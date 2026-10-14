@@ -1,7 +1,7 @@
 // ModelPort (plan 06 §4). The core never sees a vendor SDK, a base URL or a model id:
 // it asks for a ROLE and gets back a response plus everything needed to account for it.
 
-export type Role = "supervisor" | "worker" | "repair";
+export type Role = "supervisor" | "worker" | "repair" | "advisor" | "chat";
 
 /**
  * Wire-format chat message. There is deliberately NO reasoning field here: model reasoning is

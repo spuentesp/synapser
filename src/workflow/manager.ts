@@ -9,6 +9,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { digestOfJson } from "../digest/canonical.ts";
 import { Journal } from "../journal/journal.ts";
+import type { Advisor } from "../advisor/advisor.ts";
 import { EffectBroker } from "../effects/broker.ts";
 import type { Exec } from "../effects/kinds.ts";
 import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
@@ -82,6 +83,8 @@ export interface ManagerOptions {
   effectEnv?: NodeJS.ProcessEnv;
   effectIdentity?: { name: string; email: string };
   effectFetch?: typeof fetch;
+  /** Builds the advisor of a workflow (model-only is enough to consult). Absent ⇒ advice is unavailable. */
+  advisor?: (journal: Journal, workflowId: string, workflow: () => Workflow) => Advisor;
   /** Period of the effect ticker, ms (0 disables it; `settleEffects` still works). */
   effectTickMs?: number;
 }
@@ -119,6 +122,17 @@ export class WorkflowManager {
     });
     this.#brokers.set(id, b);
     return b;
+  }
+
+  readonly #advisors = new Map<string, Advisor>();
+  advisorOf(id: string): Advisor | null {
+    const held = this.#advisors.get(id);
+    if (held) return held;
+    const j = this.#journal(id);
+    if (!j || !this.#o.advisor) return null;
+    const a = this.#o.advisor(j, id, () => this.#doc(j)!.workflow);
+    this.#advisors.set(id, a);
+    return a;
   }
 
   /** Execute what humans approved, expire the stale ones. Idempotent; safe to call from any process. */

@@ -55,6 +55,20 @@ export interface MissionDeps {
     /** Extra fields for the `condition_round` event (e.g. the workflow revision judged). */
     meta?: Record<string, unknown>;
   }>;
+  /**
+   * The advisor (plan 13 §6): guidance injected into task contexts, holds, escalations, and
+   * consultations after failures and failed acceptance rounds. Absent = no advisor.
+   */
+  advisor?: {
+    notes(taskId: string): string[];
+    held(taskId: string): boolean;
+    escalations(taskId: string): number;
+    pushbackState(taskId: string): string | null;
+    superseded(taskId: string): boolean;
+    consult(trigger: { kind: "failure"; task: string; label: string; detail: string | null } | { kind: "round"; unmet: { id: string; statement: string; detail: string }[] }): Promise<unknown>;
+    /** Preflight critique before dispatch; returns true when it put the task behind a human gate. */
+    preflight?(taskId: string): Promise<boolean>;
+  };
   /** Lets native agents ASK for side effects (never perform them). */
   effects?: import("../effects/port.ts").EffectPort;
   /** Cooperative cancellation: stop admitting work, let running steps end, finish CANCELLED. */
@@ -99,6 +113,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   const validations: ValidationResult[] = [];
   const validationTaskOf = new Map<string, string>();
   let repairRounds = 0;
+  let lastUnmet: { id: string; statement: string; detail: string }[] = [];
   let failure: string | null = null;
   let timedOut = false;
   let cancelled = false;
@@ -168,11 +183,15 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       await announceIntent(deps.intent, journal, runId, { taskId: id, objective: String(row.spec.objective), scope: row.scope, criteria: (row.spec.criteria as string[]) ?? [] });
     }
     const isRepair = row.spec.kind === "repair";
+    // guidance from the advisor rides along as clearly-labelled system context
+    const noted = deps.advisor?.notes(id) ?? [];
+    const baseContext = (row.spec.context as string[] | undefined) ?? [];
+    const context = noted.length ? [...baseContext, ...noted.map((n) => `COORDINATOR NOTE (advisor guidance, not file content): ${n}`)] : baseContext;
     if (deps.orchestration) {
       const o = await dispatchStep(
         deps.orchestration,
         { journal, runId, planDigest: digest(), deadlineMs: deadline, ...(deps.budget ? { budget: deps.budget } : {}) },
-        { taskId: id, scope: row.scope, spec: row.spec } as StepRow,
+        { taskId: id, scope: row.scope, spec: { ...row.spec, context } } as StepRow,
         broker,
         exclude,
       );
@@ -188,11 +207,12 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         ...(deps.research ? { research: deps.research } : {}),
         ...(broker ? { delegation: broker } : {}),
         ...(deps.effects ? { effects: deps.effects } : {}),
+        ...(deps.advisor ? { control: { notes: (t: string) => deps.advisor!.notes(t), held: (t: string) => deps.advisor!.held(t) } } : {}),
         role: isRepair ? "repair" : "worker",
         deadlineMs: deadline,
         ...(L.loop ? { limits: L.loop } : {}),
       },
-      { taskId: id, objective: row.spec.objective, scope: row.scope, criteria: row.spec.criteria, context: row.spec.context ?? [], planRevision: 1 },
+      { taskId: id, objective: row.spec.objective, scope: row.scope, criteria: row.spec.criteria, context, planRevision: 1 },
     );
     return { taskId: id, ok: r.status === "FINISHED", label: r.status, ...(r.detail ? { detail: r.detail } : {}) };
   };
@@ -201,16 +221,45 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
   // way, a profile is weak at this), so retry — on another profile when the router has one — before
   // the mission pays for it. Bounded, and every retry is on the ledger.
   const RETRYABLE = new Set(["NEEDS_REPLAN", "STEP_LIMIT", "INVALID_OUTPUT", "NO_TOOL_CALL", "MODEL_UNAVAILABLE", "FAILED", "UNKNOWN", "STALE_VIEW", "WAITING_RESOURCE", "NOT_INTEGRATED", "REJECTED"]);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  /** Waits while the advisor holds the task. Returns false when the mission is over (deadline/abort). */
+  const waitWhileHeld = async (id: string): Promise<boolean> => {
+    while (deps.advisor?.held(id)) {
+      if (deps.signal?.aborted || Date.now() > deadline) return false;
+      await sleep(deps.orchestration?.approval?.pollMs ?? 200);
+    }
+    return true;
+  };
+
   const runAgent = async (id: string): Promise<Outcome> => {
     const tried: string[] = [];
     announced.delete(id);
     let last: Outcome = { taskId: id, ok: false, label: "NOT_RUN" };
+    // a preflight critique may put the task behind a human decision before anything is spent on it
+    if (deps.advisor?.preflight && (await deps.advisor.preflight(id))) {
+      if (!(await waitWhileHeld(id))) return { taskId: id, ok: false, label: "TIME_BUDGET_EXHAUSTED" };
+      if (deps.advisor.pushbackState(id) === "REJECTED") return { taskId: id, ok: false, label: "PUSHBACK_REJECTED", detail: "a human rejected the task after the advisor's pushback" };
+    }
     for (let attempt = 1; attempt <= Math.max(1, L.maxTaskAttempts); attempt++) {
+      if (!(await waitWhileHeld(id))) return { taskId: id, ok: false, label: "TIME_BUDGET_EXHAUSTED" };
       const r = await attemptOnce(id, tried);
+      if (r.label === "HELD") {
+        // not a failure: the advisor paused it mid-run; resume the SAME attempt number once released
+        attempt--;
+        continue;
+      }
       last = { taskId: id, ok: r.ok, label: r.label, ...(r.detail ? { detail: r.detail } : {}) };
       if (r.ok) return last;
       if (r.profileId) tried.push(r.profileId);
       if (!RETRYABLE.has(r.label) || attempt >= L.maxTaskAttempts || Date.now() > deadline) break;
+      // let the advisor look at what went wrong BEFORE the retry (it may inject guidance, hold, or escalate)
+      if (deps.advisor) {
+        const before = deps.advisor.escalations(id);
+        await deps.advisor.consult({ kind: "failure", task: id, label: r.label, detail: r.detail ?? null }).catch(() => {});
+        if (deps.advisor.escalations(id) > before && r.profileId && !tried.includes(r.profileId)) tried.push(r.profileId);
+        // the advisor split this task into others: its work now lives in the children, stop here
+        if (deps.advisor.superseded(id)) return { taskId: id, ok: true, label: "SUPERSEDED" };
+      }
       journal.tx((t) => t.event(runId, "task_retry", id, null, `ATTEMPT_${attempt + 1}`, { after: r.label, detail: r.detail ?? null, avoided: [...tried] }));
       emit("task.retry", id, { attempt: attempt + 1, after: r.label });
     }
@@ -237,6 +286,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       emit("conditions.evaluated", id, { round, satisfied: r.satisfied });
       if (!r.satisfied) {
         const unmet = r.results.filter((c) => c.required && c.status === "UNSATISFIED");
+        lastUnmet = unmet.map((c) => ({ id: c.id, statement: c.statement, detail: c.detail }));
         return {
           taskId: id,
           ok: false,
@@ -329,8 +379,14 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         if (st === "REJECTED") failure ??= `approval rejected for ${t.taskId}`;
         return st === "APPROVED";
       };
+      // a task the advisor replaced counts as satisfied for whoever waited on it: its children carry the work
+      const superseded = new Set(journal.listEvents().filter((e) => e.entity === "task_superseded").map((e) => e.entityId));
+      const satisfied = (d: string): boolean => {
+        const st = tasks.find((x) => x.taskId === d)?.state ?? "";
+        return st === "DONE" || st === "VALIDATING" || (st === "CANCELLED" && superseded.has(d));
+      };
       const ready = tasks
-        .filter((t) => t.state === "PENDING" && t.deps.every((d) => ["DONE", "VALIDATING"].includes(tasks.find((x) => x.taskId === d)?.state ?? "")))
+        .filter((t) => t.state === "PENDING" && t.deps.every(satisfied) && !deps.advisor?.held(t.taskId))
         .filter((t) => gateOpen(t))
         .sort((a, b) => b.priority - a.priority || a.taskId.localeCompare(b.taskId));
       for (const t of ready) {
@@ -346,7 +402,8 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     }
     if (running.size === 0) {
       // nothing runs: either we are done, or steps are waiting for a human decision
-      const waiting = !failure && !timedOut && journal.listTasks().some((t) => t.state === "PENDING" && (t.spec.gates as string[] | undefined)?.includes("approval") && approvalStatus(journal, t.taskId, digest()) === "PENDING");
+      const heldWaiting = !failure && !timedOut && !deps.signal?.aborted && journal.listTasks().some((t) => t.state === "PENDING" && deps.advisor?.held(t.taskId));
+      const waiting = heldWaiting || !failure && !timedOut && journal.listTasks().some((t) => t.state === "PENDING" && (t.spec.gates as string[] | undefined)?.includes("approval") && approvalStatus(journal, t.taskId, digest()) === "PENDING");
       if (!waiting) break;
       await new Promise((r) => setTimeout(r, deps.orchestration?.approval?.pollMs ?? 250));
       continue;
@@ -405,10 +462,15 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         });
         currentValidate = nextValidate;
         emit("repair.scheduled", repairId, { round: repairRounds });
+        // the advisor sees the failed round with the repair task already in the plan, so its guidance has a target
+        if (deps.advisor && lastUnmet.length) await deps.advisor.consult({ kind: "round", unmet: lastUnmet }).catch(() => {});
       } else {
         setState(done.taskId, "RUNNING", "FAILED", { label: done.label });
         failure ??= done.label === "ACCEPTANCE_FAILED" ? "acceptance checks failed" : `validation: ${done.label}`;
       }
+    } else if (done.label === "SUPERSEDED") {
+      // replaced by the advisor's replan (the task is already CANCELLED and its children carry the work)
+      emit("task.superseded", done.taskId);
     } else if (done.ok) {
       // The agent says it is finished. That is a REQUEST for validation, not a result.
       setState(done.taskId, "RUNNING", "VALIDATING", { label: done.label });

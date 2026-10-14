@@ -47,6 +47,9 @@ export function defaultModelConfig(): ModelConfig {
         temperature: 0,
         fallbacks: ["nvidia/Nemotron-3_5-Lightning"],
       },
+      // the coordinator's advisor and the UI chat: judgement and conversation, never execution
+      advisor: { provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b", temperature: 0.2 },
+      chat: { provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b", temperature: 0.3, fallbacks: ["nvidia/Nemotron-3_5-Lightning"] },
     },
     timeoutMs: 60_000,
     maxRetries: 2,
@@ -68,7 +71,7 @@ export function loadModelConfig(path: string): ModelConfig {
 }
 
 export function validateConfig(cfg: ModelConfig): void {
-  for (const role of ["supervisor", "worker", "repair"] as const) {
+  for (const role of ["supervisor", "worker", "repair", "advisor", "chat"] as const) {
     const r = cfg.roles[role];
     if (!r) throw new ModelError("CONFIG", `role ${role} is not configured`);
     if (!cfg.providers[r.provider]) throw new ModelError("CONFIG", `role ${role}: unknown provider ${r.provider}`);

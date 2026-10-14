@@ -7,6 +7,10 @@
 //   synapser gate list [--workflow ID]        pending human decisions
 //   synapser gate show <workflow> <key>       the one-time code you may hand to an agent for MCP approval
 //   synapser gate approve|reject <workflow> <key> [--reason TEXT]
+//   synapser advisor list <workflow>          interventions and their state
+//   synapser advisor ask <workflow> "question" ask Nemotron; it PROPOSES, nothing is applied
+//   synapser advisor apply <workflow> <iv-id>  apply a proposal (a rollback opens a gate instead)
+//   synapser advisor release <workflow> <task> release a held task
 //   synapser effect list <workflow>           effects requested, with state and what they would do
 //   synapser policy show                      the effect policy in force
 //   synapser config show
@@ -82,6 +86,21 @@ async function main(): Promise<void> {
           const v = m.status(id)!;
           say({ workflow_id: id, state: v.state, reason: v.reason, conditions: v.conditions.map((c) => `${c.id}: ${c.status ?? "—"} (${c.evidence ?? "—"})`) });
           return void (process.exitCode = v.state === "DONE" ? 0 : 1);
+        }
+        break;
+      }
+      case "advisor": {
+        const adv = a ? m.advisorOf(a) : null;
+        if (!adv) return die("unknown workflow, or the advisor is disabled", 1);
+        if (sub === "list") return say(adv.list().map((r) => ({ id: r.id, type: r.type, task: r.task, state: r.state, trigger: r.trigger, reason: r.reason })));
+        if (sub === "ask") {
+          const out = await adv.consult({ kind: "ask", question: argv.slice(3).join(" ") }, false);
+          return say({ assessment: out.assessment, proposals: out.records.map((r) => ({ id: r.id, type: r.type, task: r.task, state: r.state, reason: r.reason })) });
+        }
+        if (sub === "apply") return say(await adv.applyProposed(b ?? "", OPERATOR.id));
+        if (sub === "release") {
+          adv.release(b ?? "", OPERATOR.id);
+          return say({ ok: true });
         }
         break;
       }

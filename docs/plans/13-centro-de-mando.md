@@ -357,3 +357,17 @@ requerida anterior se cumple, de modo que el trabajo no aceptado nunca se public
 y remoto bare real, incluido el recorrido completo workflow → commit → push con dos decisiones humanas.
 Hallazgos del extremo a extremo (corregidos): `git status` con `trim()` se comía el primer carácter de la
 ruta; un rechazo del commit no debe seguir pidiendo el push.
+
+**P3 (hecho):** `src/advisor/` — rol de modelo `advisor` y `chat`; `types.ts` (intervenciones tipadas y
+`validateIntervention` contra el estado vivo: tarea desconocida, terminal, alcance, nada que revertir…);
+`advisor.ts` (consulta estructurada que **propone**; el control valida y aplica; presupuesto de consultas e
+intervenciones por tarea; cada intervención nombra disparador y evidencia); `revert.ts` (acciones
+compensatorias a través del ejecutor, solo sobre lo que sigue siendo exactamente lo que la tarea dejó,
+conflictos informados archivo por archivo). El ejecutor del plan: `inject_note` llega al **siguiente
+intento** (todos los adaptadores) y **entre turnos** (bucle nativo); `hold` detiene la admisión y el bucle;
+`escalate` evita el perfil que falló; `replan` parte la tarea con la misma validación de delegación,
+sustituye la original (`task_superseded`) y reengancha a sus dependientes; `rollback` abre una compuerta
+humana con desafío y, aprobado, revierte y devuelve la tarea a PENDING con la nota. **Pushback**: supuestos
+→ búsquedas (con la guarda de salida) → hallazgos que solo citan fuentes realmente recuperadas (P1) → la
+tarea queda retenida tras una decisión humana. Superficie: herramientas MCP `advise`, `intervention_list`,
+`intervention_apply`; CLI `advisor list|ask|apply|release`. Verificado en vivo con Nemotron y Tavily.

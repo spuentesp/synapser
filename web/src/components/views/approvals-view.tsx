@@ -11,7 +11,7 @@ import { shortHash } from '@/lib/format'
 import { type Key, useI18n } from '@/lib/i18n'
 import { Empty } from './common'
 
-const KIND: Record<SwarmState['gates'][number]['kind'], Key> = { start: 'gateStart', step: 'gateStep', condition: 'gateCondition', effect: 'gateEffect' }
+const KIND: Record<SwarmState['gates'][number]['kind'], Key> = { start: 'gateStart', step: 'gateStep', condition: 'gateCondition', effect: 'gateEffect', intervention: 'gateIntervention' }
 
 export function ApprovalsView({ runId, state, token, onDecided }: { runId: string; state: SwarmState; token: string | null; onDecided: () => Promise<void> }) {
   const { t } = useI18n()

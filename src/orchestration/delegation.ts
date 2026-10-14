@@ -38,6 +38,11 @@ export interface DelegationPort {
   request(requesterTaskId: string, ask: SubtaskAsk): DelegationResult;
 }
 
+/** An actor that is not the requesting agent (the coordinator's advisor): same rules, no "must be running". */
+export interface DelegationAsOptions {
+  actor: string;
+}
+
 export interface DelegationConfig {
   /** Longest chain requester → child → grandchild…; configurable per workflow. */
   maxDepth: number;
@@ -75,7 +80,17 @@ export class DelegationBroker implements DelegationPort {
   }
 
   request(requesterTaskId: string, ask: SubtaskAsk): DelegationResult {
-    const res = this.#decide(requesterTaskId, ask);
+    return this.#request(requesterTaskId, ask, false);
+  }
+
+  /** The advisor splitting a task that is not running (plan 13 §6.2 `replan`). Same validation. */
+  requestAs(parentTaskId: string, ask: SubtaskAsk, o: DelegationAsOptions): DelegationResult {
+    void o;
+    return this.#request(parentTaskId, ask, true);
+  }
+
+  #request(requesterTaskId: string, ask: SubtaskAsk, system: boolean): DelegationResult {
+    const res = this.#decide(requesterTaskId, ask, system);
     // the ledger sees attempts as well as acceptances; the agent's `why` is labelled as asserted
     this.#journal.tx((t) =>
       t.event(this.#runId, "delegation", res.ok ? res.taskId : `${requesterTaskId}-rejected`, null, res.ok ? "ACCEPTED" : "REJECTED", {
@@ -91,10 +106,10 @@ export class DelegationBroker implements DelegationPort {
     return res;
   }
 
-  #decide(requesterId: string, ask: SubtaskAsk): DelegationResult {
+  #decide(requesterId: string, ask: SubtaskAsk, system = false): DelegationResult {
     const tasks = this.#journal.listTasks();
     const requester = tasks.find((t) => t.taskId === requesterId);
-    if (!requester || requester.state !== "RUNNING") return { ok: false, code: "NOT_RUNNING", detail: "only a running task can request a subtask" };
+    if (!requester || (!system && requester.state !== "RUNNING")) return { ok: false, code: "NOT_RUNNING", detail: "only a running task can request a subtask" };
 
     const depth = ((requester.spec.depth as number | undefined) ?? 0) + 1;
     if (depth > this.#cfg.maxDepth) return { ok: false, code: "TOO_DEEP", detail: `delegation depth ${depth} exceeds the limit of ${this.#cfg.maxDepth}` };

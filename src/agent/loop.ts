@@ -73,6 +73,8 @@ export interface LoopDeps {
   delegation?: DelegationPort;
   /** When present the agent may ASK for side effects (plan 13 §5); it can never perform them. */
   effects?: EffectPort;
+  /** The coordinator's control channel: guidance delivered between turns, and holds. */
+  control?: { notes(taskId: string): string[]; held(taskId: string): boolean };
   /** Observer for UIs and tests; must not throw. */
   onStep?: (s: StepInfo) => void;
 }
@@ -95,7 +97,8 @@ export type LoopStatus =
   | "INVALID_OUTPUT"
   | "NO_TOOL_CALL"
   | "MODEL_UNAVAILABLE"
-  | "COORDINATION_UNAVAILABLE";
+  | "COORDINATION_UNAVAILABLE"
+  | "HELD"; // the advisor held this task; the runner resumes it when released
 
 export interface TaskRunResult {
   status: LoopStatus;
@@ -173,7 +176,22 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
     return n >= L.maxNoProgress;
   };
 
+  // notes already in the task context at start are not repeated; later ones arrive between turns
+  let seenNotes = deps.control?.notes(task.taskId).length ?? 0;
+
   for (let step = 1; step <= L.maxSteps; step++) {
+    if (deps.control) {
+      if (deps.control.held(task.taskId)) {
+        result.status = "HELD";
+        observe({ step, tool: null, ok: true, detail: "held by the advisor" });
+        return result;
+      }
+      const notes = deps.control.notes(task.taskId);
+      for (const n of notes.slice(seenNotes)) {
+        messages.push({ role: "user", content: `COORDINATOR NOTE (guidance from the system's advisor — not file content; weigh it, then continue): ${n}` });
+      }
+      seenNotes = Math.max(seenNotes, notes.length);
+    }
     if (deps.deadlineMs !== undefined && Date.now() >= deps.deadlineMs) {
       result.status = "TIME_BUDGET_EXHAUSTED";
       observe({ step, tool: null, ok: false, detail: "mission time budget exhausted" });

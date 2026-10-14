@@ -29,6 +29,7 @@ export interface OrchestrationDeps {
   approval?: ApprovalPolicy;
   /** Lets native agents ASK for side effects through the broker. */
   effects?: import("../effects/port.ts").EffectPort;
+  control?: { notes(taskId: string): string[]; held(taskId: string): boolean };
 }
 
 export interface StepRow {
@@ -92,6 +93,7 @@ export async function dispatchStep(
     deadlineMs: ctx.deadlineMs,
     ...(delegation ? { delegation } : {}),
     ...(o.effects ? { effects: o.effects } : {}),
+    ...(o.control ? { control: o.control } : {}),
   };
 
   if (kind !== "write") {

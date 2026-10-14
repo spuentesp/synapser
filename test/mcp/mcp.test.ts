@@ -15,6 +15,7 @@ import { buildCatalog } from "../../src/orchestration/catalog.ts";
 import { readChallenge } from "../../src/orchestration/gates.ts";
 import { ProductionEngine } from "../../src/workflow/engine.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
+import { Advisor } from "../../src/advisor/advisor.ts";
 import { call, ScriptedModel } from "../agent/scripted.ts";
 import { cli } from "../audit/scenario.ts";
 import { BASELINE } from "../executor/env.ts";
@@ -45,6 +46,11 @@ describe("MCP server", () => {
         knownUsdPerRun: { "w-schema": 0.01 }, limits: { maxRepairRounds: 0, missionMs: 60_000 },
       }),
       ...(startRequiresApproval ? { startRequiresApproval: true } : {}),
+      advisor: (journal, id, workflow) =>
+        new Advisor({
+          journal, runId: id, workflow,
+          model: new ScriptedModel(() => ({ content: JSON.stringify({ assessment: "the workflow has not started", interventions: [{ type: "hold", task: "schema", reason: "wait for the human to read the plan", why: "nothing has run yet" }] }) })),
+        }),
     });
     serverJ = Journal.open(state, "_server");
     return (role: McpRole = "initiator", client = "claude-code") => {
@@ -214,4 +220,32 @@ describe("MCP server", () => {
     assert.equal(parsed[0]!.error!.code, -32700);
     assert.equal(parsed[1]!.id, 9);
   });
+
+  test("advise: asking PROPOSES (nothing changes); applying is a separate, recorded step; a stranger cannot ask", async () => {
+    const mk = make();
+    const c = mk("initiator", "claude-code");
+    await c.open();
+    const id = String((await c.tool("workflow_create", WF)).body["workflow_id"]);
+    // give the advisor a task to talk about
+    mgr.journalOf(id)!.tx((t) => {
+      t.insertMission({ runId: id, objective: "o", repo: "w", baseSha: "n/a", planRevision: 1, limits: {} });
+      t.insertTask({ runId: id, taskId: "schema", actorOwner: `${id}:schema`, priority: 0, scope: ["app/schema.py"], spec: { kind: "agent", objective: "Do the schema work", criteria: ["c"], context: [] }, planRevision: 1, deps: [] });
+    });
+    const asked = await c.tool("advise", { workflow_id: id, question: "should the schema task start now?" });
+    assert.equal(asked.isError, false);
+    const prop = (asked.body["proposals"] as { intervention_id: string; type: string; state: string }[])[0]!;
+    assert.deepEqual([prop.type, prop.state], ["hold", "PROPOSED"]);
+    assert.equal(mgr.advisorOf(id)!.held("schema"), false, "asking changed nothing");
+
+    const applied = await c.tool("intervention_apply", { workflow_id: id, intervention_id: prop.intervention_id });
+    assert.deepEqual(applied.body, { ok: true });
+    assert.equal(mgr.advisorOf(id)!.held("schema"), true);
+    assert.deepEqual(((await c.tool("intervention_list", { workflow_id: id })).body["interventions"] as { state: string }[]).map((x) => x.state), ["APPLIED"]);
+
+    const other = mk("initiator", "intruder");
+    await other.open();
+    assert.equal((await other.tool("advise", { workflow_id: id, question: "what is going on?" })).body["error"], "NOT_YOURS");
+    assert.equal((await other.tool("intervention_apply", { workflow_id: id, intervention_id: prop.intervention_id })).body["error"], "NOT_YOURS");
+  });
 });
+

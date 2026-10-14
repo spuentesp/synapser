@@ -22,6 +22,8 @@ import { ZooAdapter } from "../zoo/adapter.ts";
 import { ZooCollector } from "../zoo/collector.ts";
 import { zooIntentSink } from "../zoo/intent.ts";
 import { loadPin } from "../zoo/pin.ts";
+import { Advisor } from "../advisor/advisor.ts";
+import { DelegationBroker } from "../orchestration/delegation.ts";
 import { approvalWaiter, baselineOf, evaluateWorkflow } from "./checkers.ts";
 import type { EngineResult, EngineRun, WorkflowEngine } from "./manager.ts";
 import type { Workflow } from "./model.ts";
@@ -41,6 +43,8 @@ export interface EngineConfig {
   planner?: (w: Workflow, catalog: ProfileCard[], journal: Journal) => Promise<Plan>;
   limits?: { concurrency?: number; maxRepairRounds?: number; maxTaskAttempts?: number; missionMs?: number; maxTokens?: number };
   delegation?: Partial<DelegationConfig>;
+  /** The advisor (plan 13 §6). Off when `enabled` is false. `pushback`: critique tasks with Tavily before dispatch. */
+  advisor?: { enabled: boolean; pushback?: "off" | "writes"; maxConsults?: number; maxPerTask?: number };
   /** Poll period while waiting for a human on an approval condition / gate. */
   pollMs?: number;
 }
@@ -82,9 +86,48 @@ export class ProductionEngine implements WorkflowEngine {
       const deadline = Date.now() + missionMs;
       const validation = new LocalRunner({ journal, runId, workspaceRoot: c.workspaceRoot, commands: c.commands, generation: lock.generation });
 
-      const mission = await runMission(
+      // ---- the advisor: Nemotron proposes, control validates (plan 13 §6) --------------------------
+      const advisorOn = c.advisor?.enabled !== false && c.advisor !== undefined;
+      const broker = new DelegationBroker({ journal, runId, workspaceRoot: c.workspaceRoot, config: c.delegation ?? {} });
+      const advisor = advisorOn
+        ? new Advisor({
+            journal, runId, model, budget, workflow: r.workflow, delegation: broker, executor, workspaceRoot: c.workspaceRoot,
+            ...(research ? { research } : {}),
+            limits: { ...(c.advisor?.maxConsults ? { maxConsults: c.advisor.maxConsults } : {}), ...(c.advisor?.maxPerTask ? { maxPerTask: c.advisor.maxPerTask } : {}) },
+          })
+        : null;
+      const advisorTick = advisor ? setInterval(() => void advisor.tick().catch(() => {}), c.pollMs ?? 250) : null;
+      const pushbackOn = advisor !== null && c.advisor?.pushback === "writes" && research !== undefined;
+
+      let mission;
+      try {
+      mission = await runMission(
         {
           executor, journal, model, budget, validation, signal: r.signal,
+          ...(advisor
+            ? {
+                advisor: {
+                  notes: (t: string) => advisor.notes(t),
+                  held: (t: string) => advisor.held(t),
+                  escalations: (t: string) => advisor.escalations(t),
+                  pushbackState: (t: string) => advisor.pushbackState(t),
+                  superseded: (t: string) => advisor.superseded(t),
+                  consult: (tr: Parameters<Advisor["consult"]>[0]) => advisor.consult(tr),
+                  ...(pushbackOn
+                    ? {
+                        preflight: async (t: string) => {
+                          const row = journal.listTasks().find((x) => x.taskId === t);
+                          if (!row || (row.spec?.step ?? "write") !== "write" || row.spec?.kind === "repair") return false;
+                          const findings = await advisor.critique(t);
+                          const serious = findings.filter((f) => f.severity !== "low");
+                          if (serious.length === 0) return false;
+                          return (await advisor.pushback(t, serious, "the advisor found problems with this task's assumptions before it started")) !== null;
+                        },
+                      }
+                    : {}),
+                },
+              }
+            : {}),
           ...(research ? { research } : {}),
           collector: new ZooCollector({ source: zoo, journal, runId }), collectEveryMs: 500, intent: zooIntentSink(zoo),
           ...(c.delegation ? { delegation: c.delegation } : {}),
@@ -144,6 +187,9 @@ export class ProductionEngine implements WorkflowEngine {
           },
         },
       );
+      } finally {
+        if (advisorTick) clearInterval(advisorTick);
+      }
       return {
         status: mission.status === "DONE" ? "DONE" : mission.status === "CANCELLED" ? "CANCELLED" : mission.status === "TIMED_OUT" ? "TIMED_OUT" : "FAILED",
         reason: mission.reason,
