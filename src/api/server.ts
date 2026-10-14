@@ -2,7 +2,9 @@
 // approval gate — NOT the executor: nothing here can touch the workspace (U1). The single write is an
 // approval decision, an event on the ledger bound to the current plan digest (U4).
 //
-//   GET  /api/session                      { token }          same-origin only (no CORS headers)
+//   GET  /api/session                      { token }          no CORS headers; a request without an Origin header gets the
+//                                                            token too, so the token guards against cross-site pages only
+//                                                            (a declared limit: the API is bound to 127.0.0.1)
 //   GET  /api/runs                         runs found under the state dir
 //   GET  /api/runs/:id/state[?seq=N]       swarm state (replayable at any seq)
 //   GET  /api/runs/:id/{timeline,cost,waste,coordination,verify,export}
@@ -197,8 +199,10 @@ export function createApi(opts: ApiOptions): ApiServer {
     const k = kind as LibraryKind;
     if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
     if (sub !== undefined) {
-      // POST /api/library/providers/:id/test tests the STORED endpoint and key, never ones sent in the body:
-      // a page cannot point the server's key at an address of its choosing (the write guard already applied)
+      // POST /api/library/providers/:id/test tests the STORED endpoint and key, never ones sent in the body. A cross-site
+      // page cannot make the server send the key to its own address. A local process that can read the session token
+      // can, because a stored document may name any https endpoint and any environment variable: a declared limit
+      // (design document, section 40).
       if (sub !== "test" || k !== "providers" || method !== "POST") return fail(res, 404, "NOT_FOUND");
       let stored: LibraryEntry | null;
       try {
@@ -262,17 +266,22 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (top === "home" && method === "GET") {
       const workflows = m.list();
       const runs = listRuns();
+      // the same figures the Cost view shows, summed over the runs: agent runs (per profile, so each run counts once)
+      // and the planner's calls. Chat and advisor calls are in neither, so they are not here either.
       let knownUsd = 0;
-      let unknownCalls = 0;
-      let calls = 0;
-      for (const id of [...runs.map((r) => r.id), "_server"]) {
+      let unknownRuns = 0;
+      let agentRuns = 0;
+      for (const { id } of runs) {
         const j = journalFor(id);
         if (!j) continue;
-        for (const call of j.listModelCalls()) {
-          calls += 1;
-          if (call.costUsd === null) unknownCalls += 1;
-          else knownUsd += call.costUsd;
+        for (const row of costBy(j, "profile")) {
+          knownUsd += row.usd;
+          unknownRuns += row.usdUnknownRuns;
+          agentRuns += row.runs;
         }
+        const orch = orchestrationCost(j);
+        if (orch.usd !== null) knownUsd += orch.usd;
+        else if (orch.calls > 0) unknownRuns += 1;
       }
       const profiles = ((c.config?.() ?? {}) as { profiles?: { enabled: boolean }[] }).profiles ?? [];
       return json(res, 200, {
@@ -283,7 +292,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         pendingApprovals: runs.reduce((n, r) => n + r.pendingApprovals, 0),
         runsWaiting: runs.filter((r) => r.pendingApprovals > 0).map((r) => r.id),
         agents: { total: profiles.length, enabled: profiles.filter((p) => p.enabled).length },
-        cost: { knownUsd: Math.round(knownUsd * 1e6) / 1e6, unknownCalls, calls },
+        cost: { knownUsd: Math.round(knownUsd * 1e6) / 1e6, unknownRuns, agentRuns },
         runs: runs.length,
       });
     }

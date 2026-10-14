@@ -67,15 +67,17 @@ $ node scripts/verify-export.ts <run>.ledger.json     # verifies an export with 
 
 `synapser serve` (or `scripts/sandbox.sh`) opens the console at `http://127.0.0.1:<port>/`.
 
-- **Home** shows what is active, which gates wait for a person, which agents are enabled, and the accumulated model
-  cost. A call without a declared price is counted apart, never as zero.
+- **Home** shows what is active, which gates wait for a person, which agents are enabled, and the accumulated cost of
+  agent runs and the planner, as the Cost view counts it. A run without a recorded cost is counted apart, never as zero.
 - **Workflows** has a form that builds a workflow. The draft is checked live by the server's own validator, which
   writes nothing, and *Save* is enabled only for a document that validator accepts. Four built-in templates fill the
   form from their parameters. The advisor's interventions and the requested effects are shown in the workflow's
   detail; decisions are taken in Approvals.
 - **Library** holds providers, agents, skills and templates as versioned documents. A refused document lists every
   problem at once. *Test connection* calls a stored provider's endpoint with its key; the report names the environment
-  variable the key came from and never shows the key.
+  variable the key came from and never shows the key. Limit: a provider's key can be any environment variable of the
+  server, and a local process that can read the console's session token can send it to any https address. A page from
+  another site cannot. This is declared in the design document (section 40) and is not yet closed.
 
 Library documents are not read by runs yet: the workflow engine still takes providers and agents from the
 configuration file. The system roles (planner, advisor, chat, worker, repair) are assigned in

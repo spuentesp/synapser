@@ -162,7 +162,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [x] Q4.1 Pantalla de inicio: workflows activos, compuertas pendientes, agentes, costo acumulado.
   commit: f5cc434 · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
-  una llamada con tarifa suma en USD y una sin tarifa se cuenta aparte, nunca como cero) y navegador real: captura
+  una ejecución de agente con costo registrado suma en USD y una sin costo se cuenta aparte, nunca como cero; el planificador suma y el chat no) y navegador real: captura
   `home.png` en `evidence/`. Suite completa.
 - [x] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
   Costo, Coordinación, Aprobaciones, Integridad). commit: f5cc434 · prueba: navegador real en un directorio de estado
@@ -189,7 +189,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ## Decisiones abiertas del usuario (no resolver sin preguntar)
 
-precedencia de los proveedores de la biblioteca frente a los del archivo (¿solo añadir, o sobrescribir?; hoy ningún
+riesgo declarado: la clave de un proveedor puede ser cualquier variable del servidor, la prueba la envía a cualquier
+endpoint https que nombre el documento guardado, y el token de sesión lo puede leer cualquier proceso local (lista
+blanca de variables, confirmación de cambios de baseUrl y modelo de amenaza: ¿cuál quieres?) · precedencia de los proveedores de la biblioteca frente a los del archivo (¿solo añadir, o sobrescribir?; hoy ningún
 consumidor la necesita) · excepción decimal en la forma canónica de la biblioteca (`digest/canonical.ts`, opción
 `decimals`, solo para documentos de biblioteca: ¿aceptable frente a la regla de solo enteros del plan 03 §2?) · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
 traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de

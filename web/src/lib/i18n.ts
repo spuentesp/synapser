@@ -65,7 +65,8 @@ const dict = {
     home: 'Inicio', homeActive: 'Workflows activos', homeNoneActive: 'Nada está en marcha. Crea un workflow o pídelo en el chat.', homeCreate: 'Crear un workflow',
     homePending: 'Compuertas pendientes', homeNoPending: 'Nada espera a una persona.', homeWaiting: 'corridas esperan tu decisión',
     homeAgents: 'Agentes', homeNoAgents: 'No hay agentes configurados.', homeAgentsOf: 'habilitados de',
-    homeCost: 'Costo acumulado', homeNoCalls: 'Aún no hay llamadas a modelos.', homeCalls: 'llamadas', homeCostUnknown: 'llamadas sin precio: no se suman como 0',
+    homeCost: 'Costo acumulado', homeNoCalls: 'Aún no hay costo registrado.', homeCalls: 'ejecuciones de agente', homeCostUnknown: 'sin costo registrado: no se suman como 0',
+    homeCostScope: 'Corridas y planificador, como en la vista Costo. El chat y el asesor no se suman aquí.',
   },
   en: {
     chat: 'Chat', workflows: 'Workflows', agents: 'Agents', send: 'Send', chatHint: 'Ask for a workflow, ask what is going on, or consult the advisor…',
@@ -129,7 +130,8 @@ const dict = {
     home: 'Home', homeActive: 'Active workflows', homeNoneActive: 'Nothing is running. Create a workflow or ask in the chat.', homeCreate: 'Create a workflow',
     homePending: 'Pending gates', homeNoPending: 'Nothing waits for a person.', homeWaiting: 'runs wait for your decision',
     homeAgents: 'Agents', homeNoAgents: 'No agents are configured.', homeAgentsOf: 'enabled of',
-    homeCost: 'Accumulated cost', homeNoCalls: 'No model calls yet.', homeCalls: 'calls', homeCostUnknown: 'calls without a price: never summed as 0',
+    homeCost: 'Accumulated cost', homeNoCalls: 'No recorded cost yet.', homeCalls: 'agent runs', homeCostUnknown: 'without a recorded cost: never summed as 0',
+    homeCostScope: 'Runs and planner, as in the Cost view. Chat and advisor are not summed here.',
   },
 } as const
 

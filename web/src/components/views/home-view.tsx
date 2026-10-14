@@ -14,7 +14,7 @@ interface Home {
   pendingApprovals: number
   runsWaiting: string[]
   agents: { total: number; enabled: number }
-  cost: { knownUsd: number; unknownCalls: number; calls: number }
+  cost: { knownUsd: number; unknownRuns: number; agentRuns: number }
   runs: number
 }
 
@@ -109,13 +109,14 @@ export function HomeView({ onNavigate, onOpenRun }: { onNavigate: (view: 'workfl
           <CardTitle>{t('homeCost')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm">
-          {home.cost.calls === 0 ? (
+          {home.cost.agentRuns === 0 && home.cost.knownUsd === 0 ? (
             <Empty>{t('homeNoCalls')}</Empty>
           ) : (
             <>
               <p className="text-2xl font-semibold tabular-nums">${home.cost.knownUsd.toFixed(4)}</p>
-              <p className="text-xs text-muted-foreground">{home.cost.calls} {t('homeCalls')} · {home.runs} {t('allRuns')}</p>
-              {home.cost.unknownCalls > 0 ? <p className="text-xs text-status-waiting">{home.cost.unknownCalls} {t('homeCostUnknown')}</p> : null}
+              <p className="text-xs text-muted-foreground">{home.cost.agentRuns} {t('homeCalls')} · {home.runs} {t('allRuns')}</p>
+              {home.cost.unknownRuns > 0 ? <p className="text-xs text-status-waiting">{home.cost.unknownRuns} {t('homeCostUnknown')}</p> : null}
+              <p className="text-xs text-muted-foreground">{t('homeCostScope')}</p>
             </>
           )}
         </CardContent>

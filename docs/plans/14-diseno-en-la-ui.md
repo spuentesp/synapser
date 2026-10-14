@@ -87,7 +87,9 @@ siguen sin esquema: es decisión abierta.
   «probar» que corre una tarea trivial en una copia desechable y muestra el resultado y el costo.
 - **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger. La prueba de conexión
   de un proveedor usa el documento GUARDADO (`POST /api/library/providers/:id/test`): nunca una URL del cuerpo de la
-  petición, así que la clave no sale hacia un destino que elige quien llama.
+  petición. Una página ajena no puede hacer salir la clave hacia un destino suyo; un proceso local que lea el token de
+  sesión sí puede, porque un documento guardado puede nombrar cualquier endpoint https y cualquier variable de entorno
+  del servidor (límite declarado, sección 40 del documento de diseño).
 
 ## 6. Pantallas sin datos
 

@@ -4,24 +4,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { type ApiServer, createApi } from "../../src/api/server.ts";
-import { Journal } from "../../src/journal/journal.ts";
+import { type AgentRunInsert, Journal } from "../../src/journal/journal.ts";
 import type { ProviderConfig } from "../../src/model/config.ts";
 import { journalRecorder, priceResolverForProviders } from "../../src/model/recorder.ts";
 import type { ModelCallRecord } from "../../src/model/types.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
 
-// Plan 14 Q4.1: the home summary counts what is active and what it costs. A call without a declared price is counted
-// apart, never summed as zero.
+// Plan 14 Q4.1: the home summary counts what is active and what it costs, with the SAME figures the Cost view shows:
+// agent runs (their own cost, which CLI agents record there) and the planner's calls. A cost that is not declared is
+// counted apart, never summed as zero.
 
 const WF = { title: "Home check", description: "A draft that stays active until it is run", conditions: [{ id: "c1", statement: "schema changed", required: true, checker: { kind: "diff", require: ["app/schema.py"] } }] };
 const ACTOR = { id: "ui:operator", role: "operator" as const };
 const PROVIDER: ProviderConfig = { protocol: "openai-compatible", baseUrl: "https://models.example/v1/", apiKeyEnv: ["HOME_TEST_KEY"], models: [{ id: "priced", usdPer1MIn: 1, usdPer1MOut: 2 }, { id: "unpriced" }] };
+const DIGEST = `sha256:${"a".repeat(64)}`;
 
-function call(model: string): ModelCallRecord {
+function modelCall(runId: string, role: string, model: string, promptTokens: number, completionTokens: number): ModelCallRecord {
   return {
-    callId: `c-${model}-${Math.random()}`, runId: "_server", taskId: null, role: "chat", requestedModel: model, servedModel: model, baseUrl: PROVIDER.baseUrl,
-    startedAt: 1, latencyMs: 2, httpStatus: 200, retries: 0, usage: { promptTokens: 1_000_000, completionTokens: 2_000_000, reasoningTokens: null },
+    callId: `c-${role}-${model}-${Math.random()}`, runId, taskId: null, role: role as ModelCallRecord["role"], requestedModel: model, servedModel: model, baseUrl: PROVIDER.baseUrl,
+    startedAt: 1, latencyMs: 2, httpStatus: 200, retries: 0, usage: { promptTokens, completionTokens, reasoningTokens: null },
     finishReason: "stop", fallbackUsed: false, error: null, request: {}, response: {},
+  };
+}
+
+function agentRun(runId: string, id: string, costUsd: number | null): AgentRunInsert {
+  return {
+    agentRunId: id, runId, taskId: "t1", profileId: "writer-a", role: "writer", adapter: "claude-code", startedAt: 1, finishedAt: 2, durationMs: 1,
+    argv: ["claude"], baseDigest: DIGEST, exitCode: 0, signal: null, timedOut: false, outcome: "SUCCEEDED", reason: null, sessionId: null,
+    models: ["m"], usageProvenance: "reported", inputTokens: 10, outputTokens: 5, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null,
+    costUsd, turns: null, apiMs: null, networkIsolated: false, permissionDenials: null, promptBlob: null, stdoutBlob: null, stderrBlob: null,
+    finalTextBlob: null, toolUse: null, changes: [],
   };
 }
 
@@ -47,20 +59,32 @@ describe("home summary (plan 14 Q4.1)", () => {
     rmSync(state, { recursive: true, force: true });
     rmSync(ws, { recursive: true, force: true });
   });
-  const home = async () => (await fetch(`${base}/api/home`)).json() as Promise<{ workflows: { total: number; active: { title: string }[] }; cost: { knownUsd: number; unknownCalls: number; calls: number }; agents: { total: number; enabled: number }; runs: number; pendingApprovals: number }>;
+  const home = async () =>
+    (await fetch(`${base}/api/home`)).json() as Promise<{ workflows: { total: number; active: { title: string }[] }; cost: { knownUsd: number; unknownRuns: number; agentRuns: number }; agents: { total: number; enabled: number }; runs: number; pendingApprovals: number }>;
 
   test("a new installation shows nothing active, no cost, and the agents from the configuration", async () => {
-    assert.deepEqual(await home(), { workflows: { total: 0, active: [] }, pendingApprovals: 0, runsWaiting: [], agents: { total: 2, enabled: 1 }, cost: { knownUsd: 0, unknownCalls: 0, calls: 0 }, runs: 0 });
+    assert.deepEqual(await home(), { workflows: { total: 0, active: [] }, pendingApprovals: 0, runsWaiting: [], agents: { total: 2, enabled: 1 }, cost: { knownUsd: 0, unknownRuns: 0, agentRuns: 0 }, runs: 0 });
   });
 
-  test("a draft is active; a priced call adds to the known cost, and an unpriced one is counted apart", async () => {
+  test("a draft is active; agent runs with a recorded cost and without one are counted apart, and the planner's priced call adds to the known cost", async () => {
     assert.equal(mgr.create(WF, ACTOR).ok, true);
-    const write = journalRecorder(sj, priceResolverForProviders({ local: PROVIDER }));
-    write(call("priced"));
-    write(call("unpriced"));
+    // a run with two agent runs: one with its cost recorded (as CLI agents record it), one without
+    const run = Journal.open(state, "run-cost");
+    try {
+      run.tx((t) => {
+        t.insertAgentRun(agentRun("run-cost", "ar-known", 2.5));
+        t.insertAgentRun(agentRun("run-cost", "ar-unknown", null));
+      });
+      // the planner's call is priced: 1M input tokens at $1 per million
+      journalRecorder(run, priceResolverForProviders({ local: PROVIDER }))(modelCall("run-cost", "supervisor", "priced", 1_000_000, 0));
+    } finally {
+      run.close();
+    }
+    // a chat call is not part of the Cost view, so the summary does not add it either
+    journalRecorder(sj, priceResolverForProviders({ local: PROVIDER }))(modelCall("_server", "chat", "priced", 1_000_000, 2_000_000));
     const h = await home();
-    assert.equal(h.workflows.total, 1);
+    assert.equal(h.workflows.total, 1, "only the draft is a workflow; the run-cost journal is a run, not a workflow");
     assert.deepEqual(h.workflows.active.map((w) => w.title), ["Home check"]);
-    assert.deepEqual(h.cost, { knownUsd: 5, unknownCalls: 1, calls: 2 }, "1M in at $1 + 2M out at $2 = $5; the unpriced call is not zero");
+    assert.deepEqual(h.cost, { knownUsd: 3.5, unknownRuns: 1, agentRuns: 2 }, "2.5 recorded + 1 planner call; the unpriced run is counted apart, the chat call is not summed");
   });
 });
