@@ -2,7 +2,7 @@
 //   route → record the dispatch (what, why, under which plan) → run → land the work.
 // A non-write step runs with an empty write scope and its result is NEVER integrated.
 
-import type { AgentProfile } from "../agents/profile.ts";
+import type { AgentProfile, Tier } from "../agents/profile.ts";
 import { type AgentRunnerRegistry, runAndIntegrate } from "../agents/port.ts";
 import type { Executor } from "../executor/executor.ts";
 import type { Journal } from "../journal/journal.ts";
@@ -30,12 +30,14 @@ export interface OrchestrationDeps {
   /** Lets native agents ASK for side effects through the broker. */
   effects?: import("../effects/port.ts").EffectPort;
   control?: { notes(taskId: string): string[]; held(taskId: string): boolean };
+  /** Concurrency limits per pool of agents; a step waits for a slot instead of failing. */
+  pools?: import("./pools.ts").PoolLimiter;
 }
 
 export interface StepRow {
   taskId: string;
   scope: string[];
-  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; gates?: string[]; kind?: string };
+  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; gates?: string[]; kind?: string; tier?: Tier };
 }
 
 export interface StepOutcome {
@@ -44,6 +46,8 @@ export interface StepOutcome {
   detail?: string;
   /** The profile that ran (or was about to), so a retry can avoid it. */
   profileId?: string;
+  /** Its tier, so a retry can ask for the next one up. */
+  tier?: Tier;
 }
 
 export async function dispatchStep(
@@ -52,13 +56,21 @@ export async function dispatchStep(
   row: StepRow,
   delegation: DelegationPort | null = null,
   exclude: readonly string[] = [],
+  minTier?: Tier,
 ): Promise<StepOutcome> {
   const kind: StepKind = row.spec.step ?? "write";
   const isRepair = row.spec.kind === "repair";
   const tags = row.spec.tags ?? (isRepair ? ["repair"] : []);
   // a retry avoids the profile that just failed — unless nothing else can do the step
-  const first = route({ kind, suggested: row.spec.profile, tags, exclude }, o.catalog);
-  const d = !first.ok && exclude.length ? route({ kind, suggested: row.spec.profile, tags }, o.catalog) : first;
+  // the tier floor comes from the plan, raised by earlier failures (the escalation ladder); a ladder that
+  // runs out of rungs falls back to the plan's own floor before it gives up
+  const planTier = row.spec.tier as Tier | undefined;
+  const tierReq = minTier ?? planTier;
+  const attempt = (e: readonly string[], t: Tier | undefined) => route({ kind, suggested: row.spec.profile, tags, exclude: e, ...(t ? { minTier: t } : {}) }, o.catalog);
+  let d = attempt(exclude, tierReq);
+  if (!d.ok && exclude.length) d = attempt([], tierReq);
+  if (!d.ok && tierReq !== planTier) d = attempt(exclude, planTier);
+  if (!d.ok && exclude.length) d = attempt([], planTier);
   if (!d.ok) return { ok: false, label: "NO_ROUTE", detail: d.rejected.map((r) => `${r.profileId}:${r.code}`).join(",") };
   const card = o.catalog.find((c) => c.id === d.profileId) as ProfileCard;
   const profile = o.profiles.find((p) => p.id === d.profileId) as AgentProfile;
@@ -69,6 +81,7 @@ export async function dispatchStep(
     reason: d.reason,
     suggested: row.spec.profile ?? null,
     costBasis: card.cost.basis,
+    tier: card.tier,
     planDigest: ctx.planDigest,
     gates: row.spec.gates ?? [],
     alerts: d.alerts,
@@ -96,19 +109,22 @@ export async function dispatchStep(
     ...(o.control ? { control: o.control } : {}),
   };
 
+  const slot = <T>(fn: () => Promise<T>): Promise<T> => (o.pools ? o.pools.run(profile.id, fn) : fn());
+
   if (kind !== "write") {
-    const run = await o.registry.for(profile).run(req);
-    if (run.changedPaths.length > 0) return { ok: false, label: "ADVISOR_CHANGED_FILES", detail: run.changedPaths.join(","), profileId: d.profileId };
+    const run = await slot(() => o.registry.for(profile).run(req));
+    if (run.changedPaths.length > 0) return { ok: false, label: "ADVISOR_CHANGED_FILES", detail: run.changedPaths.join(","), profileId: d.profileId, tier: card.tier };
     return run.outcome === "SUCCEEDED"
-      ? { ok: true, label: "FINISHED", profileId: d.profileId }
-      : { ok: false, label: run.outcome, profileId: d.profileId, ...(run.reason ? { detail: run.reason } : {}) };
+      ? { ok: true, label: "FINISHED", profileId: d.profileId, tier: card.tier }
+      : { ok: false, label: run.outcome, profileId: d.profileId, tier: card.tier, ...(run.reason ? { detail: run.reason } : {}) };
   }
-  const res = await runAndIntegrate(o.registry, req);
+  const res = await slot(() => runAndIntegrate(o.registry, req));
   const landed = res.integration.status === "INTEGRATED" || res.integration.status === "DIRECT" || res.integration.status === "NO_CHANGES";
-  if (res.run.outcome === "SUCCEEDED" && landed) return { ok: true, label: "FINISHED", profileId: d.profileId };
+  if (res.run.outcome === "SUCCEEDED" && landed) return { ok: true, label: "FINISHED", profileId: d.profileId, tier: card.tier };
   return {
     ok: false,
     profileId: d.profileId,
+    tier: card.tier,
     label: res.run.outcome !== "SUCCEEDED" ? res.run.outcome : res.integration.status,
     ...(res.integration.detail ?? res.run.reason ? { detail: String(res.integration.detail ?? res.run.reason) } : {}),
   };

@@ -4,6 +4,10 @@
 import type { ParserId } from "./usage.ts";
 
 export type AgentRole = "writer" | "advisor";
+/** What the agent is for: cheap = one-shot chores, standard = building, advanced = research/review/hard calls. */
+export type Tier = "cheap" | "standard" | "advanced";
+export const TIERS: readonly Tier[] = ["cheap", "standard", "advanced"];
+export const tierRank = (t: Tier): number => TIERS.indexOf(t);
 /** How a profile is executed. New implementations (e.g. "orca") plug in behind the AgentRunner port. */
 export type AdapterId = "native" | "cli-oneshot" | "orca";
 
@@ -30,6 +34,17 @@ export interface AgentProfile {
    * visible to the agent: it runs with a scratch HOME (plan 13 §5.2).
    */
   homeOverlay?: readonly string[];
+  /** Capability tier (plan 13 §7). Default `standard`. */
+  tier?: Tier;
+  /** How guidance can reach a running agent: between turns (`turn`) or only at its next attempt (`attempt`). */
+  steerable?: "turn" | "attempt";
+  /** Pool this agent belongs to (limits concurrency across its members). */
+  pool?: string;
+  /**
+   * A native-loop agent backed by ANY OpenAI-compatible endpoint (another model, a local server).
+   * `adapter` must be `native`. The key is read from the first set variable of `apiKeyEnv`.
+   */
+  endpoint?: { baseUrl: string; model: string; apiKeyEnv: readonly string[]; temperature?: number };
   /** Disabled profiles stay in the catalog (so the audit can name them) but are never scheduled. */
   enabled: boolean;
   disabledReason?: string;
@@ -39,6 +54,7 @@ export interface AgentProfile {
 export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   {
     id: "nemotron-worker",
+    tier: "cheap",
     description: "Native loop on Token Factory (model role: worker); no filesystem, no shell",
     role: "writer",
     adapter: "native",
@@ -51,6 +67,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "nemotron-repair",
+    tier: "standard",
     description: "Native loop on Token Factory (model role: repair)",
     role: "writer",
     adapter: "native",
@@ -63,6 +80,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "claude-sonnet-writer",
+    tier: "standard",
     description: "Claude Code (Sonnet) editing in an isolated copy; no shell",
     role: "writer",
     homeOverlay: [".claude", ".claude.json"],
@@ -74,6 +92,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "claude-opus-advisor",
+    tier: "advanced",
     description: "Claude Code (Opus) read-only review/advice",
     role: "advisor",
     homeOverlay: [".claude", ".claude.json"],
@@ -85,6 +104,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "codex-writer",
+    tier: "standard",
     description: "Codex CLI, workspace-write sandbox, in an isolated copy",
     role: "writer",
     homeOverlay: [".codex"],
@@ -96,6 +116,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "codex-advisor",
+    tier: "advanced",
     description: "Codex CLI, read-only sandbox",
     role: "advisor",
     homeOverlay: [".codex"],
@@ -107,6 +128,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "kimi-writer",
+    tier: "cheap",
     description: "Kimi Code (configured model: mimo-v2.6-pro) in an isolated copy. -p mode edits AND runs Bash without prompting: isolation is by copy only, not by capability",
     role: "writer",
     homeOverlay: [".kimi", ".kimi-code"],
@@ -118,6 +140,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
   },
   {
     id: "mimo-writer",
+    tier: "cheap",
     description: "MiMo Code CLI",
     role: "writer",
     homeOverlay: [".mimo", ".mimocode"],
@@ -140,6 +163,12 @@ export function validateProfile(p: AgentProfile): string[] {
     if (!p.argv.some((a) => a.includes("{prompt}"))) errs.push("argv must contain {prompt}");
   }
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
+  if (p.tier !== undefined && !TIERS.includes(p.tier)) errs.push(`tier must be one of ${TIERS.join(", ")}`);
+  if (p.endpoint) {
+    if (adapterOf(p) !== "native") errs.push("an endpoint agent must use the native adapter");
+    if (!/^https:\/\//.test(p.endpoint.baseUrl) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(p.endpoint.baseUrl)) errs.push("endpoint.baseUrl must be https (or loopback)");
+    if (!p.endpoint.model || p.endpoint.apiKeyEnv.length === 0) errs.push("endpoint needs a model and at least one apiKeyEnv variable name");
+  }
   if (p.role === "advisor" && p.argv.some((a) => /dangerously|bypass|yolo|workspace-write|--auto\b/.test(a))) errs.push("an advisor profile must not carry write/bypass flags");
   return errs;
 }

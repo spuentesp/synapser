@@ -14,6 +14,8 @@ export interface DispatchRecord {
   reason: "policy" | "suggestion";
   suggested: string | null;
   costBasis: "known" | "estimated" | "unknown";
+  /** Tier of the profile actually chosen. */
+  tier?: string;
   planDigest: string;
   gates: string[];
   alerts: Alert[];
@@ -28,6 +30,7 @@ export function recordDispatch(journal: Journal, runId: string, d: DispatchRecor
       reason: d.reason,
       suggested: d.suggested,
       cost_basis: d.costBasis,
+      ...(d.tier ? { tier: d.tier } : {}),
       plan_digest: d.planDigest,
       gates: d.gates,
     });

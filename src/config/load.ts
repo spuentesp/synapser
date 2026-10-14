@@ -3,7 +3,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { type AgentProfile, BUILTIN_PROFILES } from "../agents/profile.ts";
+import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
+import { PARSERS } from "../agents/usage.ts";
+import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
 
@@ -12,6 +14,7 @@ export interface SynapserConfig {
   stateDir: string;
   commands: AllowedCommand[];
   profiles: AgentProfile[];
+  pools: PoolSpec[];
   startRequiresApproval: boolean;
   /** Which side effects agents may ask for and under which decision (default: ask for commit/push, deny the rest). */
   policy: Policy;
@@ -89,6 +92,70 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     }
   }
 
+  // ---- configurable agents (plan 13 §7): extend a builtin, point at any endpoint, or wrap any CLI ------
+  if (raw["agents"] !== undefined) {
+    if (!Array.isArray(raw["agents"])) errors.push("agents must be an array");
+    else {
+      raw["agents"].forEach((a, i) => {
+        const x = a as Record<string, unknown>;
+        const at = `agents[${i}]`;
+        if (!x || typeof x !== "object" || typeof x["id"] !== "string") return void errors.push(`${at}.id is required`);
+        if (profiles.some((p) => p.id === x["id"]) || BUILTIN_PROFILES.some((p) => p.id === x["id"] && x["extends"] !== x["id"])) {
+          if (x["extends"] !== x["id"]) return void errors.push(`${at}.id "${String(x["id"])}" is already a profile; use a new id or "extends" it under another id`);
+        }
+        let base: AgentProfile | undefined;
+        if (typeof x["extends"] === "string") {
+          base = BUILTIN_PROFILES.find((p) => p.id === x["extends"]);
+          if (!base) return void errors.push(`${at}.extends "${String(x["extends"])}" is not a builtin profile`);
+        }
+        const tier = x["tier"];
+        if (tier !== undefined && !(TIERS as readonly unknown[]).includes(tier)) return void errors.push(`${at}.tier must be one of ${TIERS.join(", ")}`);
+        const parser = (x["parser"] ?? base?.parser ?? "plain") as string;
+        if (!(parser in PARSERS)) return void errors.push(`${at}.parser "${parser}" is unknown (${Object.keys(PARSERS).join(", ")})`);
+        const argv = (x["argv"] ?? base?.argv ?? []) as unknown;
+        if (!Array.isArray(argv) || argv.some((q) => typeof q !== "string")) return void errors.push(`${at}.argv must be an array of strings`);
+        const ep = x["endpoint"] as AgentProfile["endpoint"] | undefined;
+        const p: AgentProfile = {
+          ...(base ?? { description: "", role: "writer", argv: [], parser: "plain", timeoutMs: 300_000, tags: [], enabled: true }),
+          id: x["id"] as string,
+          description: typeof x["description"] === "string" ? (x["description"] as string) : (base?.description ?? ""),
+          role: (x["role"] === "advisor" || x["role"] === "writer" ? x["role"] : (base?.role ?? "writer")) as AgentProfile["role"],
+          adapter: (ep ? "native" : (x["adapter"] ?? base?.adapter ?? "cli-oneshot")) as NonNullable<AgentProfile["adapter"]>,
+          argv: argv as string[],
+          parser: parser as AgentProfile["parser"],
+          timeoutMs: typeof x["timeoutMs"] === "number" ? (x["timeoutMs"] as number) : (base?.timeoutMs ?? 300_000),
+          tags: Array.isArray(x["tags"]) ? (x["tags"] as string[]) : (base?.tags ?? []),
+          enabled: x["enabled"] === false ? false : true,
+          ...(tier ? { tier: tier as AgentProfile["tier"] } : {}),
+          ...(ep ? { endpoint: ep } : {}),
+          ...(Array.isArray(x["homeOverlay"]) ? { homeOverlay: x["homeOverlay"] as string[] } : {}),
+          ...(x["steerable"] === "turn" || x["steerable"] === "attempt" ? { steerable: x["steerable"] } : {}),
+        };
+        const problems = validateProfile(p);
+        if (problems.length) return void errors.push(...problems.map((m) => `${at}: ${m}`));
+        profiles = [...profiles.filter((q) => q.id !== p.id), p];
+      });
+    }
+  }
+  const pools: PoolSpec[] = [];
+  if (raw["pools"] !== undefined) {
+    if (!Array.isArray(raw["pools"])) errors.push("pools must be an array");
+    else {
+      const claimed = new Set<string>();
+      raw["pools"].forEach((pl, i) => {
+        const x = pl as { id?: unknown; members?: unknown; maxConcurrent?: unknown };
+        if (typeof x?.id !== "string" || !Array.isArray(x.members) || typeof x.maxConcurrent !== "number" || x.maxConcurrent < 1) return void errors.push(`pools[${i}] needs id, members[] and maxConcurrent >= 1`);
+        for (const m of x.members as string[]) {
+          if (!profiles.some((q) => q.id === m)) errors.push(`pools[${i}].members: unknown profile "${m}"`);
+          if (claimed.has(m)) errors.push(`pools[${i}].members: "${m}" is already in another pool`);
+          claimed.add(m);
+        }
+        pools.push({ id: x.id, members: x.members as string[], maxConcurrent: x.maxConcurrent });
+      });
+    }
+  }
+  profiles = profiles.map((p) => ({ ...p, ...(pools.find((pl) => pl.members.includes(p.id)) ? { pool: pools.find((pl) => pl.members.includes(p.id))!.id } : {}) }));
+
   const bool = (k: string, d: boolean): boolean => {
     const v = raw[k];
     if (v === undefined) return d;
@@ -150,7 +217,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   };
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, profiles, policy, identity, advisor,
+    workspace, stateDir, commands, profiles, pools, policy, identity, advisor,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

@@ -1,6 +1,7 @@
 // The router decides; the model only suggests (plan 10 D1). A pure function: the same task,
 // catalog and options always yield the same assignment, so every dispatch can be re-derived.
 
+import { tierRank, type Tier } from "../agents/profile.ts";
 import type { ProfileCard, StepKind } from "./catalog.ts";
 
 export interface RouteRequest {
@@ -11,6 +12,8 @@ export interface RouteRequest {
   tags?: readonly string[];
   /** Profiles that must not be used for this task (e.g. already failed on it). */
   exclude?: readonly string[];
+  /** The lowest tier that may do this step (plan 13 §7). Cheaper agents are not candidates. */
+  minTier?: Tier;
 }
 
 export interface Alert {
@@ -19,21 +22,24 @@ export interface Alert {
   detail?: string;
 }
 
+export type RejectCode = "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" | "BELOW_TIER";
 export type RouteDecision =
   | { ok: true; profileId: string; reason: "policy" | "suggestion"; alerts: Alert[]; considered: { profileId: string; rank: number }[] }
-  | { ok: false; code: "NO_CANDIDATE"; rejected: { profileId: string; code: "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" }[] };
+  | { ok: false; code: "NO_CANDIDATE"; rejected: { profileId: string; code: RejectCode }[] };
 
 const basisRank = (c: ProfileCard["cost"]): number => (c.basis === "known" ? 0 : c.basis === "estimated" ? 1 : 2);
 const usd = (c: ProfileCard["cost"]): number => (c.basis === "unknown" ? Number.POSITIVE_INFINITY : c.usdPerRun);
 const successRate = (c: ProfileCard): number => (c.observed && c.observed.runs > 0 ? c.observed.succeeded / c.observed.runs : 0.5);
 
 export function route(req: RouteRequest, catalog: readonly ProfileCard[]): RouteDecision {
-  const rejected: { profileId: string; code: "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" }[] = [];
+  const rejected: { profileId: string; code: RejectCode }[] = [];
+  const floor = req.minTier ? tierRank(req.minTier) : 0;
   const candidates: ProfileCard[] = [];
   for (const c of catalog) {
     if (req.exclude?.includes(c.id)) rejected.push({ profileId: c.id, code: "EXCLUDED" });
     else if (!c.enabled) rejected.push({ profileId: c.id, code: "DISABLED" });
     else if (!c.kinds.includes(req.kind)) rejected.push({ profileId: c.id, code: "KIND_MISMATCH" });
+    else if (tierRank(c.tier) < floor) rejected.push({ profileId: c.id, code: "BELOW_TIER" });
     else candidates.push(c);
   }
   // a total order, so the answer does not depend on the order the catalog happened to be listed in
@@ -46,7 +52,8 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
   const misfit = (c: ProfileCard): number => (c.strengths.includes("repair") && !want.has("repair") ? 1 : 0);
   // lexicographic: capability fit, then not-a-misfit, then how well the cost is known, then cost, then
   // track record, then the model's suggestion, then id (total order ⇒ deterministic)
-  const key = (c: ProfileCard): (number | string)[] => [-fit(c), misfit(c), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
+  // T1: among the agents that clear the floor, use the LOWEST tier that does (never pay for more than asked)
+  const key = (c: ProfileCard): (number | string)[] => [-fit(c), misfit(c), tierRank(c.tier), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
   const cmp = (a: ProfileCard, b: ProfileCard): number => {
     const ka = key(a);
     const kb = key(b);

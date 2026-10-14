@@ -13,7 +13,7 @@ import { type Env, makeEnv, RUN } from "../executor/env.ts";
 
 const run = (profileId: string, usd: number | null, at: number, ok = true): RunSample => ({ profileId, succeeded: ok, usd, durationMs: 1000, at });
 const card = (id: string, over: Partial<ProfileCard> = {}): ProfileCard => ({
-  id, kinds: ["write"], integration: "pending", strengths: [], cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
+  id, kinds: ["write"], integration: "pending", tier: "standard", pool: null, strengths: [], cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
 });
 const est = (usd: number): ProfileCard["cost"] => ({ basis: "estimated", usdPerRun: usd, low: usd, high: usd * 2, n: 5 });
 
@@ -254,7 +254,7 @@ describe("supervisor with a catalog", () => {
     assert.equal(out.plan.tasks[0]!.profile, "good");
     const firstPrompt = JSON.stringify(m.seen[0]);
     assert.match(firstPrompt, /AVAILABLE AGENT PROFILES/);
-    assert.match(firstPrompt, /good: can write; strengths code; estimated/);
+    assert.match(firstPrompt, /good \[standard\]: can write; strengths code; estimated/);
     assert.doesNotMatch(firstPrompt, /\boff\b: can/, "disabled profiles are not offered");
     assert.match(JSON.stringify(m.seen[1]), /PROFILE_UNKNOWN/);
   });

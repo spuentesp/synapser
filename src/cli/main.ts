@@ -13,10 +13,12 @@
 //   synapser advisor release <workflow> <task> release a held task
 //   synapser effect list <workflow>           effects requested, with state and what they would do
 //   synapser policy show                      the effect policy in force
+//   synapser doctor [--json]                  what is installed and usable, and what to enable
 //   synapser config show
 // Global: --config FILE  --workspace DIR  --state DIR
 
 import { readFileSync } from "node:fs";
+import { doctor } from "./doctor.ts";
 import { createRuntime } from "./runtime.ts";
 import { ConfigError, loadConfig } from "../config/load.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
@@ -56,6 +58,15 @@ async function main(): Promise<void> {
 
   if (cmd === "config" && sub === "show") return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id) });
   if (cmd === "policy" && sub === "show") return say(cfg.policy);
+  if (cmd === "doctor") {
+    const rep = await doctor(cfg);
+    if (sub === "--json" || argv.includes("--json")) return say(rep);
+    for (const c of rep.checks) console.log(`${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
+    console.log("\nAgents:");
+    for (const a of rep.agents) console.log(`${a.available ? "✓" : "✗"} ${a.id.padEnd(22)} ${a.tier.padEnd(9)} ${a.role.padEnd(8)} ${a.enabledInConfig ? "enabled " : "        "} ${a.detail}`);
+    if (rep.suggestions.length) console.log(`\nSuggestions:\n- ${rep.suggestions.join("\n- ")}`);
+    return void (process.exitCode = rep.ok ? 0 : 1);
+  }
 
   const rt = createRuntime(cfg);
   const m = rt.manager;

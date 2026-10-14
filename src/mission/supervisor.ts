@@ -26,6 +26,7 @@ export const PLAN_SCHEMA = {
           deps: { type: "array", items: { type: "string" } },
           priority: { type: "integer" },
           serves: { type: "array", items: { type: "string" } },
+          tier: { type: "string", enum: ["cheap", "standard", "advanced"] },
           kind: { type: "string", enum: ["write", "advise", "research", "review"] },
           profile: { type: "string" },
           tags: { type: "array", items: { type: "string" } },
@@ -82,11 +83,12 @@ export function catalogBlock(catalog: readonly ProfileCard[]): string {
     .filter((c) => c.enabled)
     .map((c) => {
       const cost = c.cost.basis === "unknown" ? "cost unknown" : `${c.cost.basis} ~$${c.cost.usdPerRun.toFixed(3)}/run`;
-      return `- ${c.id}: can ${c.kinds.join("/")}; strengths ${c.strengths.join(", ") || "-"}; ${cost}`;
+      return `- ${c.id} [${c.tier}]: can ${c.kinds.join("/")}; strengths ${c.strengths.join(", ") || "-"}; ${cost}`;
     });
   return [
     "AVAILABLE AGENT PROFILES (you may SUGGEST one per task in `profile`, and tag the task in `tags`; the system makes the final assignment):",
     ...rows,
+    "Set `tier` per task: cheap (one-shot chores: renames, small edits, boilerplate), standard (building features), advanced (research, review, hard design or risky changes). The system uses the cheapest agent at or above that tier and escalates on failure.",
     "Use kind \"advise\" or \"review\" for steps that only inspect (they cannot change files). Add gates [\"approval\"] only to risky or irreversible steps.",
   ].join("\n");
 }

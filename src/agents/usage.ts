@@ -239,7 +239,18 @@ export function parseMimo(stdout: string): ParsedRun {
   };
 }
 
+/**
+ * For a generic CLI that prints no events. The ONLY evidence is its exit code (the runner downgrades a
+ * non-zero exit to FAILED) and, later, whether its change set integrates and passes acceptance. Usage is
+ * UNKNOWN and says so: nothing is invented.
+ */
+function parsePlain(out: string): ParsedRun {
+  const tail = out.trim().split("\n").slice(-12).join("\n").slice(-1500);
+  return { outcome: "SUCCEEDED", reason: null, finalText: tail || null, sessionId: null, permissionDenials: null, toolUse: null, usage: unknownUsage("a plain CLI reports no usage") };
+}
+
 export const PARSERS = {
+  plain: (out: string) => parsePlain(out),
   "claude-json": (out: string) => parseClaude(out),
   "codex-jsonl": (out: string) => parseCodex(out),
   "kimi-stream": (out: string, o?: KimiOptions) => parseKimi(out, o),

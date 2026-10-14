@@ -5,6 +5,7 @@ import { Journal } from "../journal/journal.ts";
 import { type SynapserConfig } from "../config/load.ts";
 import { defaultModelConfig, journalRecorder, OpenAICompatibleProvider } from "../model/index.ts";
 import { buildCatalog, type ProfileCard } from "../orchestration/catalog.ts";
+import { loadHistory } from "../orchestration/history.ts";
 import { QueryGuard, researchFromEnv, ResearchSession } from "../research/index.ts";
 import { ProductionEngine } from "../workflow/engine.ts";
 import { WorkflowManager } from "../workflow/manager.ts";
@@ -26,6 +27,8 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     models: (journal) => new OpenAICompatibleProvider({ config: defaultModelConfig(), onCall: journalRecorder(journal) }),
     ...(cfg.research ? { research: (journal: Journal, runId: string) => new ResearchSession({ port: researchFromEnv(), journal, runId, guard: new QueryGuard(cfg.workspace) }) } : {}),
     knownUsdPerRun: cfg.knownUsdPerRun,
+    history: (journal) => loadHistory(cfg.stateDir, journal.runId),
+    pools: cfg.pools,
     limits: cfg.limits,
     delegation: cfg.delegation,
     ...(cfg.advisor.enabled ? { advisor: { enabled: true, pushback: cfg.advisor.pushback, maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } } : {}),

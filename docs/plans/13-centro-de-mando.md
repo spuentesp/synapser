@@ -371,3 +371,14 @@ humana con desafío y, aprobado, revierte y devuelve la tarea a PENDING con la n
 → búsquedas (con la guarda de salida) → hallazgos que solo citan fuentes realmente recuperadas (P1) → la
 tarea queda retenida tras una decisión humana. Superficie: herramientas MCP `advise`, `intervention_list`,
 `intervention_apply`; CLI `advisor list|ask|apply|release`. Verificado en vivo con Nemotron y Tavily.
+
+**P4 (hecho):** niveles `cheap | standard | advanced` en perfiles y catálogo; el planificador marca
+`tier` por tarea y el enrutador usa el nivel **más bajo que cumpla el piso** (T1, propiedad con 300
+catálogos aleatorios); **escalera** por fallo: cada intento fallido sube el piso exactamente un nivel,
+finita en tres peldaños y con cada reintento en el ledger (T2); **pools** con `maxConcurrent` por grupo de
+agentes, FIFO, un trabajo que lanza error libera su cupo (T3). Agentes configurables en `synapser.config.json`:
+extender un perfil, apuntar a **cualquier endpoint compatible con OpenAI** (mismo bucle y ejecutor, otro
+cerebro; el uso se registra y un modelo sin precio queda como costo desconocido) o envolver **cualquier
+CLI** (parser `plain`: solo código de salida y resultado de aceptación, uso desconocido). Configuración
+rechazada entera con todos los problemas (K2). `synapser doctor` sondea qué hay instalado y usable y
+sugiere qué habilitar sin habilitar nada. El costo se aprende del historial de corridas anteriores.

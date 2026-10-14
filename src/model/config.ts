@@ -92,3 +92,17 @@ export function resolveApiKey(p: ProviderConfig, env: NodeJS.ProcessEnv = proces
   }
   throw new ModelError("CONFIG", `no API key in environment (tried ${p.apiKeyEnv.join(", ")})`);
 }
+
+/** A model config whose every role goes to ONE custom OpenAI-compatible endpoint (an `endpoint` agent). */
+export function modelConfigForEndpoint(ep: { baseUrl: string; model: string; apiKeyEnv: readonly string[]; temperature?: number }): ModelConfig {
+  const base = defaultModelConfig();
+  const role = { provider: "custom", model: ep.model, temperature: ep.temperature ?? 0 };
+  const cfg: ModelConfig = {
+    ...base,
+    providers: { custom: { baseUrl: ep.baseUrl, apiKeyEnv: [...ep.apiKeyEnv] } },
+    roles: { supervisor: role, worker: role, repair: role, advisor: role, chat: role },
+    maxRetries: 1,
+  };
+  validateConfig(cfg);
+  return cfg;
+}

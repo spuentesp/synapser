@@ -10,6 +10,7 @@ import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ValidationPort, ValidationResult } from "../validation/runner.ts";
 import type { ZooCollector } from "../zoo/collector.ts";
+import { TIERS, tierRank, type Tier } from "../agents/profile.ts";
 import { announceIntent, type IntentSink } from "../zoo/intent.ts";
 import { DelegationBroker, type DelegationConfig } from "../orchestration/delegation.ts";
 import { approvalStatus, currentPlanDigest, decideApproval, requestApproval } from "../orchestration/gates.ts";
@@ -138,6 +139,8 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
           ...(pt.profile ? { profile: pt.profile } : {}),
           ...(pt.tags ? { tags: pt.tags } : {}),
           ...(pt.gates ? { gates: pt.gates } : {}),
+          ...(pt.tier ? { tier: pt.tier } : {}),
+          ...(pt.serves ? { serves: pt.serves } : {}),
           depth: 0,
         },
         planRevision: 1,
@@ -176,7 +179,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
 
   // ---- task executors ------------------------------------------------------------------------
   const announced = new Set<string>();
-  const attemptOnce = async (id: string, exclude: readonly string[]): Promise<Outcome & { profileId?: string }> => {
+  const attemptOnce = async (id: string, exclude: readonly string[], minTier?: Tier): Promise<Outcome & { profileId?: string; tier?: Tier }> => {
     const row = specOf(id)!;
     if (deps.intent && !announced.has(id)) {
       announced.add(id);
@@ -194,8 +197,9 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         { taskId: id, scope: row.scope, spec: { ...row.spec, context } } as StepRow,
         broker,
         exclude,
+        minTier,
       );
-      return { taskId: id, ok: o.ok, label: o.label, ...(o.profileId ? { profileId: o.profileId } : {}), ...(o.detail ? { detail: o.detail } : {}) };
+      return { taskId: id, ok: o.ok, label: o.label, ...(o.profileId ? { profileId: o.profileId } : {}), ...(o.tier ? { tier: o.tier } : {}), ...(o.detail ? { detail: o.detail } : {}) };
     }
     const r: TaskRunResult = await runTask(
       {
@@ -233,6 +237,9 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
 
   const runAgent = async (id: string): Promise<Outcome> => {
     const tried: string[] = [];
+    // the ESCALATION LADDER (T2): each failed attempt raises the floor by one tier, so a chore that the
+    // cheap agent botched goes to a standard one, then an advanced one — finite, three rungs
+    let floor: Tier | undefined;
     announced.delete(id);
     let last: Outcome = { taskId: id, ok: false, label: "NOT_RUN" };
     // a preflight critique may put the task behind a human decision before anything is spent on it
@@ -242,7 +249,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     }
     for (let attempt = 1; attempt <= Math.max(1, L.maxTaskAttempts); attempt++) {
       if (!(await waitWhileHeld(id))) return { taskId: id, ok: false, label: "TIME_BUDGET_EXHAUSTED" };
-      const r = await attemptOnce(id, tried);
+      const r = await attemptOnce(id, tried, floor);
       if (r.label === "HELD") {
         // not a failure: the advisor paused it mid-run; resume the SAME attempt number once released
         attempt--;
@@ -251,6 +258,10 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       last = { taskId: id, ok: r.ok, label: r.label, ...(r.detail ? { detail: r.detail } : {}) };
       if (r.ok) return last;
       if (r.profileId) tried.push(r.profileId);
+      if (r.tier) {
+        const next = TIERS[Math.min(TIERS.length - 1, tierRank(r.tier) + 1)] as Tier;
+        if (tierRank(next) > tierRank(floor ?? "cheap")) floor = next;
+      }
       if (!RETRYABLE.has(r.label) || attempt >= L.maxTaskAttempts || Date.now() > deadline) break;
       // let the advisor look at what went wrong BEFORE the retry (it may inject guidance, hold, or escalate)
       if (deps.advisor) {

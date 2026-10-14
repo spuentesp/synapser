@@ -3,7 +3,7 @@
 // known (a published tariff), estimated (learned, with a range) or unknown — never confused.
 
 import type { Journal } from "../journal/journal.ts";
-import { type AgentProfile, adapterOf } from "../agents/profile.ts";
+import { type AgentProfile, adapterOf, type Tier } from "../agents/profile.ts";
 
 export const STEP_KINDS = ["write", "advise", "research", "review"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
@@ -17,6 +17,8 @@ export interface ProfileCard {
   id: string;
   kinds: StepKind[];
   integration: "direct" | "pending";
+  tier: Tier;
+  pool: string | null;
   strengths: string[];
   cost: CostEstimate;
   observed: { runs: number; succeeded: number; medianMs: number } | null;
@@ -85,6 +87,8 @@ export function buildCatalog(profiles: readonly AgentProfile[], samples: readonl
       id: p.id,
       kinds,
       integration: adapterOf(p) === "native" ? "direct" : "pending",
+      tier: p.tier ?? "standard",
+      pool: p.pool ?? null,
       strengths: [...p.tags],
       cost,
       observed: mine.length === 0 ? null : { runs: mine.length, succeeded: mine.filter((s) => s.succeeded).length, medianMs: median(mine.map((s) => s.durationMs)) },

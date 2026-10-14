@@ -24,6 +24,8 @@ export interface PlanTask {
   tags?: string[];
   /** Ids of the workflow conditions this task works towards (plan 13 §4.2). */
   serves?: string[];
+  /** The lowest agent tier that should do it: cheap (one-shot chore), standard (build), advanced (research/review/hard). */
+  tier?: "cheap" | "standard" | "advanced";
 }
 export interface Plan {
   tasks: PlanTask[];
@@ -43,6 +45,10 @@ export interface ValidateOptions {
   budgetUsd?: number;
   /** Workflow conditions: `serves` must name known ids, and every id in `mustServe` needs ≥1 task. */
   conditions?: { known: ReadonlySet<string>; mustServe: ReadonlySet<string> };
+}
+
+function errs_tier(errors: string[], at: string): void {
+  errors.push(`${at}.tier INVALID_TIER: must be cheap, standard or advanced`);
 }
 
 export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
@@ -105,6 +111,10 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
       if (Array.isArray(o["tags"]) && o["tags"].every((x) => typeof x === "string" && x.length <= 40)) task.tags = o["tags"] as string[];
       else errors.push(`${at}.tags must be an array of short strings`);
     }
+    if (o["tier"] !== undefined) {
+      if (o["tier"] === "cheap" || o["tier"] === "standard" || o["tier"] === "advanced") task.tier = o["tier"];
+      else errs_tier(errors, at);
+    }
     if (o["serves"] !== undefined) {
       if (Array.isArray(o["serves"]) && o["serves"].every((x) => typeof x === "string" && x.length <= 41)) task.serves = o["serves"] as string[];
       else errors.push(`${at}.serves must be an array of condition ids`);
@@ -141,8 +151,8 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
   }
   if (opts.catalog) {
     for (const t of tasks) {
-      const d = route({ kind: t.kind ?? "write", suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}) }, opts.catalog);
-      if (!d.ok) errors.push(`task "${t.id}": NO_ROUTE (no enabled profile can do a ${t.kind ?? "write"} step)`);
+      const d = route({ kind: t.kind ?? "write", suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.tier ? { minTier: t.tier } : {}) }, opts.catalog);
+      if (!d.ok) errors.push(`task "${t.id}": NO_ROUTE (no enabled profile can do a ${t.kind ?? "write"} step${t.tier ? ` at tier ${t.tier} or above` : ""})`);
     }
     if (opts.budgetUsd !== undefined && errors.length === 0) {
       const c = planCost(tasks.map((t) => ({ id: t.id, kind: t.kind ?? "write", profile: t.profile, ...(t.tags ? { tags: t.tags } : {}) })), opts.catalog);

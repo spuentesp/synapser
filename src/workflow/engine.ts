@@ -23,6 +23,10 @@ import { ZooCollector } from "../zoo/collector.ts";
 import { zooIntentSink } from "../zoo/intent.ts";
 import { loadPin } from "../zoo/pin.ts";
 import { Advisor } from "../advisor/advisor.ts";
+import { PoolLimiter, type PoolSpec } from "../orchestration/pools.ts";
+import { modelConfigForEndpoint } from "../model/config.ts";
+import { journalRecorder } from "../model/recorder.ts";
+import { OpenAICompatibleProvider } from "../model/openai-compatible-provider.ts";
 import { DelegationBroker } from "../orchestration/delegation.ts";
 import { approvalWaiter, baselineOf, evaluateWorkflow } from "./checkers.ts";
 import type { EngineResult, EngineRun, WorkflowEngine } from "./manager.ts";
@@ -43,6 +47,8 @@ export interface EngineConfig {
   planner?: (w: Workflow, catalog: ProfileCard[], journal: Journal) => Promise<Plan>;
   limits?: { concurrency?: number; maxRepairRounds?: number; maxTaskAttempts?: number; missionMs?: number; maxTokens?: number };
   delegation?: Partial<DelegationConfig>;
+  /** Concurrency limits per pool of agents. */
+  pools?: PoolSpec[];
   /** The advisor (plan 13 §6). Off when `enabled` is false. `pushback`: critique tasks with Tavily before dispatch. */
   advisor?: { enabled: boolean; pushback?: "off" | "writes"; maxConsults?: number; maxPerTask?: number };
   /** Poll period while waiting for a human on an approval condition / gate. */
@@ -81,7 +87,19 @@ export class ProductionEngine implements WorkflowEngine {
       r.mark("RUNNING");
 
       const profileIds = new Set(c.profiles.map((p) => p.id));
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research), new CliOneShotRunner()]);
+      // an `endpoint` agent brings its own brain (any OpenAI-compatible server); calls are recorded here
+      const own = new Map<string, ModelPort>();
+      const modelFor = (p: AgentProfile): ModelPort | null => {
+        if (!p.endpoint) return null;
+        let m = own.get(p.id);
+        if (!m) {
+          m = new OpenAICompatibleProvider({ config: modelConfigForEndpoint(p.endpoint), onCall: journalRecorder(journal) });
+          own.set(p.id, m);
+        }
+        return m;
+      };
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner()]);
+      const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;
       const validation = new LocalRunner({ journal, runId, workspaceRoot: c.workspaceRoot, commands: c.commands, generation: lock.generation });
@@ -177,6 +195,7 @@ export class ProductionEngine implements WorkflowEngine {
             catalog, profiles: c.profiles, registry, executor, workspaceRoot: c.workspaceRoot, generation: lock.generation,
             approval: { pollMs: c.pollMs ?? 250 },
             effects: r.effects,
+            ...(pools ? { pools } : {}),
           },
         },
         {

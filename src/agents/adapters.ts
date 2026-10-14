@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { runTask } from "../agent/loop.ts";
 import { taskPrompt } from "../agent/prompts.ts";
+import type { AgentProfile } from "./profile.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { treeDigest } from "../validation/snapshot.ts";
@@ -61,10 +62,16 @@ export class NativeLoopRunner implements AgentRunner {
   readonly #model: ModelPort;
   readonly #limits: Partial<LoopLimits> | undefined;
   readonly #research: ResearchSession | undefined;
-  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession) {
+  readonly #modelFor: ((p: AgentProfile) => ModelPort | null) | undefined;
+  /**
+   * `modelFor` lets a profile carry its OWN endpoint (any OpenAI-compatible server): the same loop, the
+   * same executor, a different brain. Returning null falls back to the shared model.
+   */
+  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession, modelFor?: (p: AgentProfile) => ModelPort | null) {
     this.#model = model;
     this.#limits = limits;
     this.#research = research;
+    this.#modelFor = modelFor;
   }
 
   async run(req: AgentRunRequest): Promise<AgentRunOutput> {
@@ -77,7 +84,7 @@ export class NativeLoopRunner implements AgentRunner {
 
     const r = await runTask(
       {
-        model: this.#model,
+        model: this.#modelFor?.(req.profile) ?? this.#model,
         executor: req.executor,
         journal,
         runId: req.runId,
