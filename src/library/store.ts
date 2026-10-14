@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { canonicalJson, type CanonicalOptions } from "../digest/canonical.ts";
 import { type Digest, isDigest, sha256Bytes } from "../digest/file.ts";
 import { fsyncDir, writeFileDurable } from "../journal/artifacts.ts";
-import type { EventRow, Journal } from "../journal/journal.ts";
+import { type EventRow, Journal } from "../journal/journal.ts";
 
 export const LIBRARY_KINDS = ["providers", "skills", "templates", "agents"] as const;
 export type LibraryKind = (typeof LIBRARY_KINDS)[number];
@@ -46,16 +46,21 @@ const ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 export class LibraryStore {
   readonly root: string;
   readonly #journal: Journal;
+  readonly #readOnly: boolean;
 
-  constructor(stateDir: string, serverJournal: Journal) {
+  /** A read-only handle writes nothing: no projection, no sync, and every write is refused (doctor, config show). */
+  constructor(stateDir: string, serverJournal: Journal, opts: { readOnly?: boolean } = {}) {
     if (serverJournal.runId !== "_server") throw new Error("library changes must use the _server journal");
     this.root = join(stateDir, "library");
     this.#journal = serverJournal;
+    this.#readOnly = opts.readOnly === true;
+    if (this.#readOnly) return;
     mkdirSync(this.root, { recursive: true });
     this.sync();
   }
 
   put(kind: LibraryKind, id: string, document: LibraryDocument, actor: string): { entry: LibraryEntry; changed: boolean } {
+    this.#assertWritable();
     checkIdentity(kind, id, actor);
     if (!document || Array.isArray(document) || Object.getPrototypeOf(document) !== Object.prototype) throw new Error("library document must be a plain object");
     if (document["id"] !== undefined && document["id"] !== id) throw new Error(`document id does not match ${id}`);
@@ -80,6 +85,7 @@ export class LibraryStore {
   }
 
   remove(kind: LibraryKind, id: string, actor: string): boolean {
+    this.#assertWritable();
     checkIdentity(kind, id, actor);
     const current = this.get(kind, id);
     if (!current) {
@@ -141,6 +147,10 @@ export class LibraryStore {
     }
   }
 
+  #assertWritable(): void {
+    if (this.#readOnly) throw new Error("this library handle is read-only");
+  }
+
   #events(): EventRow[] {
     return this.#journal.listEvents().filter((event) => event.entity === "library_change");
   }
@@ -192,6 +202,20 @@ export class LibraryStore {
       if (existsSync(path)) unlinkSync(path);
     }
     if (existsSync(base)) fsyncDir(base);
+  }
+}
+
+/**
+ * The library as the ledger records it, for doctor and config show. It creates no journal and materialises no
+ * projection; a missing server journal reads as an empty library.
+ */
+export function readLibrary(stateDir: string): LibraryEntry[] {
+  if (!existsSync(join(stateDir, "_server", "journal.db"))) return [];
+  const journal = Journal.open(stateDir, "_server");
+  try {
+    return new LibraryStore(stateDir, journal, { readOnly: true }).list();
+  } finally {
+    journal.close();
   }
 }
 

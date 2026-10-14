@@ -24,6 +24,7 @@ import { doctor } from "./doctor.ts";
 import { createRuntime } from "./runtime.ts";
 import { ConfigError, loadConfig } from "../config/load.ts";
 import { testProviderConnection } from "../model/connection.ts";
+import { readLibrary } from "../library/store.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { Actor } from "../workflow/manager.ts";
@@ -59,7 +60,16 @@ async function main(): Promise<void> {
   if (st) cfg = { ...cfg, stateDir: st };
   const [cmd, sub, a, b] = argv;
 
-  if (cmd === "config" && sub === "show") return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id) });
+  if (cmd === "config" && sub === "show") {
+    // the library next to the file (plan 14 Q2.7): its index only; the documents are read through the API
+    let library: unknown;
+    try {
+      library = readLibrary(cfg.stateDir).map(({ kind, id, digest, seq, actor }) => ({ kind, id, digest, seq, actor }));
+    } catch (e) {
+      library = { error: String((e as Error).message ?? e).slice(0, 200) };
+    }
+    return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id), library });
+  }
   if (cmd === "policy" && sub === "show") return say(cfg.policy);
   if (cmd === "provider" && sub === "test") {
     const id = a ?? "";

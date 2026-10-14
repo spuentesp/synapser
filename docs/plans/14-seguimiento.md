@@ -12,7 +12,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 - Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
   plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
-  Estado al traspaso: 424 pasan, 0 fallan, 9 omitidas (433 pruebas). Una tarea no está hecha si baja ese número.
+  Estado al traspaso: 452 pasan, 0 fallan, 9 omitidas (461 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
   (gitignored); **nunca** imprimirlas ni commitearlas; revisar el diff antes de cada commit.
 - Commits: mensaje claro, cuerpo con el porqué, y cerrar con `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -119,8 +119,13 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
   guardia (`writeAllowed`) sustituye las tres copias. Precios decimales: `test/library/decimals.test.ts`, con la
   opción `decimals` de la forma canónica solo para la biblioteca (ver decisiones abiertas). Suite completa.
-- [~] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo. commit: PENDING · prueba:
+  `test/library/read.test.ts` (sin biblioteca no se crea journal; leer no materializa la proyección; doctor muestra
+  el índice, informa la clave de cada proveedor de biblioteca sin que sea fatal y falla un documento que ya no cumple
+  sus reglas; `config show` lista el índice sin documentos; un manejador de solo lectura rechaza escrituras). Falsada
+  con una lectura que sincroniza. Suite completa.
+  nota: ninguna corrida usa aún proveedores ni agentes de la biblioteca; el archivo sigue siendo la fuente de
+  ejecución. Cuando un consumidor los lea, pasa por el manejador congelado de Q2.5.
 
 ### Q3 — Diseñadores y plantillas (UI)
 
@@ -172,3 +177,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q2.4: prueba de conexión por proveedor (`src/model/connection.ts`) y CLI `provider test`; la clave no aparece en el informe. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.5: instantánea de la biblioteca por corrida, copiada a sus artefactos; el manejador congelado es la única vía de lectura de la corrida. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.6: `/api/library` (lectura abierta; escritura con token y mismo origen); validación completa por tipo; guardia único; precios decimales en la biblioteca con la opción `decimals`. |
+| 2026-10-14 | Claude Haiku 5.5 | Q2.7: `doctor` y `config show` leen la biblioteca con un manejador de solo lectura (sin sincronizar ni crear journal). |

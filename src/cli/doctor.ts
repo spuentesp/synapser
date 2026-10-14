@@ -6,6 +6,8 @@ import { accessSync, constants, existsSync, mkdirSync } from "node:fs";
 import type { AgentProfile } from "../agents/profile.ts";
 import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
+import { readLibrary } from "../library/store.ts";
+import { validateLibraryDocument } from "../library/validate.ts";
 
 export interface Probe {
   /** Resolve a program on PATH; null when absent. */
@@ -89,6 +91,26 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   checks.push({ name: "search key (Tavily)", ok: hasSearch, detail: hasSearch ? "set" : "not set — research and pushback are off (never simulated)" });
   checks.push({ name: "commands", ok: cfg.commands.length > 0, detail: cfg.commands.length ? cfg.commands.map((c) => c.id).join(", ") : "no allowlisted commands: `command` conditions cannot be used" });
 
+  // the operator library (plan 14 Q2.7): read from the ledger, never materialised; its documents must still pass
+  // their rules, and the keys of its providers are reported as information (no run uses a library provider yet)
+  let library: ReturnType<typeof readLibrary> = [];
+  try {
+    library = readLibrary(cfg.stateDir);
+    const count = (kind: string) => library.filter((e) => e.kind === kind).length;
+    checks.push({ name: "library", ok: true, detail: library.length ? `providers ${count("providers")} · agents ${count("agents")} · skills ${count("skills")} · templates ${count("templates")}` : "empty" });
+  } catch (e) {
+    checks.push({ name: "library", ok: false, detail: `cannot be read: ${String((e as Error).message ?? e).slice(0, 200)}` });
+  }
+  for (const entry of library) {
+    const problems = validateLibraryDocument(entry.kind, entry.id, entry.document);
+    if (problems.length) checks.push({ name: `library ${entry.kind}/${entry.id}`, ok: false, detail: problems.join("; ") });
+    const names = entry.document["apiKeyEnv"];
+    if (entry.kind === "providers" && Array.isArray(names)) {
+      const hasKey = names.some((n) => probe.env(String(n)));
+      checks.push({ name: `library provider key (${entry.id})`, ok: hasKey, detail: hasKey ? "set" : `none of ${names.join(" / ")} is set` });
+    }
+  }
+
   const agents: DoctorReport["agents"] = [];
   const all = new Map<string, AgentProfile>([...BUILTIN_PROFILES, ...cfg.profiles].map((p) => [p.id, p]));
   for (const p of all.values()) {
@@ -126,5 +148,6 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   if (!agents.some((a) => a.enabledInConfig && a.available && a.role === "advisor")) suggestions.push("no usable advisor-role agent is enabled: `review` conditions and advise steps cannot run");
   // limitations, not faults: no search key (research is off, never simulated) and no allowlisted commands
   const advisory = new Set(["search key (Tavily)", "commands"]);
-  return { ok: checks.every((c) => c.ok || advisory.has(c.name)), checks, agents, suggestions };
+  const informational = (name: string): boolean => advisory.has(name) || name.startsWith("library provider key");
+  return { ok: checks.every((c) => c.ok || informational(c.name)), checks, agents, suggestions };
 }
