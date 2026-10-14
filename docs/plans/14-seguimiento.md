@@ -70,7 +70,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   suite completa; falsación de procedencia/digest/rutas y de ampliación de permisos; corrida del runner
   con archivo de skill en HOME efímero y auditoría en fila + evento.
 - [x] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
-  `--help` del binario real (omitida si el binario no está). commit: 0000000 · prueba: igualdad entre
+  `--help` del binario real (omitida si el binario no está). commit: 3966715 · prueba: igualdad entre
   flags construidos y `capabilities.cliFlags`; contraste con `--help` real de Claude, Codex, Kimi y MiMo;
   suite completa.
 - [ ] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
