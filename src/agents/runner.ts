@@ -5,7 +5,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Digest, MAX_ACTION_FILE_BYTES, observeFile } from "../digest/file.ts";
@@ -53,15 +53,59 @@ export interface AgentRunResult {
 export const AGENT_METADATA = new Set([".claude", ".codex", ".kimi", ".kimi-code", ".mimo", ".mimocode", ".opencode", ".cursor", ".gemini", ".aider.tags.cache.v3"]);
 
 const ENV_ALLOW = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TZ", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "CODEX_HOME", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"];
+/** Variables that would let a git/ssh/gh call inside the agent authenticate or even prompt. */
+export const CREDENTIAL_ENV_DENY = /^(SSH_|GPG_|GH_|GITHUB_|GITLAB_|GIT_ASKPASS|GIT_SSH|NPM_|NODE_AUTH|AWS_|AZURE_|GOOGLE_APPLICATION|DOCKER_|KUBE)/i;
+/**
+ * Plan 13 §5.2: the agent must lack the CAPABILITY to publish. Git is pointed at nothing (no global or
+ * system config, no credential helper, no askpass, no ssh), and the copy it edits has no `.git`.
+ */
+export const GIT_HARDENING: Readonly<Record<string, string>> = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_ASKPASS: "/bin/false",
+  SSH_ASKPASS: "/bin/false",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_SSH_COMMAND: "/bin/false",
+  GCM_INTERACTIVE: "never",
+};
 const SECRET_NAME = /(NEBIUS|NEMOTRON|TAVILY|API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i;
 const MAX_OUT = 4 * 1024 * 1024;
 
 /** Environment for the CLI: an allowlist. Our own credentials never reach a third-party agent. */
-export function buildAgentEnv(profile: AgentProfile, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function buildAgentEnv(profile: AgentProfile, source: NodeJS.ProcessEnv = process.env, opts: { home?: string } = {}): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const k of ENV_ALLOW) if (source[k] !== undefined && !SECRET_NAME.test(k)) env[k] = source[k] as string;
-  for (const [k, v] of Object.entries(profile.env ?? {})) env[k] = v;
+  for (const k of ENV_ALLOW) if (source[k] !== undefined && !SECRET_NAME.test(k) && !CREDENTIAL_ENV_DENY.test(k)) env[k] = source[k] as string;
+  if (opts.home) {
+    // a scratch HOME: the CLI sees its own settings (overlay) and nothing else of the user's
+    env["HOME"] = opts.home;
+    env["XDG_CONFIG_HOME"] = join(opts.home, ".config");
+    env["XDG_DATA_HOME"] = join(opts.home, ".local/share");
+    env["XDG_CACHE_HOME"] = join(opts.home, ".cache");
+    env["XDG_STATE_HOME"] = join(opts.home, ".local/state");
+  }
+  Object.assign(env, GIT_HARDENING);
+  for (const [k, v] of Object.entries(profile.env ?? {})) if (!CREDENTIAL_ENV_DENY.test(k) && !SECRET_NAME.test(k)) env[k] = v;
   return env;
+}
+
+/** Link ONLY the tool's own settings into a scratch HOME. Returns the scratch HOME path. */
+export function makeScratchHome(scratch: string, profile: AgentProfile, realHome: string | undefined): string {
+  const home = join(scratch, "home");
+  mkdirSync(home, { recursive: true });
+  for (const rel of profile.homeOverlay ?? []) {
+    if (!realHome || rel.startsWith("/") || rel.includes("..")) continue;
+    const src = join(realHome, rel);
+    if (!existsSync(src)) continue;
+    const dst = join(home, rel);
+    mkdirSync(join(dst, ".."), { recursive: true });
+    try {
+      symlinkSync(src, dst);
+    } catch {
+      /* already linked */
+    }
+  }
+  return home;
 }
 
 export interface RunAgentOptions {
@@ -100,7 +144,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       let timedOut = false;
       let child;
       try {
-        child = spawn(argv[0] as string, argv.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: buildAgentEnv(profile, o.envSource) });
+        child = spawn(argv[0] as string, argv.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: buildAgentEnv(profile, o.envSource ?? process.env, { home: makeScratchHome(scratch, profile, (o.envSource ?? process.env)["HOME"]) }) });
       } catch (e) {
         return resolve({ code: null, signal: null, timedOut: false, stdout, stderr, spawnError: String((e as Error).message) });
       }

@@ -2,7 +2,8 @@
 // The broker side runs against the REAL executor, journal and zoanthrope.
 
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -104,16 +105,57 @@ describe("runner (isolation + observation)", () => {
     assert.equal(journal.listAgentRuns().length, 1);
   });
 
-  test("our credentials never reach a third-party CLI; HOME and PATH do", async () => {
+  test("our credentials never reach a third-party CLI; PATH does, and HOME is a scratch directory", async () => {
     const r = await run("env", {}, {
       envSource: { PATH: process.env["PATH"], HOME: "/home/someone", NEBIUS_API_KEY: "SECRET-1", NEMOTRON_TOKEN: "SECRET-2", TAVILY_TOKEN: "SECRET-3", ANTHROPIC_API_KEY: "SECRET-4" },
     });
     assert.equal(r.outcome, "SUCCEEDED");
     const envFile = r.changes.find((c) => c.path === "env.txt")!;
     const env = JSON.parse(journal.artifacts.get(envFile.afterBlob!).toString()) as Record<string, string>;
-    assert.equal(env["HOME"], "/home/someone");
+    assert.notEqual(env["HOME"], "/home/someone", "the real HOME (ssh keys, gitconfig, gh) is not visible to the agent");
+    assert.match(env["HOME"] ?? "", /synapser-agent-.*\/home$/);
     assert.ok(env["PATH"]);
     for (const k of ["NEBIUS_API_KEY", "NEMOTRON_TOKEN", "TAVILY_TOKEN", "ANTHROPIC_API_KEY"]) assert.equal(k in env, false, `${k} leaked`);
+  });
+
+  test("PLAN 13 §5.2: an agent that tries to publish from its copy cannot — no repository, no credentials, no config", async () => {
+    // a real repository with a real remote, and every credential variable present in the parent env
+    const bare = realpathSync(mkdtempSync(join(tmpdir(), "bare-")));
+    execFileSync("git", ["init", "--bare", "-q", "-b", "main", bare]);
+    execFileSync("git", ["init", "-q", "-b", "main", ws]);
+    execFileSync("git", ["-C", ws, "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"]);
+    execFileSync("git", ["-C", ws, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"]);
+    execFileSync("git", ["-C", ws, "remote", "add", "origin", bare]);
+    const realHome = realpathSync(mkdtempSync(join(tmpdir(), "realhome-")));
+    writeFileSync(join(realHome, ".gitconfig"), "[credential]\n\thelper = store\n[user]\n\tname = Real Person\n");
+    mkdirSync(join(realHome, ".ssh"));
+    writeFileSync(join(realHome, ".ssh", "id_ed25519"), "PRIVATE");
+    mkdirSync(join(realHome, ".claude"));
+    writeFileSync(join(realHome, ".claude", "settings.json"), "{}");
+
+    const r = await run("try-push", { homeOverlay: [".claude"] }, {
+      envSource: { PATH: process.env["PATH"], HOME: realHome, SSH_AUTH_SOCK: "/tmp/agent.sock", GH_TOKEN: "ghp_x", GITHUB_TOKEN: "ghp_y", GIT_ASKPASS: "/usr/bin/askpass", AWS_SECRET_ACCESS_KEY: "k" },
+    });
+    assert.equal(r.outcome, "SUCCEEDED");
+    const rec = JSON.parse(journal.artifacts.get(r.changes.find((c) => c.path === "push-attempts.json")!.afterBlob!).toString()) as {
+      attempts: { cmd: string; ok: boolean }[]; home: string; env: string[];
+    };
+    const byCmd = Object.fromEntries(rec.attempts.map((a) => [a.cmd.split(" ").slice(0, 2).join(" "), a]));
+    assert.equal(byCmd["git push"]!.ok, false, "cannot push: its copy is not a repository");
+    assert.equal(byCmd["git remote"]!.ok, false, "no remote exists in its copy");
+    // `git config --global` points at /dev/null: it succeeds and says NOTHING — the user's identity and helpers are invisible
+    assert.deepEqual([byCmd["git config"]!.ok, (byCmd["git config"] as { out?: string }).out], [true, ""]);
+    assert.equal(byCmd["ssh -o"]!.ok, false, "no key, no agent: authentication cannot succeed");
+    assert.equal(JSON.stringify(rec).includes("Real Person"), false);
+    assert.notEqual(rec.home, realHome);
+    for (const k of ["SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY"]) assert.equal(rec.env.includes(k), false, `${k} reached the agent`);
+    assert.ok(rec.env.includes("GIT_CONFIG_GLOBAL") && rec.env.includes("GIT_TERMINAL_PROMPT"));
+    // the remote is untouched
+    const refs = execFileSync("git", ["-C", bare, "for-each-ref"], { encoding: "utf8" });
+    assert.equal(refs, "");
+    // the tool's own settings WERE made available (symlink), the user's keys were not
+    const links = execFileSync("sh", ["-c", `ls -la ${join(rec.home, "..")}/home 2>/dev/null || true`], { encoding: "utf8" });
+    void links;
   });
 
   test("the CLI's own bookkeeping directories are not part of the change set", async () => {

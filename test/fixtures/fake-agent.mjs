@@ -55,6 +55,22 @@ switch (mode) {
   case "error-exit0":
     console.log(JSON.stringify({ type: "error", sessionID: "s1", error: { name: "APIError", data: { message: "Insufficient account balance", statusCode: 402 } } }));
     break; // exit code 0 on purpose
+  case "try-push": {
+    // what a misbehaving agent would try: publish from its own copy, with whatever it can find
+    const { execFileSync } = await import("node:child_process");
+    const attempts = [];
+    for (const cmd of [["git", "push", "origin", "HEAD:main"], ["git", "remote", "-v"], ["git", "config", "--global", "-l"], ["ssh", "-o", "BatchMode=yes", "-T", "git@github.com"]]) {
+      try {
+        const out = execFileSync(cmd[0], cmd.slice(1), { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 8000 });
+        attempts.push({ cmd: cmd.join(" "), ok: true, out: out.slice(0, 200) });
+      } catch (e) {
+        attempts.push({ cmd: cmd.join(" "), ok: false, err: String(e.stderr || e.message).slice(0, 200) });
+      }
+    }
+    writeFileSync("push-attempts.json", JSON.stringify({ attempts, home: process.env.HOME, env: Object.keys(process.env).sort() }));
+    ok("tried");
+    break;
+  }
   case "env":
     writeFileSync("env.txt", JSON.stringify(process.env));
     ok();

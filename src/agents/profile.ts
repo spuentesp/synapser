@@ -24,6 +24,12 @@ export interface AgentProfile {
   tags: readonly string[];
   /** Extra environment entries. Our own credentials are NEVER inherited (see runner). */
   env?: Readonly<Record<string, string>>;
+  /**
+   * What the CLI needs from the real HOME to authenticate and keep its own settings (relative paths,
+   * e.g. ".claude"). Everything else in HOME — ~/.ssh, ~/.gitconfig, ~/.config/gh, ~/.netrc — is NOT
+   * visible to the agent: it runs with a scratch HOME (plan 13 §5.2).
+   */
+  homeOverlay?: readonly string[];
   /** Disabled profiles stay in the catalog (so the audit can name them) but are never scheduled. */
   enabled: boolean;
   disabledReason?: string;
@@ -59,6 +65,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "claude-sonnet-writer",
     description: "Claude Code (Sonnet) editing in an isolated copy; no shell",
     role: "writer",
+    homeOverlay: [".claude", ".claude.json"],
     argv: ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "sonnet", "--allowedTools", "Read,Glob,Grep,Edit,Write", "--max-budget-usd", "1"],
     parser: "claude-json",
     timeoutMs: 300_000,
@@ -69,6 +76,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "claude-opus-advisor",
     description: "Claude Code (Opus) read-only review/advice",
     role: "advisor",
+    homeOverlay: [".claude", ".claude.json"],
     argv: ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "opus", "--allowedTools", "Read,Glob,Grep", "--max-budget-usd", "2"],
     parser: "claude-json",
     timeoutMs: 300_000,
@@ -79,6 +87,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "codex-writer",
     description: "Codex CLI, workspace-write sandbox, in an isolated copy",
     role: "writer",
+    homeOverlay: [".codex"],
     argv: ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "-s", "workspace-write", "-C", "{cwd}", "{prompt}"],
     parser: "codex-jsonl",
     timeoutMs: 300_000,
@@ -89,6 +98,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "codex-advisor",
     description: "Codex CLI, read-only sandbox",
     role: "advisor",
+    homeOverlay: [".codex"],
     argv: ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-C", "{cwd}", "{prompt}"],
     parser: "codex-jsonl",
     timeoutMs: 300_000,
@@ -99,6 +109,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "kimi-writer",
     description: "Kimi Code (configured model: mimo-v2.6-pro) in an isolated copy. -p mode edits AND runs Bash without prompting: isolation is by copy only, not by capability",
     role: "writer",
+    homeOverlay: [".kimi", ".kimi-code"],
     argv: ["kimi", "-p", "{prompt}", "--output-format", "stream-json"],
     parser: "kimi-stream",
     timeoutMs: 300_000,
@@ -109,6 +120,7 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     id: "mimo-writer",
     description: "MiMo Code CLI",
     role: "writer",
+    homeOverlay: [".mimo", ".mimocode"],
     argv: ["mimo", "run", "{prompt}", "--format", "json"],
     parser: "mimo-json",
     timeoutMs: 300_000,
