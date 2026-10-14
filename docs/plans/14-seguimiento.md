@@ -12,7 +12,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 - Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
   plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
-  Estado al traspaso: 462 pasan, 0 fallan, 9 omitidas (471 pruebas). Una tarea no está hecha si baja ese número.
+  Estado al traspaso: 464 pasan, 0 fallan, 9 omitidas (473 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
   (gitignored); **nunca** imprimirlas ni commitearlas; revisar el diff antes de cada commit.
 - Commits: mensaje claro, cuerpo con el porqué, y cerrar con `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -150,13 +150,18 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q4 — Inicio y pantallas sin datos
 
-- [~] Q4.1 Pantalla de inicio: workflows activos, compuertas pendientes, agentes, costo acumulado.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q4.1 Pantalla de inicio: workflows activos, compuertas pendientes, agentes, costo acumulado.
+  commit: PENDING · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
+  una llamada con tarifa suma en USD y una sin tarifa se cuenta aparte, nunca como cero) y navegador real: captura
+  `home.png` en `evidence/`. Suite completa.
 - [~] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
-  Costo, Coordinación, Aprobaciones, Integridad).
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
-- [~] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+  Costo, Coordinación, Aprobaciones, Integridad). commit: PENDING · prueba: navegador real en un directorio de estado
+  vacío: las vistas por corrida dicen qué hacer y ofrecen el diseñador (`empty-swarm.png` en `evidence/`). Al probar
+  se encontró que sin corridas las vistas quedaban en esqueletos para siempre; corregido en el estado de carga del
+  hook. Suite completa.
+- [x] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
+  commit: PENDING · prueba: navegador real: al elegir un borrador en Workflows, el selector de corrida pasa a la corrida
+  de ese workflow (verificado con dos borradores). Suite completa.
 - [ ] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP).
 
 ### Cierre
@@ -193,3 +198,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Revisión del trabajo de GPT-5 Codex (Q2.2): el cargador buscaba `providers[id]` sin propiedad propia; `provider: "constructor"` lanzaba `TypeError` en vez de `ConfigError`. Corregido en `src/config/load.ts`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.1: diseñador de workflow (formulario, condiciones por verificador, comprobación en vivo con el validador del servidor vía `POST /api/designer/check`, vista previa JSON). Empezado sin commit de reclamo previo: proceso incumplido, registrado aquí. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.5: editor de biblioteca (proveedores, agentes, skills, plantillas) y prueba de conexión por POST contra el documento guardado; reclamo previo en `da9c984`. |
+| 2026-10-14 | Claude Haiku 5.5 | Q4.1–Q4.3: inicio (`GET /api/home`), estados vacíos que enlazan al diseñador, y la corrida del workflow seleccionado como contexto. Corregido: sin corridas las vistas quedaban en esqueletos. |

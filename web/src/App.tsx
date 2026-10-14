@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, Layers, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
+import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, LayoutDashboard, Layers, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -9,6 +9,7 @@ import { AgentsView } from '@/components/views/agents-view'
 import { ChatView } from '@/components/views/chat-view'
 import { WorkflowsView } from '@/components/views/workflows-view'
 import { LibraryView } from '@/components/views/library-view'
+import { HomeView } from '@/components/views/home-view'
 import { ApprovalsView } from '@/components/views/approvals-view'
 import { Empty, ErrorNote, Loading } from '@/components/views/common'
 import { CoordinationView } from '@/components/views/coordination-view'
@@ -22,15 +23,15 @@ import { shortHash } from '@/lib/format'
 import { I18nContext, makeT, type Key, type Lang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-const VIEWS = ['chat', 'workflows', 'agents', 'library', 'swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
+const VIEWS = ['home', 'chat', 'workflows', 'agents', 'library', 'swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
 type View = (typeof VIEWS)[number]
 const ICON: Record<View, typeof Users> = {
-  chat: MessageSquare, workflows: Workflow, agents: Bot, library: Layers, swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
+  home: LayoutDashboard, chat: MessageSquare, workflows: Workflow, agents: Bot, library: Layers, swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
 }
 
 const readHash = (): View => {
   const h = decodeURIComponent(location.hash.slice(1)).split('?')[0] as View
-  return VIEWS.includes(h) ? h : 'chat'
+  return VIEWS.includes(h) ? h : 'home'
 }
 
 export default function App() {
@@ -65,21 +66,27 @@ export default function App() {
     history.replaceState(null, '', `#${v}`)
     setView(v)
   }
+  // the run of a selected workflow is the default context of the run views (plan 14 Q4.3)
+  const openWorkflow = (id: string | null) => {
+    setWfId(id)
+    if (id) L.setRunId(id)
+  }
   const pending = L.state?.pendingApprovals.length ?? 0
   const run = L.run
-  const labels: Record<View, Key> = { chat: 'chat', workflows: 'workflows', agents: 'agents', library: 'library', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
+  const labels: Record<View, Key> = { home: 'home', chat: 'chat', workflows: 'workflows', agents: 'agents', library: 'library', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
 
-  const GLOBAL: View[] = ['chat', 'workflows', 'agents', 'library']
+  const GLOBAL: View[] = ['home', 'chat', 'workflows', 'agents', 'library']
   let body: React.ReactNode
   if (GLOBAL.includes(view)) {
     body = {
-      chat: <ChatView token={L.token} onOpen={(id) => { setWfId(id); go('workflows') }} />,
-      workflows: <WorkflowsView token={L.token} tick={L.tick} selected={wfId} onSelect={setWfId} />,
+      chat: <ChatView token={L.token} onOpen={(id) => { openWorkflow(id); go('workflows') }} />,
+      workflows: <WorkflowsView token={L.token} tick={L.tick} selected={wfId} onSelect={openWorkflow} />,
       agents: <AgentsView />,
       library: <LibraryView token={L.token} />,
-    }[view as 'chat' | 'workflows' | 'agents' | 'library']
+      home: <HomeView onNavigate={(v) => go(v)} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
+    }[view as 'home' | 'chat' | 'workflows' | 'agents' | 'library']
   } else if (L.error && !run) body = <ErrorNote code={L.error} />
-  else if (!run || !L.state || !L.runId) body = L.runs.length === 0 && L.state === null && !L.error ? <Loading /> : <Empty>{t('noRuns')}</Empty>
+  else if (!run || !L.state || !L.runId) body = !L.loaded ? <Loading /> : <Empty><span className="block">{t('noRunsHint')}</span><Button size="sm" variant="outline" className="mt-2" onClick={() => go('workflows')}>{t('homeCreate')}</Button></Empty>
   else {
     const id = L.runId
     body = {

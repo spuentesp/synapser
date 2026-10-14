@@ -50,6 +50,11 @@ const dict = {
     libraryTesting: 'Probando…', libraryTestOk: 'Conexión correcta', libraryTestFail: 'La prueba falló', libraryKeyFrom: 'Clave tomada de',
     libraryServed: 'Modelos que sirve', libraryNotListed: 'declarados pero no listados', libraryNoListing: 'El endpoint no publica su lista de modelos',
     libraryCallDetail: 'Llamada mínima', libraryCost: 'costo estimado', libraryVersion: 'versión', libraryUnsaved: 'sin guardar',
+    noRunsHint: 'Aún no hay corridas. Crea un workflow y ponlo en marcha: su corrida aparecerá aquí.',
+    home: 'Inicio', homeActive: 'Workflows activos', homeNoneActive: 'Nada está en marcha. Crea un workflow o pídelo en el chat.', homeCreate: 'Crear un workflow',
+    homePending: 'Compuertas pendientes', homeNoPending: 'Nada espera a una persona.', homeWaiting: 'corridas esperan tu decisión',
+    homeAgents: 'Agentes', homeNoAgents: 'No hay agentes configurados.', homeAgentsOf: 'habilitados de',
+    homeCost: 'Costo acumulado', homeNoCalls: 'Aún no hay llamadas a modelos.', homeCalls: 'llamadas', homeCostUnknown: 'llamadas sin precio: no se suman como 0',
   },
   en: {
     chat: 'Chat', workflows: 'Workflows', agents: 'Agents', send: 'Send', chatHint: 'Ask for a workflow, ask what is going on, or consult the advisor…',
@@ -98,6 +103,11 @@ const dict = {
     libraryTesting: 'Testing…', libraryTestOk: 'Connection works', libraryTestFail: 'The test failed', libraryKeyFrom: 'Key read from',
     libraryServed: 'Models served', libraryNotListed: 'declared but not listed', libraryNoListing: 'The endpoint publishes no model list',
     libraryCallDetail: 'Minimal call', libraryCost: 'estimated cost', libraryVersion: 'version', libraryUnsaved: 'unsaved',
+    noRunsHint: 'No runs yet. Create a workflow and start it: its run will appear here.',
+    home: 'Home', homeActive: 'Active workflows', homeNoneActive: 'Nothing is running. Create a workflow or ask in the chat.', homeCreate: 'Create a workflow',
+    homePending: 'Pending gates', homeNoPending: 'Nothing waits for a person.', homeWaiting: 'runs wait for your decision',
+    homeAgents: 'Agents', homeNoAgents: 'No agents are configured.', homeAgentsOf: 'enabled of',
+    homeCost: 'Accumulated cost', homeNoCalls: 'No model calls yet.', homeCalls: 'calls', homeCostUnknown: 'calls without a price: never summed as 0',
   },
 } as const
 

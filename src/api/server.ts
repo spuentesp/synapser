@@ -257,6 +257,36 @@ export function createApi(opts: ApiOptions): ApiServer {
       const b = await readBody(req, res);
       return b === undefined ? undefined : json(res, 200, m.check(b));
     }
+    // the operator's first screen (plan 14 Q4.1): what is active, what waits for a person, what it costs. An unknown
+    // price is counted apart, never summed as zero.
+    if (top === "home" && method === "GET") {
+      const workflows = m.list();
+      const runs = listRuns();
+      let knownUsd = 0;
+      let unknownCalls = 0;
+      let calls = 0;
+      for (const id of [...runs.map((r) => r.id), "_server"]) {
+        const j = journalFor(id);
+        if (!j) continue;
+        for (const call of j.listModelCalls()) {
+          calls += 1;
+          if (call.costUsd === null) unknownCalls += 1;
+          else knownUsd += call.costUsd;
+        }
+      }
+      const profiles = ((c.config?.() ?? {}) as { profiles?: { enabled: boolean }[] }).profiles ?? [];
+      return json(res, 200, {
+        workflows: {
+          total: workflows.length,
+          active: workflows.filter((w) => !["DONE", "FAILED", "CANCELLED"].includes(w.state)).map((w) => ({ id: w.id, title: w.workflow.title, state: w.state, revision: w.revision })),
+        },
+        pendingApprovals: runs.reduce((n, r) => n + r.pendingApprovals, 0),
+        runsWaiting: runs.filter((r) => r.pendingApprovals > 0).map((r) => r.id),
+        agents: { total: profiles.length, enabled: profiles.filter((p) => p.enabled).length },
+        cost: { knownUsd: Math.round(knownUsd * 1e6) / 1e6, unknownCalls, calls },
+        runs: runs.length,
+      });
+    }
     if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method);
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
@@ -319,7 +349,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       return void res.end(readFileSync(file));
     }
 
-    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer|home)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");

@@ -17,6 +17,8 @@ export interface Ledger {
   /** Bumps whenever the ledger grew, so views can re-fetch. */
   tick: number
   error: string | null
+  /** True once the run list has been read at least once: an empty list is then a real answer, not a loading state. */
+  loaded: boolean
 }
 
 /** One source of truth for the page: runs, the swarm state, and the live SSE stream. */
@@ -28,6 +30,7 @@ export function useLedger(): Ledger {
   const [token, setToken] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const headRef = useRef(0)
   const [head, setHead] = useState(0)
 
@@ -35,6 +38,7 @@ export function useLedger(): Ledger {
     try {
       const { runs: rs } = await api<{ runs: RunInfo[] }>('/api/runs')
       setRuns(rs)
+      setLoaded(true)
       const id = runId && rs.some((r) => r.id === runId) ? runId : (rs.at(-1)?.id ?? null)
       if (id !== runId) setRunIdState(id)
       if (id) {
@@ -83,6 +87,6 @@ export function useLedger(): Ledger {
 
   return {
     runs, run: runs.find((r) => r.id === runId) ?? null, runId, setRunId, state, head, seq, setSeq,
-    live: seq === null, token, refresh, tick, error,
+    live: seq === null, token, refresh, tick, error, loaded,
   }
 }
