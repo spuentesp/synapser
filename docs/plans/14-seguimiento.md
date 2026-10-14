@@ -63,7 +63,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: a836569. Prueba: `--help` y esquema del binario
   instalado, argv determinista, parser del 402 capturado y suite completa verdes; llamada pagada omitida por saldo.
 - [x] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
-  commit: f492fca (inicio; implementación y cierre en este commit). Prueba: sustitución argv sin shell,
+  commit: 6386db6. Prueba: sustitución argv sin shell,
   parser `plain`, validación de perfil y suite completa verdes.
 - [ ] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2.
