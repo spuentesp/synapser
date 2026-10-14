@@ -11,11 +11,18 @@ import type { AgentRunOutput, AgentRunRequest, AgentRunner } from "./port.ts";
 import { runAgent } from "./runner.ts";
 import type { LoopLimits } from "../agent/loop.ts";
 import { unknownUsage, type UsageRecord } from "./usage.ts";
+import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
 
 // ---- cli-oneshot -----------------------------------------------------------------------------
 
 export class CliOneShotRunner implements AgentRunner {
   readonly adapter = "cli-oneshot" as const;
+  readonly #cliAdapter: AgentAdapter;
+
+  constructor(adapter: AgentAdapter = PROFILE_CLI_ADAPTER) {
+    this.#cliAdapter = adapter;
+  }
+
   async run(req: AgentRunRequest): Promise<AgentRunOutput> {
     const t = req.task;
     const prompt =
@@ -36,6 +43,7 @@ export class CliOneShotRunner implements AgentRunner {
       taskId: t.taskId,
       journal: req.journal,
       generation: req.generation,
+      adapter: this.#cliAdapter,
     });
     return {
       agentRunId: r.agentRunId,

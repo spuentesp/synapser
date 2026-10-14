@@ -12,8 +12,11 @@ import { type Digest, MAX_ACTION_FILE_BYTES, observeFile } from "../digest/file.
 import type { Journal } from "../journal/journal.ts";
 import { procStartTicks } from "../recovery/children.ts";
 import { listTree, takeSnapshot, treeEntries } from "../validation/snapshot.ts";
+import { NO_INJECTED_SKILLS, PROFILE_CLI_ADAPTER, type AgentAdapter, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
-import { PARSERS, type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
+import { type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
+
+export { buildAgentEnv, CREDENTIAL_ENV_DENY, GIT_HARDENING } from "./adapter.ts";
 
 export interface FileChange {
   path: string;
@@ -52,42 +55,7 @@ export interface AgentRunResult {
 /** Directories the CLIs create for their own bookkeeping: not part of the user's change. */
 export const AGENT_METADATA = new Set([".claude", ".codex", ".kimi", ".kimi-code", ".mimo", ".mimocode", ".opencode", ".cursor", ".gemini", ".aider.tags.cache.v3"]);
 
-const ENV_ALLOW = ["PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR", "TZ", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "CODEX_HOME", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE"];
-/** Variables that would let a git/ssh/gh call inside the agent authenticate or even prompt. */
-export const CREDENTIAL_ENV_DENY = /^(SSH_|GPG_|GH_|GITHUB_|GITLAB_|GIT_ASKPASS|GIT_SSH|NPM_|NODE_AUTH|AWS_|AZURE_|GOOGLE_APPLICATION|DOCKER_|KUBE)/i;
-/**
- * Plan 13 §5.2: the agent must lack the CAPABILITY to publish. Git is pointed at nothing (no global or
- * system config, no credential helper, no askpass, no ssh), and the copy it edits has no `.git`.
- */
-export const GIT_HARDENING: Readonly<Record<string, string>> = {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-  GIT_ASKPASS: "/bin/false",
-  SSH_ASKPASS: "/bin/false",
-  GIT_TERMINAL_PROMPT: "0",
-  GIT_SSH_COMMAND: "/bin/false",
-  GCM_INTERACTIVE: "never",
-};
-const SECRET_NAME = /(NEBIUS|NEMOTRON|TAVILY|API_?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i;
 const MAX_OUT = 4 * 1024 * 1024;
-
-/** Environment for the CLI: an allowlist. Our own credentials never reach a third-party agent. */
-export function buildAgentEnv(profile: AgentProfile, source: NodeJS.ProcessEnv = process.env, opts: { home?: string } = {}): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const k of ENV_ALLOW) if (source[k] !== undefined && !SECRET_NAME.test(k) && !CREDENTIAL_ENV_DENY.test(k)) env[k] = source[k] as string;
-  if (opts.home) {
-    // a scratch HOME: the CLI sees its own settings (overlay) and nothing else of the user's
-    env["HOME"] = opts.home;
-    env["XDG_CONFIG_HOME"] = join(opts.home, ".config");
-    env["XDG_DATA_HOME"] = join(opts.home, ".local/share");
-    env["XDG_CACHE_HOME"] = join(opts.home, ".cache");
-    env["XDG_STATE_HOME"] = join(opts.home, ".local/state");
-  }
-  Object.assign(env, GIT_HARDENING);
-  for (const [k, v] of Object.entries(profile.env ?? {})) if (!CREDENTIAL_ENV_DENY.test(k) && !SECRET_NAME.test(k)) env[k] = v;
-  return env;
-}
 
 /** Link ONLY the tool's own settings into a scratch HOME. Returns the scratch HOME path. */
 export function makeScratchHome(scratch: string, profile: AgentProfile, realHome: string | undefined): string {
@@ -116,6 +84,9 @@ export interface RunAgentOptions {
   taskId: string | null;
   journal: Journal;
   generation: number;
+  /** Invocation/parser implementation. Direct callers retain the legacy profile-driven default. */
+  adapter?: AgentAdapter;
+  injectedSkills?: InjectedSkills;
   kimi?: KimiOptions;
   /** Replaces the process environment as the source for the allowlist (tests). */
   envSource?: NodeJS.ProcessEnv;
@@ -123,6 +94,7 @@ export interface RunAgentOptions {
 
 export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
   const { profile, journal } = o;
+  const adapter = o.adapter ?? PROFILE_CLI_ADAPTER;
   if (!profile.enabled) throw new Error(`profile ${profile.id} is disabled: ${profile.disabledReason ?? "no reason recorded"}`);
   const agentRunId = `ar-${randomUUID()}`;
   const scratch = mkdtempSync(join(tmpdir(), "synapser-agent-"));
@@ -135,8 +107,15 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     cpSync(baseDir, work, { recursive: true });
     const base = new Map(treeEntries(baseDir, snap.files).map((e) => [e.path, e]));
     const promptBlob = journal.artifacts.put(Buffer.from(o.prompt, "utf8"));
-    const argv = profile.argv.map((a) => a.replaceAll("{prompt}", o.prompt).replaceAll("{cwd}", work).replaceAll("{model}", profile.model ?? ""));
-    const template = [...profile.argv];
+    const home = makeScratchHome(scratch, profile, (o.envSource ?? process.env)["HOME"]);
+    const invocation = adapter.build(
+      profile,
+      { prompt: o.prompt, cwd: work, home, envSource: o.envSource ?? process.env },
+      o.injectedSkills ?? NO_INJECTED_SKILLS,
+    );
+    if (invocation.files.length > 0) throw new Error(`adapter ${adapter.id} returned files before skill injection is enabled`);
+    const argv = [...invocation.argv];
+    const template = [...invocation.argvTemplate];
 
     const exec = await new Promise<{ code: number | null; signal: string | null; timedOut: boolean; stdout: string; stderr: string; spawnError: string | null }>((resolve) => {
       let stdout = "";
@@ -144,7 +123,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       let timedOut = false;
       let child;
       try {
-        child = spawn(argv[0] as string, argv.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: buildAgentEnv(profile, o.envSource ?? process.env, { home: makeScratchHome(scratch, profile, (o.envSource ?? process.env)["HOME"]) }) });
+        child = spawn(argv[0] as string, argv.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: invocation.env });
       } catch (e) {
         return resolve({ code: null, signal: null, timedOut: false, stdout, stderr, spawnError: String((e as Error).message) });
       }
@@ -187,8 +166,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     if (exec.spawnError) {
       parsed = { outcome: "FAILED", reason: `spawn failed: ${exec.spawnError}`, finalText: null, sessionId: null, permissionDenials: null, toolUse: null, usage: { provenance: "unknown", inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null, costUsd: null, models: [], turns: null, apiMs: null, note: "did not start" } };
     } else {
-      const fn = PARSERS[profile.parser] as (out: string, k?: KimiOptions) => ParsedRun;
-      parsed = fn(exec.stdout, o.kimi);
+      parsed = adapter.parse(exec.stdout, profile, { ...(o.kimi ? { kimi: o.kimi } : {}) });
       if (exec.timedOut) parsed = { ...parsed, outcome: "FAILED", reason: `timed out after ${profile.timeoutMs} ms` };
       else if (parsed.outcome === "SUCCEEDED" && exec.code !== 0) parsed = { ...parsed, outcome: "FAILED", reason: `exit code ${String(exec.code)} despite a success event` };
       else if (parsed.outcome === "UNKNOWN" && exec.code !== 0) {

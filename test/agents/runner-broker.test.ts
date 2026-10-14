@@ -7,6 +7,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
+import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "../../src/agents/adapter.ts";
 import { integrateRun } from "../../src/agents/broker.ts";
 import { type AgentProfile, ProfileRegistry, validateProfile } from "../../src/agents/profile.ts";
 import { runAgent } from "../../src/agents/runner.ts";
@@ -63,6 +64,26 @@ describe("runner (isolation + observation)", () => {
     assert.deepEqual(row?.argv.slice(-1), ["{prompt}"], "the ledger stores the template; the prompt is a blob");
     assert.ok(journal.listEvents().some((e) => e.entity === "agent_run" && e.toState === "SUCCEEDED"));
     assert.deepEqual(journal.listChildren(), []);
+  });
+
+  test("invocation and output parsing are delegated to the selected AgentAdapter", async () => {
+    let builds = 0;
+    let parses = 0;
+    const adapter: AgentAdapter = {
+      ...PROFILE_CLI_ADAPTER,
+      build(profile, task, injected) {
+        builds += 1;
+        return PROFILE_CLI_ADAPTER.build(profile, task, injected);
+      },
+      parse(stdout, profile, options) {
+        parses += 1;
+        return PROFILE_CLI_ADAPTER.parse(stdout, profile, options);
+      },
+    };
+
+    const r = await run("write", {}, { adapter });
+    assert.equal(r.outcome, "SUCCEEDED");
+    assert.deepEqual([builds, parses], [1, 1]);
   });
 
   test("REGRESSION: the recorded BASE is what the agent was given, even if the live file changes mid-run", async () => {
