@@ -57,6 +57,9 @@ export interface EffectKind {
 
 export const effectDigest = (kind: string, prepared: Prepared): string => digestOfJson(JSON.parse(JSON.stringify({ kind, ...prepared.material })));
 
+/** Synapser's own working files and caches are never part of a change set. */
+const OWN = [":(exclude).zoanthrope", ":(exclude).synapser", ":(exclude).synapser-state", ":(exclude,glob)**/__pycache__/**", ":(exclude,glob)**/.synapser-tmp-*"];
+
 const SENSITIVE = /(^|\/)(\.env(\..*)?|id_(rsa|dsa|ecdsa|ed25519)|.*\.(pem|p12|pfx|key)|\.npmrc|\.netrc|credentials(\.json)?|secrets?\.(json|ya?ml))$/i;
 const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/;
 const str = (v: unknown, max = 300): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
@@ -86,7 +89,10 @@ const gitCommit: EffectKind = {
     const paths = (params["paths"] as string[] | undefined) ?? [];
     const cur = await must(ctx, ["rev-parse", "--abbrev-ref", "HEAD"], "current branch");
     const branch = (params["branch"] as string | undefined) ?? cur;
-    const st = await must(ctx, ["status", "--porcelain=v1", "-z", ...(paths.length ? ["--", ...paths] : [])], "status");
+    // NOT trimmed: porcelain v1 starts with a status column that may be a space (" M path")
+    const stRaw = await git(ctx, ["status", "--porcelain=v1", "-z", "--", ...(paths.length ? paths : ["."]), ...OWN]);
+    if (stRaw.code !== 0) throw new EffectFailure("GIT_FAILED", `status: ${(stRaw.stderr || stRaw.stdout).trim().slice(0, 300)}`);
+    const st = stRaw.stdout;
     const files = st
       .split("\0")
       .filter(Boolean)
@@ -114,7 +120,7 @@ const gitCommit: EffectKind = {
       await must(ctx, exists ? ["switch", branch] : ["switch", "-c", branch], `switch to ${branch}`);
     }
     const paths = (params["paths"] as string[] | undefined) ?? [];
-    await must(ctx, ["add", "-A", "--", ...(paths.length ? paths : ["."])], "stage");
+    await must(ctx, ["add", "-A", "--", ...(paths.length ? paths : ["."]), ...OWN], "stage");
     await must(
       ctx,
       ["-c", `user.name=${ctx.identity.name}`, "-c", `user.email=${ctx.identity.email}`, "commit", "-q", "-m", String(params["message"])],

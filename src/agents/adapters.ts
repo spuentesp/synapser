@@ -87,6 +87,7 @@ export class NativeLoopRunner implements AgentRunner {
         ...(this.#limits ? { limits: this.#limits } : {}),
         ...(this.#research ? { research: this.#research } : {}),
         ...(req.delegation ? { delegation: req.delegation } : {}),
+        ...(req.effects ? { effects: req.effects } : {}),
       },
       {
         taskId: req.task.taskId,

@@ -94,7 +94,7 @@ describe("MCP server", () => {
     const w = make()("worker");
     await w.open();
     const wl = (await w.rpc("tools/list")) as { result: { tools: { name: string }[] } };
-    assert.deepEqual(wl.result.tools, [], "M1: a worker session has no initiator/approval tools");
+    assert.deepEqual(wl.result.tools.map((t) => t.name).sort(), ["effect_request", "effect_status"], "M1: a worker can ASK for effects and look; it has no workflow, gate or policy tools");
     const r = await w.tool("gate_approve", { workflow_id: "x", gate: "start", code: "ABCDEF" });
     assert.equal(r.isError, true);
     assert.equal(r.body["error"], "UNKNOWN_TOOL");

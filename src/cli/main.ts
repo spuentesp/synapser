@@ -7,6 +7,8 @@
 //   synapser gate list [--workflow ID]        pending human decisions
 //   synapser gate show <workflow> <key>       the one-time code you may hand to an agent for MCP approval
 //   synapser gate approve|reject <workflow> <key> [--reason TEXT]
+//   synapser effect list <workflow>           effects requested, with state and what they would do
+//   synapser policy show                      the effect policy in force
 //   synapser config show
 // Global: --config FILE  --workspace DIR  --state DIR
 
@@ -49,6 +51,7 @@ async function main(): Promise<void> {
   const [cmd, sub, a, b] = argv;
 
   if (cmd === "config" && sub === "show") return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id) });
+  if (cmd === "policy" && sub === "show") return say(cfg.policy);
 
   const rt = createRuntime(cfg);
   const m = rt.manager;
@@ -82,6 +85,13 @@ async function main(): Promise<void> {
         }
         break;
       }
+      case "effect": {
+        if (sub === "list") {
+          const b = m.effects(a ?? "");
+          return b ? say(b.records().map((r) => ({ id: r.id, kind: r.kind, state: r.state, summary: r.summary, rule: r.rule, evidence: r.evidence }))) : die("unknown workflow", 1);
+        }
+        break;
+      }
       case "gate": {
         if (sub === "list") {
           const only = flag("workflow");
@@ -99,6 +109,7 @@ async function main(): Promise<void> {
             taskId: b, planDigest: g.digest, currentDigest: isSelfBound(b) ? g.digest : currentPlanDigest(j),
             decision: sub === "approve" ? "APPROVED" : "REJECTED", actor: OPERATOR.id, channel: "cli", ...(flag("reason") ? { reason: flag("reason") as string } : {}),
           });
+          if (r.ok && b.startsWith("effect:")) await m.settleEffects(a); // run what was just approved (we are the broker's host now)
           return r.ok ? say({ ok: true, gate: b }) : die(`not decided: ${r.code}`);
         }
         break;

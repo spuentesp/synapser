@@ -88,12 +88,31 @@ export class ProductionEngine implements WorkflowEngine {
           ...(research ? { research } : {}),
           collector: new ZooCollector({ source: zoo, journal, runId }), collectEveryMs: 500, intent: zooIntentSink(zoo),
           ...(c.delegation ? { delegation: c.delegation } : {}),
+          effects: r.effects,
           conditions: async (taskId) => {
             r.mark("VERIFYING");
             const w = r.workflow(); // re-read: the operator may have edited the conditions meanwhile (C2)
             const res = await evaluateWorkflow(w, {
               journal, runId, workspaceRoot: c.workspaceRoot, validation, taskId, baseline,
               awaitApproval: approvalWaiter(journal, runId, { pollMs: c.pollMs ?? 250, deadlineMs: deadline, aborted: () => r.signal.aborted }),
+              ensureEffect: async (kind, params) => {
+                const matches = (rec: { kind: string; params: Record<string, unknown> }) =>
+                  rec.kind === kind && Object.entries(params).every(([k, v]) => JSON.stringify(rec.params[k]) === JSON.stringify(v));
+                let rec = r.effects.records().filter(matches).at(-1) ?? null;
+                if (!rec || ["DENIED", "REJECTED", "FAILED", "STALE", "EXPIRED"].includes(rec.state)) {
+                  // a terminal failure of an EARLIER request is not the answer for the current tree: ask again
+                  if (rec && rec.state !== "STALE" && rec.state !== "EXPIRED" && rec.state !== "FAILED") return { state: rec.state, reason: rec.reason, evidence: rec.evidence, summary: rec.summary };
+                  const q = await r.effects.request({ kind, params, requestedBy: `workflow:${w.id}` });
+                  if (!q.ok) return { state: "INVALID", reason: (q.errors ?? [q.code]).join("; "), evidence: null, summary: "" };
+                  rec = r.effects.status(q.id);
+                }
+                const until = Date.now() + Math.max(1000, deadline - Date.now());
+                while (rec && (rec.state === "PENDING" || rec.state === "EXECUTING") && !r.signal.aborted && Date.now() < until) {
+                  await new Promise((res) => setTimeout(res, c.pollMs ?? 250));
+                  rec = r.effects.status(rec.id);
+                }
+                return rec ? { state: rec.state, reason: rec.reason, evidence: rec.evidence, summary: rec.summary } : { state: "UNKNOWN", reason: null, evidence: null, summary: "" };
+              },
               review: async (profileId, rubric) => {
                 const profile = c.profiles.find((p) => p.id === profileId);
                 if (!profile || !profileIds.has(profileId)) return { verdict: "fail", text: `unknown reviewer ${profileId}` };
@@ -114,6 +133,7 @@ export class ProductionEngine implements WorkflowEngine {
           orchestration: {
             catalog, profiles: c.profiles, registry, executor, workspaceRoot: c.workspaceRoot, generation: lock.generation,
             approval: { pollMs: c.pollMs ?? 250 },
+            effects: r.effects,
           },
         },
         {

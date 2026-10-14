@@ -35,6 +35,8 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     profileIds: new Set(cfg.profiles.map((p) => p.id)),
     engine,
     startRequiresApproval: cfg.startRequiresApproval,
+    policy: () => cfg.policy,
+    effectIdentity: cfg.identity,
   });
   const serverJournal = Journal.open(cfg.stateDir, "_server");
   return {

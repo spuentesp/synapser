@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { type AgentProfile, BUILTIN_PROFILES } from "../agents/profile.ts";
+import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
 
 export interface SynapserConfig {
@@ -12,6 +13,10 @@ export interface SynapserConfig {
   commands: AllowedCommand[];
   profiles: AgentProfile[];
   startRequiresApproval: boolean;
+  /** Which side effects agents may ask for and under which decision (default: ask for commit/push, deny the rest). */
+  policy: Policy;
+  /** Identity Synapser commits with when the repository has none configured. */
+  identity: { name: string; email: string };
   research: boolean;
   knownUsdPerRun: Record<string, number>;
   limits: { concurrency: number; maxRepairRounds: number; maxTaskAttempts: number; missionMs: number };
@@ -111,8 +116,28 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     }
   }
 
+  let policy: Policy = DEFAULT_POLICY;
+  if (raw["policy"] !== undefined) {
+    let doc: unknown = raw["policy"];
+    if (typeof doc === "string") {
+      try {
+        doc = JSON.parse(readFileSync(abs(doc, ""), "utf8"));
+      } catch (e) {
+        errors.push(`policy file: ${String((e as Error).message)}`);
+        doc = null;
+      }
+    }
+    if (doc !== null) {
+      const v = validatePolicy(doc);
+      if (v.ok) policy = v.policy;
+      else errors.push(...v.errors.map((e) => `policy: ${e}`));
+    }
+  }
+  const id = raw["identity"] as { name?: unknown; email?: unknown } | undefined;
+  const identity = id && typeof id.name === "string" && typeof id.email === "string" ? { name: id.name, email: id.email } : { name: "Synapser", email: "synapser@localhost" };
+
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, profiles,
+    workspace, stateDir, commands, profiles, policy, identity,
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),
     knownUsdPerRun: known,

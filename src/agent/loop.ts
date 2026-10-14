@@ -14,7 +14,8 @@ import { validate } from "./schema.ts";
 import { ResearchError } from "../research/types.ts";
 import type { ResearchSession } from "../research/session.ts";
 import type { DelegationPort } from "../orchestration/delegation.ts";
-import { normalizeArgs, REQUEST_SUBTASK_SPEC, TOOL_EXAMPLES, TOOL_SCHEMAS, TOOL_SPECS, WEB_SEARCH_SPEC } from "./tools.ts";
+import type { EffectPort } from "../effects/port.ts";
+import { EFFECT_SPECS, normalizeArgs, REQUEST_SUBTASK_SPEC, TOOL_EXAMPLES, TOOL_SCHEMAS, TOOL_SPECS, WEB_SEARCH_SPEC } from "./tools.ts";
 
 export interface TaskSpec {
   taskId: string;
@@ -70,6 +71,8 @@ export interface LoopDeps {
   research?: ResearchSession;
   /** When present the agent may call request_subtask (plan 10 §5, W5). */
   delegation?: DelegationPort;
+  /** When present the agent may ASK for side effects (plan 13 §5); it can never perform them. */
+  effects?: EffectPort;
   /** Observer for UIs and tests; must not throw. */
   onStep?: (s: StepInfo) => void;
 }
@@ -180,7 +183,7 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
     let res;
     try {
       res = await model.complete(
-        { role: deps.role ?? "worker", messages, tools: [...TOOL_SPECS, ...(deps.research ? [WEB_SEARCH_SPEC] : []), ...(deps.delegation ? [REQUEST_SUBTASK_SPEC] : [])], toolChoice: "auto", maxTokens: L.maxTokensPerCall },
+        { role: deps.role ?? "worker", messages, tools: [...TOOL_SPECS, ...(deps.research ? [WEB_SEARCH_SPEC] : []), ...(deps.delegation ? [REQUEST_SUBTASK_SPEC] : []), ...(deps.effects ? EFFECT_SPECS : [])], toolChoice: "auto", maxTokens: L.maxTokensPerCall },
         { runId: deps.runId, taskId: task.taskId, ...(deps.budget ? { budget: deps.budget } : {}) },
       );
       result.modelCalls++;
@@ -518,6 +521,25 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
           }
           throw e;
         }
+      }
+
+      case "request_effect": {
+        if (!deps.effects) return { ok: false, payload: { error: "DISABLED", detail: "side effects are not available in this run" }, detail: "effects disabled", noProgressKey: "effect:DISABLED" };
+        const r = await deps.effects.request({ kind: String(args["kind"]), params: args["params"], requestedBy: `${deps.runId}:${task.taskId}`, taskId: task.taskId });
+        if (!r.ok) return { ok: false, payload: { error: r.code, ...(r.errors ? { errors: r.errors } : {}) }, detail: `effect ${r.code}`, noProgressKey: `effect:${r.code}` };
+        return {
+          ok: r.state !== "DENIED" && r.state !== "FAILED",
+          payload: {
+            id: r.id, state: r.state, decision: r.decision, summary: r.summary,
+            note: r.state === "PENDING" ? "A human must decide. Do not wait for it: continue your own work and call finish when YOUR task is done." : r.state === "DENIED" ? "Policy does not allow this. Do not retry it." : undefined,
+          },
+          ...(r.state === "DENIED" ? { detail: "effect denied", noProgressKey: `effect:denied:${String(args["kind"])}` } : {}),
+        };
+      }
+
+      case "effect_status": {
+        const st = deps.effects?.status(String(args["id"]));
+        return st ? { ok: true, payload: st } : { ok: false, payload: { error: "UNKNOWN_EFFECT" }, detail: "unknown effect", noProgressKey: "effect:unknown" };
       }
 
       case "request_subtask": {

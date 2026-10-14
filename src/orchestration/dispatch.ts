@@ -27,6 +27,8 @@ export interface OrchestrationDeps {
   workspaceRoot: string;
   generation: number;
   approval?: ApprovalPolicy;
+  /** Lets native agents ASK for side effects through the broker. */
+  effects?: import("../effects/port.ts").EffectPort;
 }
 
 export interface StepRow {
@@ -89,6 +91,7 @@ export async function dispatchStep(
     ...(ctx.budget ? { budget: ctx.budget } : {}),
     deadlineMs: ctx.deadlineMs,
     ...(delegation ? { delegation } : {}),
+    ...(o.effects ? { effects: o.effects } : {}),
   };
 
   if (kind !== "write") {

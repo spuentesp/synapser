@@ -344,3 +344,16 @@ violado, cancelación, revisión C2, compuerta de inicio con código), servidor 
 proceso real `synapser mcp` por stdio contra la CLI del operador. La planificación ve objetivos,
 no-objetivos y condiciones y debe declarar `serves` (C5). Pendiente de P1: endpoints de workflow en
 la API/UI (se entregan con el chat, P5).
+
+**P2 (hecho):** `src/effects/` — política (`policy.ts`: estricto gana, defecto *deny*, una `allow`
+incondicional sobre un tipo destructivo se rechaza al cargar), tipos de efecto (`git.commit`, `git.push`,
+`gh.pr`, `http.request`; el resumen y el digest los calcula Synapser del mundo real y se recalculan al
+ejecutar), el *broker* (`broker.ts`: PENDING → decisión humana → EXECUTING, un solo uso, TTL, canales por
+regla, STALE si el repositorio cambió) y los verificadores G1–G6 sobre el ledger. El CLI del agente corre
+con `HOME` temporal, sin variables de credenciales, git apuntando a nada y sin `.git` en su copia
+(verificado con un doble que intenta publicar, y con codex y claude reales). Los efectos son
+condiciones de primera clase (`checker.kind: "effect"`): se piden solo cuando **toda** condición
+requerida anterior se cumple, de modo que el trabajo no aceptado nunca se publica. Pruebas con git real
+y remoto bare real, incluido el recorrido completo workflow → commit → push con dos decisiones humanas.
+Hallazgos del extremo a extremo (corregidos): `git status` con `trim()` se comía el primer carácter de la
+ruta; un rechazo del commit no debe seguir pidiendo el push.

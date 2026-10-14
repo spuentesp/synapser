@@ -64,7 +64,21 @@ const REQUEST_SUBTASK: Schema = {
   additionalProperties: false,
 };
 
+const REQUEST_EFFECT: Schema = {
+  type: "object",
+  properties: {
+    kind: { type: "string", minLength: 3, maxLength: 40 },
+    params: { type: "object" },
+    why: { type: "string", minLength: 3, maxLength: 500 },
+  },
+  required: ["kind", "params", "why"],
+  additionalProperties: false,
+};
+const EFFECT_STATUS: Schema = { type: "object", properties: { id: { type: "string", minLength: 1, maxLength: 40 } }, required: ["id"], additionalProperties: false };
+
 export const TOOL_SCHEMAS: Record<string, Schema> = {
+  request_effect: REQUEST_EFFECT,
+  effect_status: EFFECT_STATUS,
   web_search: WEB_SEARCH,
   request_subtask: REQUEST_SUBTASK,
   read_files: READ,
@@ -116,6 +130,16 @@ export const REQUEST_SUBTASK_SPEC: ToolSpec = fn(
   REQUEST_SUBTASK,
 );
 
+/** Offered only when the run has an effect broker. You can ASK; you can never do it yourself. */
+export const EFFECT_SPECS: ToolSpec[] = [
+  fn(
+    "request_effect",
+    "Ask Synapser to perform a side effect you are not allowed to do yourself (git.commit, git.push, gh.pr, http.request). Returns PENDING while a human decides; nothing happens until then. Describe WHAT you want; the system computes what will actually happen and shows that to the human.",
+    REQUEST_EFFECT,
+  ),
+  fn("effect_status", "Look up the state of an effect you requested (PENDING, DONE, DENIED, STALE, EXPIRED…).", EFFECT_STATUS),
+];
+
 /** What a correct call looks like; returned with INVALID_ARGUMENTS so a model can copy it. */
 export const TOOL_EXAMPLES: Record<string, unknown> = {
   read_files: { paths: ["app/billing.py", "app/schema.py"] },
@@ -125,6 +149,8 @@ export const TOOL_EXAMPLES: Record<string, unknown> = {
   apply_changes: {},
   finish: { summary: "what was done" },
   web_search: { query: "ISO 4217 minor unit exponent Chilean peso", max_results: 3 },
+  request_effect: { kind: "git.push", params: { remote: "origin", branch: "feature/discounts" }, why: "the change is complete and accepted" },
+  effect_status: { id: "ef-1" },
   request_subtask: { objective: "Add unit tests for the discount validation", scope: ["tests/test_discount.py"], criteria: ["tests cover 0 and 10000 bps"], why: "tests are a separate concern from the implementation" },
 };
 

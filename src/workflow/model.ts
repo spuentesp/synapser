@@ -10,7 +10,9 @@ export type Checker =
   | { kind: "diff"; require?: string[]; forbid?: string[] }
   | { kind: "file"; path: string; assert: "exists" | "absent" | { contains: string } }
   | { kind: "approval"; prompt: string }
-  | { kind: "review"; profile: string; rubric: string };
+  | { kind: "review"; profile: string; rubric: string }
+  /** Satisfied when Synapser has PERFORMED this effect (after the human decision its policy requires). */
+  | { kind: "effect"; effectKind: string; params: Record<string, unknown> };
 
 export type CheckerKind = Checker["kind"];
 
@@ -145,6 +147,19 @@ function checkChecker(c: unknown, at: string, o: ValidateWorkflowOptions, errors
         return null;
       }
       return { kind: "review", profile: x["profile"] as string, rubric: x["rubric"] as string };
+    case "effect": {
+      const ek = x["effectKind"];
+      const pr = x["params"];
+      if (!isStr(ek, 3, 40) || !/^[a-z][a-z0-9_.]*$/.test(ek as string)) {
+        errors.push(`${at}.checker.effectKind must be an effect kind such as git.push`);
+        return null;
+      }
+      if (!pr || typeof pr !== "object" || Array.isArray(pr)) {
+        errors.push(`${at}.checker.params must be an object`);
+        return null;
+      }
+      return { kind: "effect", effectKind: ek as string, params: pr as Record<string, unknown> };
+    }
     default:
       errors.push(`${at}.checker.kind "${kind}" is unknown`);
       return null;

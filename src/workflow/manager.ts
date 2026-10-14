@@ -9,6 +9,9 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { digestOfJson } from "../digest/canonical.ts";
 import { Journal } from "../journal/journal.ts";
+import { EffectBroker } from "../effects/broker.ts";
+import type { Exec } from "../effects/kinds.ts";
+import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
 
@@ -20,6 +23,8 @@ export interface Actor {
 export interface EngineRun {
   workflow: () => Workflow;
   revision: () => number;
+  /** The effect broker of THIS workflow (the only thing that may perform side effects). */
+  effects: EffectBroker;
   journal: Journal;
   runId: string;
   signal: AbortSignal;
@@ -70,6 +75,15 @@ export interface ManagerOptions {
   startRequiresApproval?: boolean;
   /** Poll period for the start gate, ms. */
   pollMs?: number;
+  /** Effect policy in force (default: DEFAULT_POLICY — every effect is asked or denied). */
+  policy?: () => Policy;
+  /** Test seams for the broker. */
+  effectExec?: Exec;
+  effectEnv?: NodeJS.ProcessEnv;
+  effectIdentity?: { name: string; email: string };
+  effectFetch?: typeof fetch;
+  /** Period of the effect ticker, ms (0 disables it; `settleEffects` still works). */
+  effectTickMs?: number;
 }
 
 const newId = (): string => `wf-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
@@ -79,10 +93,44 @@ export class WorkflowManager {
   readonly #journals = new Map<string, Journal>();
   readonly #running = new Map<string, { abort: AbortController; done: Promise<void> }>();
   readonly #queue: string[] = [];
+  readonly #brokers = new Map<string, EffectBroker>();
+  #ticker: ReturnType<typeof setInterval> | null = null;
   #closed = false;
 
   constructor(o: ManagerOptions) {
     this.#o = o;
+    const every = o.effectTickMs ?? 250;
+    if (every > 0) {
+      this.#ticker = setInterval(() => void this.settleEffects().catch(() => {}), every);
+      this.#ticker.unref?.();
+    }
+  }
+
+  /** The workflow's effect broker (created on first use, bound to its journal). */
+  effects(id: string): EffectBroker | null {
+    const held = this.#brokers.get(id);
+    if (held) return held;
+    const j = this.#journal(id);
+    if (!j) return null;
+    const b = new EffectBroker({
+      journal: j, runId: id, repoRoot: this.#o.workspaceRoot, policy: this.#o.policy ?? (() => DEFAULT_POLICY),
+      ...(this.#o.effectExec ? { exec: this.#o.effectExec } : {}), ...(this.#o.effectEnv ? { env: this.#o.effectEnv } : {}),
+      ...(this.#o.effectIdentity ? { identity: this.#o.effectIdentity } : {}), ...(this.#o.effectFetch ? { fetch: this.#o.effectFetch } : {}),
+    });
+    this.#brokers.set(id, b);
+    return b;
+  }
+
+  /** Execute what humans approved, expire the stale ones. Idempotent; safe to call from any process. */
+  async settleEffects(id?: string): Promise<void> {
+    const ids = id ? [id] : [...this.#journals.keys()];
+    for (const wf of ids) {
+      const j = this.#journal(wf);
+      if (!j) continue;
+      // cheap guard: only workflows that have an open effect need a broker
+      if (!j.listEvents().some((e) => e.entity === "effect" && (e.toState === "PENDING" || e.toState === "EXECUTING"))) continue;
+      await this.effects(wf)!.tick();
+    }
   }
 
   // ---- persistence helpers ----------------------------------------------------------------------
@@ -202,6 +250,7 @@ export class WorkflowManager {
         res = await this.#o.engine.run({
           workflow: () => this.#doc(j)!.workflow,
           revision: () => this.#doc(j)!.revision,
+          effects: this.effects(id)!,
           journal: j,
           runId: id,
           signal: abort.signal,
@@ -303,6 +352,7 @@ export class WorkflowManager {
 
   async close(): Promise<void> {
     this.#closed = true;
+    if (this.#ticker) clearInterval(this.#ticker);
     for (const r of this.#running.values()) r.abort.abort();
     await Promise.allSettled([...this.#running.values()].map((r) => r.done));
     for (const j of this.#journals.values()) j.close();

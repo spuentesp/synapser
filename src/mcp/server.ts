@@ -36,7 +36,10 @@ const str = (d: string, extra: Record<string, unknown> = {}) => ({ type: "string
 export interface McpOptions {
   manager: WorkflowManager;
   role?: McpRole;
+  /** A `worker` session belongs to ONE workflow/task; it can touch nothing else (plan 13 §3, M1). */
+  bound?: { workflowId: string; taskId: string };
   catalog?: () => ProfileCard[];
+  policy?: () => unknown;
   /** Journal for calls that belong to no workflow (list, catalog). */
   serverJournal: Journal;
   version?: string;
@@ -66,6 +69,15 @@ export class McpServer {
   }
 
   /** A caller may act on workflows its client created; the operator (CLI/UI) acts on all. */
+  /** Resolve the workflow an effect tool acts on, enforcing ownership (initiator) or binding (worker). */
+  #scope(a: Record<string, unknown>, s: McpSession): string | { error: string } {
+    const bound = this.#o.bound;
+    const id = String(a["workflow_id"] ?? bound?.workflowId ?? "");
+    if (s.role === "worker") return bound && id === bound.workflowId ? id : { error: "NOT_YOUR_WORKFLOW" };
+    const own = this.#owned(id, s);
+    return own.ok ? id : { error: own.error };
+  }
+
   #owned(id: string, s: McpSession): { ok: true } | { ok: false; error: string } {
     const v = this.#o.manager.status(id);
     if (!v) return { ok: false, error: "UNKNOWN_WORKFLOW" };
@@ -182,6 +194,49 @@ export class McpServer {
         description: "Relay a human's rejection of a gate. Same code requirement as gate_approve.",
         inputSchema: { type: "object", required: ["workflow_id", "gate", "code"], properties: { workflow_id: wfId, gate: str("Gate key."), code: str("The operator's one-time code."), reason: str("Optional note.") } },
         run: (a, s) => this.#decide(a, s, "REJECTED"),
+      },
+      {
+        name: "effect_request", roles: ["initiator", "worker"], readOnly: false,
+        description: "Ask Synapser to perform a side effect you cannot (git.commit, git.push, gh.pr, http.request). Policy decides allow/ask/deny; with `ask` a human must approve what the system computes (not what you describe). Returns PENDING — nothing happens until then.",
+        inputSchema: {
+          type: "object", required: ["workflow_id", "kind", "params"],
+          properties: { workflow_id: wfId, kind: str("e.g. git.push"), params: { type: "object" }, why: str("Why — recorded as your assertion, never as evidence.") },
+        },
+        run: async (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          const b = m.effects(id);
+          if (!b) return { error: "UNKNOWN_WORKFLOW" };
+          const r = await b.request({ kind: String(a["kind"]), params: a["params"], requestedBy: `${s.client}#${s.id}`, taskId: this.#o.bound?.taskId ?? null });
+          return r.ok ? { effect_id: r.id, state: r.state, decision: r.decision, summary: r.summary, rule: r.rule } : { error: r.code, errors: r.errors };
+        },
+      },
+      {
+        name: "effect_status", roles: ["initiator", "worker"], readOnly: true,
+        description: "State, summary and evidence of an effect (PENDING, DONE, DENIED, STALE, EXPIRED, FAILED).",
+        inputSchema: { type: "object", required: ["workflow_id", "effect_id"], properties: { workflow_id: wfId, effect_id: str("ef-…") } },
+        run: (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          const st = m.effects(id)?.status(String(a["effect_id"]));
+          return st ? { effect_id: st.id, kind: st.kind, state: st.state, summary: st.summary, reason: st.reason, evidence: st.evidence, rule: st.rule } : { error: "UNKNOWN_EFFECT" };
+        },
+      },
+      {
+        name: "effect_list", roles: ["initiator"], readOnly: true,
+        description: "Effects requested in a workflow, with their state.",
+        inputSchema: { type: "object", required: ["workflow_id"], properties: { workflow_id: wfId } },
+        run: (a, s) => {
+          const id = this.#scope(a, s);
+          if (typeof id !== "string") return id;
+          return { effects: (m.effects(id)?.records() ?? []).map((r) => ({ effect_id: r.id, kind: r.kind, state: r.state, summary: r.summary, rule: r.rule })) };
+        },
+      },
+      {
+        name: "policy_show", roles: ["initiator"], readOnly: true,
+        description: "The effect policy in force: which kinds are allowed, asked or denied.",
+        inputSchema: { type: "object", properties: {} },
+        run: () => this.#o.policy?.() ?? { error: "NO_POLICY" },
       },
       {
         name: "catalog_list", roles: ["initiator"], readOnly: true,

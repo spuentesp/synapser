@@ -42,6 +42,8 @@ export interface AgentRunRequest {
   deadlineMs?: number;
   /** Native agents may ask for subtasks through this port; CLI agents have no such tool. */
   delegation?: import("../orchestration/delegation.ts").DelegationPort;
+  /** Native agents may ASK for side effects here; CLI agents cannot (they have no channel back). */
+  effects?: import("../effects/port.ts").EffectPort;
 }
 
 export type IntegrationMode =

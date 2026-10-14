@@ -74,6 +74,18 @@ const summarize = (e: Ev): string => {
       return `search ${e.toState}${d.query ? `: "${String(d.query).slice(0, 80)}"` : " (refused)"} → ${(d.urls ?? []).length} source(s)${d.cached ? " [cached]" : ""}${d.error ? ` — ${d.error}` : ""}`;
     case "acceptance_check":
       return `check ${d.check}: ${e.toState} — ${d.detail}`;
+    case "effect":
+      return e.fromState === null
+        ? `effect ${e.entityId} (${d.kind}) requested by ${d.requested_by}: ${e.toState}${d.rule ? ` [rule ${d.rule}]` : ""}${d.summary ? ` — ${String(d.summary).slice(0, 160)}` : ""}`
+        : `effect ${e.entityId} ${e.fromState} → ${e.toState}${d.reason ? ` (${String(d.reason).slice(0, 120)})` : ""}${d.evidence ? ` evidence=${JSON.stringify(d.evidence).slice(0, 120)}` : ""}`;
+    case "policy":
+      return `effect policy ${e.entityId.slice(7, 19)}… in force (${d.rules} rules, default ${d.default})`;
+    case "mcp_call":
+      return `${d.client} (${d.role}) called ${e.toState}${d.ok === false ? " — refused" : ""}`;
+    case "condition":
+      return `condition ${e.entityId}: ${e.toState} (${d.evidence}) — ${String(d.detail ?? "").split("\n")[0]!.slice(0, 140)}`;
+    case "workflow":
+      return `workflow ${e.fromState ?? "∅"} → ${e.toState}${d.reason ? ` (${String(d.reason).slice(0, 100)})` : ""}`;
     case "task_retry":
       return `${e.entityId} retried (${e.toState?.toLowerCase().replace("_", " ")}) after ${d.after}${(d.avoided ?? []).length ? `, avoiding ${(d.avoided as string[]).join(",")}` : ""}`;
     case "task_dep":

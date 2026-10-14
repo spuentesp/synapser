@@ -39,6 +39,11 @@ export interface CheckerContext {
   baseline: ReadonlyMap<string, string | null>;
   /** Waits for a human decision on a `approval` condition. Resolves "APPROVED" | "REJECTED" | "TIMEOUT". */
   awaitApproval: (key: string, snapshot: string, prompt: string) => Promise<"APPROVED" | "REJECTED" | "TIMEOUT">;
+  /**
+   * Makes sure an effect has been performed: reuses a finished/in-flight one, or requests it, then waits
+   * for the human decision the policy requires. Absent ⇒ effect conditions cannot be satisfied.
+   */
+  ensureEffect?: (kind: string, params: Record<string, unknown>) => Promise<{ state: string; reason: string | null; evidence: Record<string, unknown> | null; summary: string }>;
   /** Runs a reviewer; absent ⇒ review conditions are unsatisfied with that explanation. */
   review?: (profileId: string, rubric: string) => Promise<{ verdict: "pass" | "fail"; text: string }>;
 }
@@ -113,6 +118,12 @@ async function run(checker: Checker, id: string, ctx: CheckerContext, snapshot: 
       const d = await ctx.awaitApproval(`cond:${id}`, snapshot, checker.prompt);
       return { ok: d === "APPROVED", detail: d === "APPROVED" ? "approved by a human" : d === "REJECTED" ? "rejected by a human" : "no human decision before the deadline", evidence: "human" };
     }
+    case "effect": {
+      if (!ctx.ensureEffect) return { ok: false, detail: "effects are not available in this run", evidence: "deterministic" };
+      const e = await ctx.ensureEffect(checker.effectKind, checker.params);
+      if (e.state === "DONE") return { ok: true, detail: `${checker.effectKind} performed: ${JSON.stringify(e.evidence ?? {}).slice(0, 200)}`, evidence: "human" };
+      return { ok: false, detail: `${checker.effectKind} is ${e.state}${e.reason ? `: ${e.reason}` : ""}`, evidence: "human" };
+    }
     case "review": {
       if (!ctx.review) return { ok: false, detail: "no reviewer is configured", evidence: "secondary" };
       const r = await ctx.review(checker.profile, checker.rubric);
@@ -129,7 +140,18 @@ export async function evaluateWorkflow(w: Workflow, ctx: CheckerContext): Promis
     const status: ConditionStatus = waived ? "WAIVED" : o.ok ? (required ? "SATISFIED" : "INFO_OK") : required ? "UNSATISFIED" : "INFO_FAIL";
     results.push({ id, statement, required, status, evidence: o.evidence, detail: waived ? `waived by ${waived.actor}: ${waived.reason}` : o.detail, checker: checker.kind, snapshot });
   };
-  for (const c of w.conditions) {
+  // Effects are requested only when EVERYTHING ELSE holds: never publish work that is not accepted.
+  const ordered = [...w.conditions.filter((c) => c.checker.kind !== "effect"), ...w.conditions.filter((c) => c.checker.kind === "effect")];
+  // ANY unmet required condition blocks the next effect — an earlier rejected commit included
+  const blockedBy = (): string[] => results.filter((r) => r.required && r.status === "UNSATISFIED").map((r) => r.id);
+  for (const c of ordered) {
+    if (c.checker.kind === "effect" && !c.waivedBy) {
+      const blockers = blockedBy();
+      if (blockers.length) {
+        push(c.id, c.statement, c.required, c.checker, { ok: false, detail: `not attempted: required condition(s) unmet (${blockers.join(", ")}), so nothing is published`, evidence: "deterministic" });
+        continue;
+      }
+    }
     if (c.waivedBy) {
       push(c.id, c.statement, c.required, c.checker, { ok: false, detail: "", evidence: "deterministic" }, c.waivedBy);
       continue;

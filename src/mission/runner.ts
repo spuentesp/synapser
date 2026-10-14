@@ -55,6 +55,8 @@ export interface MissionDeps {
     /** Extra fields for the `condition_round` event (e.g. the workflow revision judged). */
     meta?: Record<string, unknown>;
   }>;
+  /** Lets native agents ASK for side effects (never perform them). */
+  effects?: import("../effects/port.ts").EffectPort;
   /** Cooperative cancellation: stop admitting work, let running steps end, finish CANCELLED. */
   signal?: AbortSignal;
   /** Evidence checks beyond commands (e.g. citation provenance); run after the commands pass. */
@@ -185,6 +187,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         ...(deps.budget ? { budget: deps.budget } : {}),
         ...(deps.research ? { research: deps.research } : {}),
         ...(broker ? { delegation: broker } : {}),
+        ...(deps.effects ? { effects: deps.effects } : {}),
         role: isRepair ? "repair" : "worker",
         deadlineMs: deadline,
         ...(L.loop ? { limits: L.loop } : {}),

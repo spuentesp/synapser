@@ -62,7 +62,7 @@ export function workflowBlock(w: Workflow): string {
   const chk = (c: Workflow["conditions"][number]): string => {
     const k = c.checker;
     const how =
-      k.kind === "command" ? `command ${k.commandId}` : k.kind === "citations" ? `${k.file} cites ≥${k.min} retrieved source(s)` : k.kind === "diff" ? `diff: require ${(k.require ?? []).join(",") || "—"}; forbid ${(k.forbid ?? []).join(",") || "—"}` : k.kind === "file" ? `${k.path} ${typeof k.assert === "string" ? k.assert : `contains "${k.assert.contains}"`}` : k.kind === "approval" ? `human approval: ${k.prompt}` : `review by ${k.profile}`;
+      k.kind === "command" ? `command ${k.commandId}` : k.kind === "citations" ? `${k.file} cites ≥${k.min} retrieved source(s)` : k.kind === "diff" ? `diff: require ${(k.require ?? []).join(",") || "—"}; forbid ${(k.forbid ?? []).join(",") || "—"}` : k.kind === "file" ? `${k.path} ${typeof k.assert === "string" ? k.assert : `contains "${k.assert.contains}"`}` : k.kind === "approval" ? `human approval: ${k.prompt}` : k.kind === "effect" ? `Synapser performs ${k.effectKind} after the required human decision (no task needed)` : `review by ${k.profile}`;
     return `- [${c.id}] ${c.statement} — checked by ${how}${c.required ? "" : " (informational)"}`;
   };
   return [
