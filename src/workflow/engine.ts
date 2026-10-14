@@ -127,7 +127,8 @@ export class ProductionEngine implements WorkflowEngine {
           m = new OpenAICompatibleProvider({
             config: modelConfigForProvider(p.provider, provider, p.model, p.temperature ?? 0),
             // Bind accounting to the selected provider. Two providers may legally share URL/model.
-            onCall: journalRecorder(journal, priceResolverForProviders({ [p.provider]: provider })),
+            // plan 15 D4: tariffs come only from the operator's file. A library provider's prices are never summed into a cost
+            onCall: journalRecorder(journal, priceResolverForProviders({ [p.provider]: Object.hasOwn(c.providers ?? defaultModelConfig().providers, p.provider) ? provider : { ...provider, models: provider.models.map((m) => ({ id: m.id })) } })),
           });
           own.set(p.id, m);
         }

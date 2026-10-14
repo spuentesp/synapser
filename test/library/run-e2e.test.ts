@@ -80,7 +80,8 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     const later = await endpoint("VERDICT: FAIL");   // an edit made while the run is planning names this one
     servers = [answers, after, later];
 
-    const provider = (baseUrl: string) => ({ protocol: "openai-compatible", baseUrl, apiKeyEnv: [KEY], models: [{ id: "lib-model" }] });
+    // the library states prices; they must not reach the cost of the run (plan 15 D4)
+    const provider = (baseUrl: string) => ({ protocol: "openai-compatible", baseUrl, apiKeyEnv: [KEY], models: [{ id: "lib-model", usdPer1MIn: 1, usdPer1MOut: 2 }] });
     lib.put("providers", "lib-provider", provider(answers.url), OP.id);
     lib.put("agents", "lib-reviewer", { adapter: "native", description: "reviews the change", role: "advisor", tags: ["review"], timeoutMs: 120_000, provider: "lib-provider", model: "lib-model" }, OP.id);
 
@@ -129,6 +130,9 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     const reviews = mgr.journalOf("wf-library")?.listAgentRuns().filter((r) => r.profileId === "lib-reviewer") ?? [];
     assert.ok(reviews.length > 0, "the library reviewer left no run record");
     assert.deepEqual(reviews.at(-1)?.skills, [{ id: "style-guide", digest: sha256Bytes(Buffer.from(SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
+    const libraryCalls = mgr.journalOf("wf-library")?.listModelCalls().filter((c) => c.requestedModel === "lib-model") ?? [];
+    assert.ok(libraryCalls.length > 0, "the library model left no call record");
+    assert.ok(libraryCalls.every((c) => c.costUsd === null), "a library tariff reached the cost of a run");
     assert.equal(after.requests.length, 0, "an edit made after the snapshot redirected the run");
     assert.equal(later.requests.length, 0, "an edit made while planning redirected the run");
   });
