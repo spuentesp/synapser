@@ -136,7 +136,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   inválido lista sus problemas y deja Guardar deshabilitado; un borrador se edita y guarda con PUT. Suite completa.
   nota: esta tarea se empezó sin commit de reclamo previo (ver bitácora).
 - [x] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
-  revisión, migración con no-metas. commit: PENDING · prueba: navegador real: cada plantilla, con parámetros, rellena
+  revisión, migración con no-metas. commit: 1a118df · prueba: navegador real: cada plantilla, con parámetros, rellena
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
