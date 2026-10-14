@@ -62,8 +62,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
   commit: a836569. Prueba: `--help` y esquema del binario
   instalado, argv determinista, parser del 402 capturado y suite completa verdes; llamada pagada omitida por saldo.
-- [~] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
-  quién: GPT-5 Codex · desde: 2026-10-13
+- [x] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
+  commit: f492fca (inicio; implementación y cierre en este commit). Prueba: sustitución argv sin shell,
+  parser `plain`, validación de perfil y suite completa verdes.
 - [ ] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2.
 - [ ] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
@@ -127,3 +128,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-13 | GPT-5 Codex | Q1.3: adaptador `codex`; sandbox por perfil y `CODEX_HOME` dentro del HOME descartable. |
 | 2026-10-13 | GPT-5 Codex | Q1.4: adaptador `kimi`; parser de sesión aislado y mecanismo `--skills-dir` declarado. |
 | 2026-10-13 | GPT-5 Codex | Q1.5: adaptador `mimo`; skills nativas confirmadas mediante `skills.paths` en config efímera. |
+| 2026-10-13 | GPT-5 Codex | Q1.6: adaptador `generic-cli`; argv declarativo, parser `plain` y fallback `prompt-prepend`. |

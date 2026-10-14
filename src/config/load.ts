@@ -120,7 +120,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
           id: x["id"] as string,
           description: typeof x["description"] === "string" ? (x["description"] as string) : (base?.description ?? ""),
           role: (x["role"] === "advisor" || x["role"] === "writer" ? x["role"] : (base?.role ?? "writer")) as AgentProfile["role"],
-          adapter: (ep ? "native" : (x["adapter"] ?? base?.adapter ?? "cli-oneshot")) as NonNullable<AgentProfile["adapter"]>,
+          adapter: (ep ? "native" : (x["adapter"] ?? base?.adapter ?? "generic-cli")) as NonNullable<AgentProfile["adapter"]>,
           argv: argv as string[],
           parser: parser as AgentProfile["parser"],
           timeoutMs: typeof x["timeoutMs"] === "number" ? (x["timeoutMs"] as number) : (base?.timeoutMs ?? 300_000),

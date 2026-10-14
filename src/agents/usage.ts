@@ -244,7 +244,7 @@ export function parseMimo(stdout: string): ParsedRun {
  * non-zero exit to FAILED) and, later, whether its change set integrates and passes acceptance. Usage is
  * UNKNOWN and says so: nothing is invented.
  */
-function parsePlain(out: string): ParsedRun {
+export function parsePlain(out: string): ParsedRun {
   const tail = out.trim().split("\n").slice(-12).join("\n").slice(-1500);
   return { outcome: "SUCCEEDED", reason: null, finalText: tail || null, sessionId: null, permissionDenials: null, toolUse: null, usage: unknownUsage("a plain CLI reports no usage") };
 }

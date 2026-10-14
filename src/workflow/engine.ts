@@ -8,6 +8,7 @@ import { CLAUDE_CODE_ADAPTER } from "../agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../agents/codex.ts";
 import { KIMI_ADAPTER } from "../agents/kimi.ts";
 import { MIMO_ADAPTER } from "../agents/mimo.ts";
+import { GENERIC_CLI_ADAPTER } from "../agents/generic-cli.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
 import { Executor } from "../executor/executor.ts";
@@ -102,7 +103,7 @@ export class ProductionEngine implements WorkflowEngine {
         }
         return m;
       };
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)]);
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(GENERIC_CLI_ADAPTER), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)]);
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

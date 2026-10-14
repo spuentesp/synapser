@@ -170,7 +170,7 @@ describe("configurable agents", () => {
       agents: [
         { id: "codex-fast", extends: "codex-writer", tier: "cheap", tags: ["boilerplate"] },
         { id: "local-llama", adapter: "native", role: "writer", tier: "cheap", endpoint: { baseUrl: "http://127.0.0.1:11434/v1/", model: "llama3.1", apiKeyEnv: ["LOCAL_LLM_KEY"] } },
-        { id: "my-tool", adapter: "cli-oneshot", role: "writer", argv: ["mytool", "--task", "{prompt}"], tier: "standard" },
+        { id: "my-tool", adapter: "generic-cli", role: "writer", argv: ["mytool", "--task", "{prompt}"], tier: "standard" },
       ],
       pools: [{ id: "codex", members: ["codex-writer", "codex-fast"], maxConcurrent: 1 }],
     });
@@ -179,6 +179,7 @@ describe("configurable agents", () => {
     assert.deepEqual(by["codex-fast"]!.argv, by["codex-writer"]!.argv, "inherits everything it does not override");
     assert.equal(by["local-llama"]!.endpoint!.model, "llama3.1");
     assert.equal(by["my-tool"]!.parser, "plain", "a CLI without a known event format uses the plain parser");
+    assert.equal(by["my-tool"]!.adapter, "generic-cli");
     assert.equal(by["codex-fast"]!.pool, "codex");
     assert.equal(by["codex-writer"]!.pool, "codex");
     assert.deepEqual(c.pools, [{ id: "codex", members: ["codex-writer", "codex-fast"], maxConcurrent: 1 }]);

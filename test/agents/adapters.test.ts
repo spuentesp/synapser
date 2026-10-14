@@ -6,6 +6,7 @@ import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
+import { GENERIC_CLI_ADAPTER } from "../../src/agents/generic-cli.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/cli/${name}`, import.meta.url), "utf8");
@@ -119,5 +120,33 @@ describe("MimoAdapter", () => {
     assert.match(parsed.reason ?? "", /402/);
     assert.ok(validateProfile({ ...profile, permissions: { mode: "never-ask" } }).some((problem) => /mimo permission mode/.test(problem)));
     assert.ok(validateProfile({ ...profile, maxBudgetUsd: 1 }).some((problem) => /no per-run USD budget/.test(problem)));
+  });
+});
+
+describe("GenericCliAdapter", () => {
+  test("substitutes an argv array without a shell and always parses plain output", () => {
+    const profile = {
+      id: "my-tool", description: "custom", role: "writer", adapter: "generic-cli",
+      argv: ["my-tool", "--cwd", "{cwd}", "--task", "{prompt}"], parser: "plain",
+      timeoutMs: 10_000, tags: [], enabled: true,
+    } as const;
+    const invocation = GENERIC_CLI_ADAPTER.build(
+      profile,
+      { prompt: "do it", cwd: "/isolated/work", home: "/isolated/home", envSource: { PATH: "/bin" } },
+      NO_INJECTED_SKILLS,
+    );
+    assert.deepEqual(invocation.argv, ["my-tool", "--cwd", "/isolated/work", "--task", "do it"]);
+    const parsed = GENERIC_CLI_ADAPTER.parse("line one\nfinished\n", profile);
+    assert.equal(parsed.outcome, "SUCCEEDED");
+    assert.equal(parsed.finalText, "line one\nfinished");
+    assert.equal(parsed.usage.provenance, "unknown");
+    assert.equal(GENERIC_CLI_ADAPTER.capabilities.skillMechanism, "prompt-prepend");
+  });
+
+  test("rejects shell strings, missing prompt slots and structured parser claims", () => {
+    const base = { id: "my-tool", description: "custom", role: "writer", adapter: "generic-cli", argv: ["my-tool", "{prompt}"], parser: "plain", timeoutMs: 10_000, tags: [], enabled: true } as const;
+    assert.ok(validateProfile({ ...base, argv: ["sh -c bad", "{prompt}"] }).length > 0);
+    assert.ok(validateProfile({ ...base, argv: ["my-tool"] }).length > 0);
+    assert.ok(validateProfile({ ...base, parser: "codex-jsonl" }).some((problem) => /plain parser/.test(problem)));
   });
 });
