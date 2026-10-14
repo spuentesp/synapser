@@ -142,11 +142,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   abierta). Suite completa.
 - [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
-  motivo: bloqueada hasta Q5.2. El usuario decidió que las corridas leen la biblioteca (decisión 1, 14 oct), así que
-  el diseñador de agentes espera a que esos agentes se consuman de verdad.
+  motivo: desbloqueada, porque Q5.2 está hecha. El usuario decidió que las corridas leen la biblioteca (decisión 1, 14 oct). Pendiente de construir.
 - [!] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-  motivo: requiere investigación primero (tarea Q5.5). El diseño va al final, por decisión del usuario (decisión 2,
-  14 oct).
+  motivo: la investigación está hecha (`docs/plans/14-probar-agente.md`). El diseño va al final, por decisión del usuario (decisión 2, 14 oct), y espera las preguntas que son del usuario en ese documento.
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
@@ -155,7 +153,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   inválido (capturas `library-test.png` y `library-invalid.png` en `evidence/`). Suite completa.
 - [!] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
   motivo: lo construido (Q3.1, Q3.2 y Q3.5) ya está verificado en navegador con capturas en `evidence/`; "todo lo
-  anterior" incluye Q3.3 y Q3.4, bloqueadas por decisiones abiertas y sin construir, así que no hay nada que verificar.
+  anterior" incluye Q3.4, bloqueada por decisiones abiertas, y Q3.3, pendiente y sin construir, así que no hay nada que verificar.
 
 ### Q4 — Inicio y pantallas sin datos
 
@@ -193,8 +191,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: 04a58ad · prueba: `test/library/run-e2e.test.ts`: una corrida real con `ProductionEngine` (diario, Zoanthrope, ejecutor), con un servidor local que hace de endpoint. El revisor de biblioteca corre por el proveedor de biblioteca y el planificador ve al agente en su catálogo. Una edición posterior a la instantánea, y otra hecha mientras se planifica, no llegan a la corrida. Falsación: un `FrozenLibrary` que lee la biblioteca viva manda la revisión al endpoint posterior y la prueba falla.
 - [!] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
   motivo: bloqueada por D6 (plan 15): quién puede adjuntar una skill a un agente y con qué límite de tamaño y de contenido. Es decisión del usuario. Alternativa provisional que no necesita decisión (no construida): el archivo decide qué skill recibe cada agente y la biblioteca solo aporta el contenido, el mismo patrón que IC2.
-- [~] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
+  commit: 87a8403 · prueba: `docs/plans/14-probar-agente.md`: investigación con los hechos del código (copia desechable, tope de costo por adaptador, permisos, proveedor sin costo, registro) y sus preguntas al usuario. No construye nada, así que no hay código que falsar.
 
 ### Cierre
 
@@ -240,3 +238,5 @@ Abiertas: D1 a D7 del plan 15 (token, lista de variables, política de destinos,
 | 2026-10-14 | Claude Haiku 5.5 | Q5.1: la corrida lee su instantánea de biblioteca bajo el archivo vigente; una biblioteca que no cumple para la corrida entera (antes del lock). Diseño revisado con el asesor (regla estricta; reserva de todos los ids integrados; referencias inversas en 409 para Q5.2). |
 | 2026-10-14 | Claude Haiku 5.5 | Q5.2: referencias: 409 al borrar o editar lo que un agente o un workflow usa; un revisor que la instantánea no tiene detiene la corrida al arrancar. |
 | 2026-10-14 | Claude Haiku 5.5 | Q5.3 se escribió antes de reclamarlo (proceso incumplido, como P15); la reclamación queda registrada aquí. |
+| 2026-10-14 | Claude Haiku 5.5 | Q5.4 bloqueada por D6 (quién adjunta skills y con qué límite); Q3.3 desbloqueada, porque Q5.2 ya está hecha. |
+| 2026-10-14 | Claude Haiku 5.5 | Q5.5: investigación de «probar agente» en `docs/plans/14-probar-agente.md`, sin construir; preguntas al usuario en ese documento. |
