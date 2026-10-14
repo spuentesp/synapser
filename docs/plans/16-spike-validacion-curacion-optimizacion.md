@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: **propuesto** (14 oct 2026). Ninguna tarea está empezada. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: **P16.2 hecho en la rama `spike/mcp-sdk`, pendiente la decisión 1**; el resto, propuesto (14 oct 2026). Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -26,7 +26,7 @@ Etiquetas de invariantes: X (spike), V (validación), CU (curación) y O (optimi
 
 **Hechos del registro (consultados el 14 oct 2026).** `@modelcontextprotocol/server` tiene 2.3.1 como `latest`, publicada el 5 oct 2026, con licencia Apache-2.0. Sus dependencias directas son `zod` ^4.2.0 y `@modelcontextprotocol/core` 2.3.1, y exige Node ≥20. Su README en npm menciona el transporte stdio y la revisión `2026-07-28`. Las guías de terceros se contradicen sobre si la v2 es beta o estable, así que no se usan para eso.
 
-**Lo que no está verificado.** Que la revisión `2026-07-28` elimine el handshake `initialize` y la cabecera de sesión. Solo lo afirma una guía de terceros. Se verifica en la especificación oficial antes de decidir.
+**Lo que no depende de la especificación.** Una guía de terceros dice que la revisión `2026-07-28` retira el handshake `initialize`. El spike no lo usa como premisa: los clientes de hoy negocian la era 2025, que el SDK sirve con `initialize`, y la era `2026-07-28` (`server/discover`) queda fuera de alcance (ver el resultado).
 
 **Alcance.** Sustituir el transporte y el despacho de `src/mcp/server.ts`. La lógica de herramientas (gestor, catálogo, compuertas de efectos, códigos de aprobación) no cambia.
 
@@ -47,6 +47,45 @@ Etiquetas de invariantes: X (spike), V (validación), CU (curación) y O (optimi
 - **Acotado.** El spike no cambia nada fuera de `src/mcp/server.ts` y sus pruebas.
 
 **Decisión previa.** Añadir `@modelcontextprotocol/server` requiere la aprobación del usuario, con versión exacta, como `undici` (ronda 3 del plan 14).
+
+### Resultado del spike (14 oct 2026)
+
+Rama `spike/mcp-sdk`: `b53f601` (caracterización y X1, contra el servidor de `main`) y `6a6d11d` (el SDK como capa de protocolo). Suite completa: 601 pruebas, 592 pasan, 0 fallan, 9 omitidas. `npm run typecheck` en verde. El árbol de producción añade `@modelcontextprotocol/server` 2.3.1, `@modelcontextprotocol/core` 2.3.1 y `zod` 4.6.7 (deduplicada con la del SDK).
+
+**Lo que lleva el SDK:** la negociación de `initialize`, `ping`, las notificaciones, `tools/list` y los errores de método.
+
+**Lo que sigue escrito a mano:**
+- El encuadre de líneas sobre stdio. El transporte stdio del SDK cierra la sesión ante una línea que no es JSON; el nuestro responde `-32700` y sigue.
+- `tools/call`. El SDK valida sus parámetros antes de nuestro código, y así una llamada sin nombre no llegaría al ledger (M3). Tampoco puede expresar el `-32002` de una sesión sin inicializar.
+- Las herramientas, los roles y el registro. El nombre del cliente sale del `initialize`; el rol nunca.
+
+**Diferencias deliberadas,** cada una fijada en `test/mcp/characterization.test.ts`:
+1. La negociación responde la revisión que el cliente pide, si el SDK la conoce (`2025-06-18` → `2025-06-18`). Una revisión desconocida recibe `2025-11-25`. Antes se respondía `2024-11-05` siempre.
+2. Los métodos desconocidos reciben el texto `Method not found` del SDK, en lugar de `method not found: <nombre>`. El código `-32601` no cambia.
+3. Una petición con `id` nulo recibe `-32600`. Antes recibía un resultado.
+4. Un mensaje sin `id` que no es notificación no recibe respuesta. Antes recibía un resultado con `id` nulo.
+5. Una notificación con `id` no recibe respuesta. Antes, solo las dos que nombra el servidor (`notifications/initialized` y `notifications/cancelled`) no la recibían; las demás recibían `-32601`.
+6. Los parámetros de `ping` y `tools/list` no se leen, como antes: un `cursor` que no sea texto no impide el listado.
+7. Un `initialize` sin revisión, sin `clientInfo.version` o con capacidades que el servidor no lee se responde como antes. Las capacidades del cliente no se pasan al SDK.
+8. En llamadas en proceso (`handle`), `ping` e `initialize` se responden aunque haya una llamada de herramienta retenida. Por stdio, la cadena de líneas sigue reteniéndolos, como antes.
+
+**Guarda.** Una petición que el SDK no responda en `answerTimeoutMs` (10 s por defecto) recibe `-32603`, en lugar de congelar la sesión. Ninguna de las entradas probadas la activa. Su única verificación es una falsificación que quitó el filtro de `id` y convirtió el cuelgue en esa respuesta.
+
+**Era moderna, fuera de alcance.** `server/discover` responde `-32601`, e `initialize` con `2026-07-28` recibe `2025-11-25`. Para servirla hay que rehacer el estado por sesión: la clave de propietario y el contador de llamadas viven en una instancia por conexión. El SDK crea instancias por conexión y era (en HTTP, por petición). Por eso la actualización de revisión no es un beneficio inmediato de adoptar el SDK.
+
+**Clientes reales (X3).**
+- Claude Code 2.1.299: conectado al arrancar; `workflow_list` respondió sin error.
+- codex-cli 0.160.1: llamada completada. Para esa invocación se habilitó solo esa herramienta y se aprobó: el bloqueo inicial lo puso la política de aprobación del cliente, no el servidor.
+- mimo 0.1.15: conectado (`mimo mcp list`). No se ejecutó la llamada: sus credenciales están en su directorio de datos, y usarlo sin copiarlas escribiría en la base de sesiones del operador.
+- kimi 2.1.1: su CLI no expone MCP; no cuenta como cliente.
+
+El detalle está en `evidence/p16-2-clients/` (no versionado).
+
+**Criterios.** X1 cumplido: la instantánea de `tools/list` por rol coincide, y se falsó quitando una herramienta y cambiando una descripción. X2 cumplido: `mcp.test.ts` y `stdio-e2e.test.ts` pasan sin cambiar sus líneas. X3 cumplido con Claude Code y codex; mimo conecta sin llamada. X4 cumplido: tres paquetes en el árbol de producción.
+
+**Lo que la adopción compra:** la negociación de las revisiones 2025 y los tipos del protocolo, mantenidos por el SDK. No compra la revisión `2026-07-28`, y el encuadre y `tools/call` siguen siendo nuestros.
+
+**Decisión 1, pendiente.** Incorporar `@modelcontextprotocol/server` 2.3.1 a `main` con esta lista de diferencias. Recomendación: sí, sabiendo que el beneficio es la negociación de revisiones 2025, no la era nueva.
 
 ## 4. P16.3 — Validación con zod
 
@@ -158,7 +197,7 @@ Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la
 
 | # | Decisión | Recomendación | Por qué requiere aprobación |
 |---|---|---|---|
-| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | sí, si X3 pasa | es dependencia nueva |
+| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | sí; X1, X2 y X4 cumplidos, X3 con Claude Code y codex (mimo conecta sin llamada) | es dependencia nueva |
 | 2 | zod en versión exacta, dentro de `^4.2.0` | sí, en P16.3 | es dependencia nueva, aunque el SDK la trae |
 | 3 | Dónde viven los casos de regresión | un tipo de documento `cases` en la biblioteca, enlazado por el id de la skill | cambia el modelo de la biblioteca |
 | 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | cambia la máquina de estados de la biblioteca |
