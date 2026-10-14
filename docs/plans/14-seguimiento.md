@@ -12,7 +12,7 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
 - Repo `/data/agents/orca/synapser`, rama `main`. Node 24, sin dependencias de ejecución nuevas salvo que el
   plan lo diga. La UI es React + Tailwind + shadcn/ui en `web/` (`npm run web:build`).
 - Pruebas: `env -u NEBIUS_TOKEN env -u TAVILY_TOKEN npm test` (las pruebas vivas se omiten sin claves).
-  Estado al traspaso: 459 pasan, 0 fallan, 9 omitidas (468 pruebas). Una tarea no está hecha si baja ese número.
+  Estado al traspaso: 462 pasan, 0 fallan, 9 omitidas (471 pruebas). Una tarea no está hecha si baja ese número.
 - Pruebas vivas: `node --env-file=.env --test test/live/<archivo>.test.ts`. Las claves están en `.env`
   (gitignored); **nunca** imprimirlas ni commitearlas; revisar el diff antes de cada commit.
 - Commits: mensaje claro, cuerpo con el porqué, y cerrar con `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
@@ -140,8 +140,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
 - [ ] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-- [~] Q3.5 Editor de skills y de proveedores con prueba de conexión.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: PENDING · prueba:
+  `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
+  sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
+  se informa sin llamar a nadie) y navegador real con Chromium headless: crear y guardar un proveedor, probarlo
+  contra un servidor local falso (la clave solo aparece como nombre de variable) y ver los problemas de un documento
+  inválido (capturas `library-test.png` y `library-invalid.png` en `evidence/`). Suite completa.
 - [ ] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
 
 ### Q4 — Inicio y pantallas sin datos
@@ -185,3 +189,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q2.7: `doctor` y `config show` leen la biblioteca con un manejador de solo lectura (sin sincronizar ni crear journal). |
 | 2026-10-14 | Claude Haiku 5.5 | Revisión del trabajo de GPT-5 Codex (Q2.2): el cargador buscaba `providers[id]` sin propiedad propia; `provider: "constructor"` lanzaba `TypeError` en vez de `ConfigError`. Corregido en `src/config/load.ts`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.1: diseñador de workflow (formulario, condiciones por verificador, comprobación en vivo con el validador del servidor vía `POST /api/designer/check`, vista previa JSON). Empezado sin commit de reclamo previo: proceso incumplido, registrado aquí. |
+| 2026-10-14 | Claude Haiku 5.5 | Q3.5: editor de biblioteca (proveedores, agentes, skills, plantillas) y prueba de conexión por POST contra el documento guardado; reclamo previo en `da9c984`. |

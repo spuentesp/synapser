@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,6 +125,53 @@ describe("API library (plan 14 Q2.6)", () => {
     const badId = await call("PUT", "/api/library/templates/Bad%20Id", { title: "x" }, ok());
     assert.equal(badId.status, 400);
     assert.equal((await badId.json() as any).error, "INVALID_LIBRARY_ENTRY");
+  });
+
+  test("the connection test runs against the STORED endpoint and key; the key never reaches the response", async () => {
+    const seen: { auth: string | undefined; path: string }[] = [];
+    const upstream = createServer((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        seen.push({ auth: req.headers["authorization"], path: req.url ?? "" });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(req.url?.endsWith("/models") ? JSON.stringify({ data: [{ id: "m1" }] }) : JSON.stringify({ choices: [{ message: { role: "assistant", content: "pong" } }], usage: { prompt_tokens: 2, completion_tokens: 1 } }));
+      });
+    });
+    await new Promise<void>((r) => upstream.listen(0, "127.0.0.1", r));
+    const port = (upstream.address() as { port: number }).port;
+    process.env["LIBRARY_TEST_KEY"] = "sk-library-secret";
+    try {
+      await call("PUT", "/api/library/providers/local", { ...PROVIDER, baseUrl: `http://127.0.0.1:${port}/v1/` }, ok());
+      const r = await call("POST", "/api/library/providers/local/test", undefined, ok());
+      assert.equal(r.status, 200);
+      const body = (await r.json()) as { ok: boolean; error: string | null; provider: string; keyFrom: string | null };
+      assert.equal(body.ok, true, body.error ?? "");
+      assert.equal(body.provider, "local");
+      assert.equal(body.keyFrom, "LIBRARY_TEST_KEY");
+      assert.deepEqual(seen.map((s) => [s.auth, s.path]), [["Bearer sk-library-secret", "/v1/models"], ["Bearer sk-library-secret", "/v1/chat/completions"]]);
+      assert.equal(JSON.stringify(body).includes("sk-library-secret"), false, "the key never reaches the response");
+    } finally {
+      delete process.env["LIBRARY_TEST_KEY"];
+      upstream.closeAllConnections();
+      await new Promise<void>((r) => upstream.close(() => r()));
+    }
+  });
+
+  test("the connection test is a write: no token, no call; an unknown or non-provider target is refused", async () => {
+    await call("PUT", "/api/library/providers/local", PROVIDER, ok());
+    assert.equal((await call("POST", "/api/library/providers/local/test", undefined, { origin: base })).status, 401);
+    assert.equal((await call("POST", "/api/library/providers/missing/test", undefined, ok())).status, 404);
+    assert.equal((await call("POST", "/api/library/skills/x/test", undefined, ok())).status, 404);
+    assert.equal((await call("GET", "/api/library/providers/local/test")).status, 404);
+  });
+
+  test("a stored provider whose key is not set reports it, and sends nothing", async () => {
+    await call("PUT", "/api/library/providers/local", PROVIDER, ok());
+    delete process.env["LIBRARY_TEST_KEY"];
+    const body = (await (await call("POST", "/api/library/providers/local/test", undefined, ok())).json()) as { ok: boolean; keyFrom: string | null; error: string | null };
+    assert.equal(body.ok, false);
+    assert.equal(body.keyFrom, null);
+    assert.equal(body.error, "no API key in environment (tried LIBRARY_TEST_KEY)");
   });
 
   test("without a library the routes do not exist", async () => {

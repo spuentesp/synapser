@@ -82,7 +82,9 @@ Agent(native) { provider, model, temperature, tier, role, skills[] }
   no escribe nada; «Guardar» solo se habilita con un documento que ese validador acepta.
 - **Diseñador de agente**: elegir adaptador, nivel, rol, permisos, presupuesto, pool, skills; botón
   «probar» que corre una tarea trivial en una copia desechable y muestra el resultado y el costo.
-- **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger.
+- **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger. La prueba de conexión
+  de un proveedor usa el documento GUARDADO (`POST /api/library/providers/:id/test`): nunca una URL del cuerpo de la
+  petición, así que la clave no sale hacia un destino que elige quien llama.
 
 ## 6. Pantallas sin datos
 

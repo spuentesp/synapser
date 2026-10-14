@@ -44,6 +44,12 @@ const dict = {
     checkerDiff: 'Cambios en archivos', checkerCommand: 'Comando permitido', checkerCitations: 'Citas con evidencia', checkerFile: 'Estado de un archivo',
     checkerApproval: 'Aprobación humana', checkerReview: 'Revisión de un agente (evidencia secundaria)', checkerEffect: 'Efecto realizado',
     assertExists: 'existe', assertAbsent: 'no existe', assertContains: 'contiene texto',
+    library: 'Biblioteca', libraryKindProviders: 'Proveedores', libraryKindAgents: 'Agentes', libraryKindSkills: 'Skills', libraryKindTemplates: 'Plantillas',
+    libraryNewId: 'Identificador nuevo', libraryNew: 'Nuevo', libraryEmpty: 'Aún no hay documentos de este tipo.', libraryPickOne: 'Elige un documento o crea uno nuevo.',
+    libraryDocument: 'Documento (JSON)', librarySave: 'Guardar', libraryDelete: 'Borrar', libraryConfirmDelete: 'Confirmar borrado', libraryTest: 'Probar conexión',
+    libraryTesting: 'Probando…', libraryTestOk: 'Conexión correcta', libraryTestFail: 'La prueba falló', libraryKeyFrom: 'Clave tomada de',
+    libraryServed: 'Modelos que sirve', libraryNotListed: 'declarados pero no listados', libraryNoListing: 'El endpoint no publica su lista de modelos',
+    libraryCallDetail: 'Llamada mínima', libraryCost: 'costo estimado', libraryVersion: 'versión', libraryUnsaved: 'sin guardar',
   },
   en: {
     chat: 'Chat', workflows: 'Workflows', agents: 'Agents', send: 'Send', chatHint: 'Ask for a workflow, ask what is going on, or consult the advisor…',
@@ -86,6 +92,12 @@ const dict = {
     checkerDiff: 'File changes', checkerCommand: 'Allowlisted command', checkerCitations: 'Cited evidence', checkerFile: 'File state',
     checkerApproval: 'Human approval', checkerReview: 'Agent review (secondary evidence)', checkerEffect: 'Performed effect',
     assertExists: 'exists', assertAbsent: 'absent', assertContains: 'contains text',
+    library: 'Library', libraryKindProviders: 'Providers', libraryKindAgents: 'Agents', libraryKindSkills: 'Skills', libraryKindTemplates: 'Templates',
+    libraryNewId: 'New id', libraryNew: 'New', libraryEmpty: 'No documents of this kind yet.', libraryPickOne: 'Pick a document or create a new one.',
+    libraryDocument: 'Document (JSON)', librarySave: 'Save', libraryDelete: 'Delete', libraryConfirmDelete: 'Confirm delete', libraryTest: 'Test connection',
+    libraryTesting: 'Testing…', libraryTestOk: 'Connection works', libraryTestFail: 'The test failed', libraryKeyFrom: 'Key read from',
+    libraryServed: 'Models served', libraryNotListed: 'declared but not listed', libraryNoListing: 'The endpoint publishes no model list',
+    libraryCallDetail: 'Minimal call', libraryCost: 'estimated cost', libraryVersion: 'version', libraryUnsaved: 'unsaved',
   },
 } as const
 

@@ -23,6 +23,8 @@ import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
 import { validateLibraryDocument } from "../library/validate.ts";
+import type { ProviderConfig } from "../model/config.ts";
+import { testProviderConnection } from "../model/connection.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 
@@ -187,12 +189,26 @@ export function createApi(opts: ApiOptions): ApiServer {
    * The operator library (plan 14 Q2.6). Reads are open like the other GETs (no secrets live in a document:
    * provider keys are environment NAMES, which validateProviderConfig enforces). Writes come through control().
    */
-  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, kind: string | undefined, key: string | undefined, method: string, depth: number): Promise<void> {
-    if (depth > 3) return fail(res, 404, "NOT_FOUND");
+  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string): Promise<void> {
+    const [kind, key, sub] = rest;
+    if (rest.length > 3) return fail(res, 404, "NOT_FOUND");
     if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
     if (!(LIBRARY_KINDS as readonly string[]).includes(kind)) return fail(res, 404, "UNKNOWN_KIND");
     const k = kind as LibraryKind;
     if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
+    if (sub !== undefined) {
+      // POST /api/library/providers/:id/test tests the STORED endpoint and key, never ones sent in the body:
+      // a page cannot point the server's key at an address of its choosing (the write guard already applied)
+      if (sub !== "test" || k !== "providers" || method !== "POST") return fail(res, 404, "NOT_FOUND");
+      let stored: LibraryEntry | null;
+      try {
+        stored = lib.get(k, key);
+      } catch {
+        return fail(res, 400, "BAD_ID");
+      }
+      if (!stored) return fail(res, 404, "UNKNOWN_ENTRY");
+      return json(res, 200, { provider: key, ...(await testProviderConnection(stored.document as unknown as ProviderConfig)) });
+    }
     if (method === "GET") {
       let entry: LibraryEntry | null;
       try {
@@ -241,7 +257,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       const b = await readBody(req, res);
       return b === undefined ? undefined : json(res, 200, m.check(b));
     }
-    if (top === "library" && c.library) return libraryRoute(c.library, req, res, id, action, method, parts.length);
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method);
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {
