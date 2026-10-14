@@ -104,10 +104,10 @@ describe("API", () => {
     const before = readdirSync(env.ws).sort();
     const digest = currentPlanDigest(env.journal);
     requestApproval(env.journal, RUN, "t8", digest); // the gate (and its challenge) exist BEFORE the request under test
-    const before = env.journal.listEvents().length;
+    const eventsBefore = env.journal.listEvents().length;
     await fetch(`${base}/api/runs/${RUN}/approvals/t8`, { method: "POST", headers: { "content-type": "application/json", "x-synapser-token": api.token }, body: JSON.stringify({ decision: "APPROVED", planDigest: digest }) });
     assert.deepEqual(readdirSync(env.ws).sort(), before, "the workspace is untouched");
-    const added = env.journal.listEvents().slice(before);
+    const added = env.journal.listEvents().slice(eventsBefore);
     assert.deepEqual(added.map((e) => `${e.entity}:${e.toState}`), ["approval:APPROVED"], "the POST appended exactly the decision");
   });
 
