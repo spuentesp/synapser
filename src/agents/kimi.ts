@@ -33,6 +33,11 @@ export class KimiAdapter implements AgentAdapter {
       argv.push(`--${mode}`);
       template.push(`--${mode}`);
     }
+    // Kimi resolves -m against the models declared in its config.toml; that file must declare the model (P17.5).
+    if (profile.model) {
+      argv.push("-m", profile.model);
+      template.push("-m", profile.model);
+    }
     if (injected.skills.length > 0) {
       const skillsDir = join(task.home, ".local/share/synapser/skills");
       argv.push("--skills-dir", skillsDir);

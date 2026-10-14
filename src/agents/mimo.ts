@@ -28,7 +28,11 @@ export class MimoAdapter implements AgentAdapter {
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["mimo", "run", task.prompt, "--format", "json", "--pure", "--dir", task.cwd];
     const template = ["mimo", "run", "{prompt}", "--format", "json", "--pure", "--dir", "{cwd}"];
-    if (profile.model) {
+    // An injected provider carries its own model flag; the profile's model is then not used.
+    if (task.injection) {
+      argv.push(...task.injection.argv);
+      template.push(...task.injection.argv);
+    } else if (profile.model) {
       argv.push("--model", profile.model);
       template.push("--model", profile.model);
     }
@@ -37,15 +41,17 @@ export class MimoAdapter implements AgentAdapter {
       template.push("--dangerously-skip-permissions");
     }
     const files: AdapterFile[] = skillFiles(injected.skills, "home", ".local/share/synapser/skills");
-    if (injected.skills.length > 0) {
-      files.push({
-        root: "home",
-        path: ".config/mimocode/mimocode.jsonc",
-        content: `${JSON.stringify({ skills: { paths: [join(task.home, ".local/share/synapser/skills")] } }, null, 2)}\n`,
-      });
+    // One configuration file carries both the skills and the injected provider.
+    const homeConfig: Record<string, unknown> = {};
+    if (injected.skills.length > 0) homeConfig["skills"] = { paths: [join(task.home, ".local/share/synapser/skills")] };
+    if (task.injection?.homeJson) Object.assign(homeConfig, task.injection.homeJson.value);
+    if (Object.keys(homeConfig).length > 0) {
+      files.push({ root: "home", path: ".config/mimocode/mimocode.jsonc", content: `${JSON.stringify(homeConfig, null, 2)}\n` });
     }
+    const env = buildAgentEnv(profile, task.envSource, task.home);
+    if (task.injection) Object.assign(env, task.injection.env);
     return {
-      argv, argvTemplate: template, env: buildAgentEnv(profile, task.envSource, task.home),
+      argv, argvTemplate: template, env,
       resetDirs: [{ root: "home", path: ".local/share/synapser/skills" }], files,
     };
   }

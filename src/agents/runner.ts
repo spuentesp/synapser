@@ -14,6 +14,7 @@ import { procStartTicks } from "../recovery/children.ts";
 import { listTree, takeSnapshot, treeEntries } from "../validation/snapshot.ts";
 import { NO_INJECTED_SKILLS, PROFILE_CLI_ADAPTER, type AgentAdapter, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
+import { type InjectedProvider, planInjection } from "./inject.ts";
 import { assertSkillPolicyUnchanged, materializeAdapterFiles, type RecordedSkill, validateInjectedSkills } from "./skills.ts";
 import { type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
 
@@ -102,6 +103,8 @@ export interface RunAgentOptions {
   kimi?: KimiOptions;
   /** Replaces the process environment as the source for the allowlist (tests). */
   envSource?: NodeJS.ProcessEnv;
+  /** Provider to inject into this run (plan 17 P17.5). A run with a provider gets no login overlay (K8). */
+  provider?: InjectedProvider;
 }
 
 export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
@@ -119,10 +122,13 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     cpSync(baseDir, work, { recursive: true });
     const base = new Map(treeEntries(baseDir, snap.files).map((e) => [e.path, e]));
     const promptBlob = journal.artifacts.put(Buffer.from(o.prompt, "utf8"));
-    const home = makeScratchHome(scratch, profile, (o.envSource ?? process.env)["HOME"]);
+    // K8: with an injected provider, the run's home gets no login overlay, so no operator credential can reach that endpoint.
+    const home = makeScratchHome(scratch, o.provider ? { ...profile, homeOverlay: [] } : profile, (o.envSource ?? process.env)["HOME"]);
     const injected = o.injectedSkills ?? NO_INJECTED_SKILLS;
     const recordedSkills = validateInjectedSkills(injected, adapter.capabilities.skillMechanism);
-    const adapterTask = { prompt: o.prompt, cwd: work, home, envSource: o.envSource ?? process.env };
+    const envSource = o.envSource ?? process.env;
+    const injection = o.provider ? planInjection(adapter.id, o.provider, envSource) : undefined;
+    const adapterTask = { prompt: o.prompt, cwd: work, home, envSource, ...(injection ? { injection } : {}) };
     const invocation = adapter.build(
       profile,
       adapterTask,

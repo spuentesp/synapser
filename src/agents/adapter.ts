@@ -3,6 +3,7 @@
 
 import { join } from "node:path";
 import type { AdapterId, AgentProfile } from "./profile.ts";
+import type { InjectionPlan } from "./inject.ts";
 import { PARSERS, type KimiOptions, type ParsedRun } from "./usage.ts";
 
 export type SkillSupport = "native" | "prompt-prepend" | "none";
@@ -42,6 +43,8 @@ export interface AdapterTask {
   cwd: string;
   home: string;
   envSource: NodeJS.ProcessEnv;
+  /** Provider injected for this run (plan 17 P17.5); absent for a run on the CLI's own configuration. */
+  injection?: InjectionPlan;
 }
 
 /** A future skill adapter may place files in either isolated root; paths are always relative. */

@@ -29,7 +29,11 @@ export class CodexAdapter implements AgentAdapter {
     const sandbox = profile.permissions?.mode ?? (profile.role === "advisor" ? "read-only" : "workspace-write");
     const argv = ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", sandbox, "-C", task.cwd];
     const template = [...argv];
-    if (profile.model) {
+    // An injected provider carries its own model flag; the profile's model is then not used.
+    if (task.injection) {
+      argv.push(...task.injection.argv);
+      template.push(...task.injection.argv);
+    } else if (profile.model) {
       argv.push("-m", profile.model);
       template.push("-m", profile.model);
     }
@@ -37,6 +41,7 @@ export class CodexAdapter implements AgentAdapter {
     template.push("{prompt}");
     const env = buildAgentEnv(profile, task.envSource, task.home);
     env["CODEX_HOME"] = join(task.home, ".codex");
+    if (task.injection) Object.assign(env, task.injection.env);
     return {
       argv, argvTemplate: template, env,
       resetDirs: [{ root: "home", path: ".codex/skills" }],
