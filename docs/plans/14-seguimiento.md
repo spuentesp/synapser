@@ -86,7 +86,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   rechazo de identidades inseguras y reparación de una proyección adulterada; suite completa.
 - [x] Q2.2 `Provider` (protocolo, baseUrl, apiKeyEnv, modelos con precio) y agentes `native` que lo
   referencian; migrar `endpoint` de perfiles a proveedor; precio declarado → costo conocido.
-  commit: PENDING · prueba: validación acumulada de proveedores, modelos y precios; migración
+  commit: ebee726 · prueba: validación acumulada de proveedores, modelos y precios; migración
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
   costo conocido por tarifa declarada y costo desconocido ante tarifa ausente o ambigua; suite completa.
 - [ ] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
