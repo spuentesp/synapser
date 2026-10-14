@@ -44,8 +44,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q1 — Adaptadores por agente y skills
 
-- [ ] Q1.1 Interfaz `AgentAdapter` con `capabilities` y `build/parse` (`src/agents/adapter.ts`); el
+- [~] Q1.1 Interfaz `AgentAdapter` con `capabilities` y `build/parse` (`src/agents/adapter.ts`); el
   `CliOneShotRunner` actual delega en ella sin cambiar el comportamiento. *Prueba:* toda la suite actual verde.
+  quién: GPT-5 Codex · desde: 2026-10-13
 - [ ] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
 - [ ] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
