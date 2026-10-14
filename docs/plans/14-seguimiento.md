@@ -151,7 +151,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 ### Q4 — Inicio y pantallas sin datos
 
 - [x] Q4.1 Pantalla de inicio: workflows activos, compuertas pendientes, agentes, costo acumulado.
-  commit: PENDING · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
+  commit: f5cc434 · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
   una llamada con tarifa suma en USD y una sin tarifa se cuenta aparte, nunca como cero) y navegador real: captura
   `home.png` en `evidence/`. Suite completa.
 - [~] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
@@ -160,7 +160,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   se encontró que sin corridas las vistas quedaban en esqueletos para siempre; corregido en el estado de carga del
   hook. Suite completa.
 - [x] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
-  commit: PENDING · prueba: navegador real: al elegir un borrador en Workflows, el selector de corrida pasa a la corrida
+  commit: f5cc434 · prueba: navegador real: al elegir un borrador en Workflows, el selector de corrida pasa a la corrida
   de ese workflow (verificado con dos borradores). Suite completa.
 - [ ] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP).
 
