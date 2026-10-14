@@ -169,6 +169,13 @@ function checkAgent(at: string, profile: AgentProfile, policy: LibraryPolicy): R
   return { profile: problems.length ? null : profile, problems };
 }
 
+/** The provider a library agent document runs on: its own, or its base's (a file provider, never a library one). */
+export function providerOfAgent(d: Record<string, unknown>, policy: LibraryPolicy): string | undefined {
+  if (typeof d["provider"] === "string") return d["provider"];
+  if (typeof d["extends"] !== "string") return undefined;
+  return policy.bases.find((b) => b.profile.id === d["extends"])?.profile.provider;
+}
+
 // ---- providers and skills --------------------------------------------------------------------------------------------
 
 /** IC2: a library provider may name only the key variables the operator's file allows. */

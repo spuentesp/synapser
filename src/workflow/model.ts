@@ -273,3 +273,8 @@ export function matchesPattern(path: string, pattern: string): boolean {
     .join(".*");
   return new RegExp(`^${re}$`).test(path);
 }
+
+/** The agent ids the workflow's review conditions name (plan 14 Q5.2): what a run must hold, and what a delete must not break. */
+export function reviewProfilesOf(w: Workflow): string[] {
+  return [...new Set(w.conditions.flatMap((c) => (c.checker.kind === "review" ? [c.checker.profile] : [])))];
+}

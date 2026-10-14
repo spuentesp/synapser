@@ -24,7 +24,8 @@ import { swarmState } from "../audit/state.ts";
 import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
-import { type LibraryPolicy, NO_LIBRARY_POLICY, validateLibraryDocument } from "../library/validate.ts";
+import { type LibraryPolicy, NO_LIBRARY_POLICY, providerOfAgent, resolveAgent, validateLibraryDocument } from "../library/validate.ts";
+import { reviewProfilesOf } from "../workflow/model.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import { testProviderConnection } from "../model/connection.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
@@ -101,6 +102,30 @@ const sameOrigin = (req: IncomingMessage): boolean => {
 function withLibraryProviders(policy: LibraryPolicy, lib: LibraryStore): LibraryPolicy {
   const providers = Object.fromEntries(lib.list("providers").map((e) => [e.id, e.document as unknown as ProviderConfig]));
   return { ...policy, providers: { ...policy.providers, ...providers } };
+}
+
+/** The workflows that can still start and name this agent as a reviewer: a delete must not break them (plan 14 Q5.2). */
+function reviewingWorkflows(m: ApiControl["manager"], agentId: string): string[] {
+  return m
+    .list()
+    .filter((v) => (v.state === "DRAFT" || v.state === "AWAITING_START") && reviewProfilesOf(v.workflow).includes(agentId))
+    .map((v) => `workflow ${v.id} reviews with ${agentId}`);
+}
+
+/** The library agents that run on this provider. */
+function usersOfProvider(lib: LibraryStore, providerId: string, policy: LibraryPolicy): string[] {
+  return lib.list("agents").filter((e) => providerOfAgent(e.document, policy) === providerId).map((e) => `agent ${e.id} runs on provider ${providerId}`);
+}
+
+/** The agents on this provider that an edit would leave unresolvable: such an edit is refused, with the agents it breaks. */
+function agentsBrokenBy(lib: LibraryStore, providerId: string, edited: LibraryDocument, policy: LibraryPolicy): string[] {
+  const candidate: LibraryPolicy = { ...policy, providers: { ...policy.providers, [providerId]: edited as unknown as ProviderConfig } };
+  return lib.list("agents")
+    .filter((e) => providerOfAgent(e.document, policy) === providerId)
+    .flatMap((e) => {
+      const problems = resolveAgent(`agents/${e.id}`, e.id, e.document, candidate).problems;
+      return problems.length ? [`agent ${e.id} would not resolve with this edit: ${problems.join("; ")}`] : [];
+    });
 }
 
 export function createApi(opts: ApiOptions): ApiServer {
@@ -199,7 +224,7 @@ export function createApi(opts: ApiOptions): ApiServer {
    * The operator library (plan 14 Q2.6). Reads are open like the other GETs (no secrets live in a document:
    * provider keys are environment NAMES, which validateProviderConfig enforces). Writes come through control().
    */
-  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy): Promise<void> {
+  async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy, reviewers: (agentId: string) => string[]): Promise<void> {
     const [kind, key, sub] = rest;
     if (rest.length > 3) return fail(res, 404, "NOT_FOUND");
     if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
@@ -239,6 +264,9 @@ export function createApi(opts: ApiOptions): ApiServer {
       // every problem at once: an invalid edit changes nothing
       const errors = validateLibraryDocument(k, key, body, policy);
       if (errors.length) return json(res, 400, { error: "INVALID_LIBRARY_DOCUMENT", errors });
+      // a provider edit that would leave an agent unresolvable is refused, with the agents it breaks (plan 14 Q5.2)
+      const broken = k === "providers" ? agentsBrokenBy(lib, key, body as LibraryDocument, policy) : [];
+      if (broken.length) return json(res, 409, { error: "REFERENCED", references: broken });
       try {
         const r = lib.put(k, key, body as LibraryDocument, OPERATOR.id);
         return json(res, 200, { ...entryJson(r.entry), changed: r.changed });
@@ -247,6 +275,9 @@ export function createApi(opts: ApiOptions): ApiServer {
       }
     }
     if (method === "DELETE") {
+      // a referenced entry stays, and the references say why (plan 14 Q5.2)
+      const references = k === "providers" ? usersOfProvider(lib, key, policy) : k === "agents" ? reviewers(key) : [];
+      if (references.length) return json(res, 409, { error: "REFERENCED", references });
       try {
         return json(res, 200, { removed: lib.remove(k, key, OPERATOR.id) });
       } catch (e) {
@@ -307,7 +338,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         runs: runs.length,
       });
     }
-    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, withLibraryProviders(c.libraryPolicy?.() ?? NO_LIBRARY_POLICY, c.library));
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, withLibraryProviders(c.libraryPolicy?.() ?? NO_LIBRARY_POLICY, c.library), (agentId) => reviewingWorkflows(c.manager, agentId));
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {

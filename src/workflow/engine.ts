@@ -21,6 +21,7 @@ import { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import { buildCatalog, samplesFromJournal, type ProfileCard } from "../orchestration/catalog.ts";
 import { LibraryRunError, type LibraryView, runLibrary } from "../library/resolve.ts";
+import { reviewProfilesOf } from "./model.ts";
 import type { DelegationConfig } from "../orchestration/delegation.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { LocalRunner, type AllowedCommand } from "../validation/runner.ts";
@@ -82,6 +83,9 @@ export class ProductionEngine implements WorkflowEngine {
       if (e instanceof LibraryRunError) return { status: "FAILED", reason: e.message };
       throw e;
     }
+    // plan 14 Q5.2: a review that names an agent this run's library does not hold cannot be judged; the run stops here
+    const missing = reviewProfilesOf(r.workflow()).filter((id) => !library.profiles.some((p) => p.id === id));
+    if (missing.length) return { status: "FAILED", reason: `this run's library does not hold the agents its reviews name: ${missing.join(", ")}` };
     const { journal, runId } = r;
     const lock = acquireWorkspaceLock(c.stateDir, c.workspaceRoot);
     const zoo = await ZooAdapter.open(loadPin(), c.workspaceRoot);

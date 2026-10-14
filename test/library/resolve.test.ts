@@ -124,4 +124,21 @@ describe("the engine refuses a run whose library does not hold (plan 14 Q5.1)", 
     assert.equal(result.status, "FAILED");
     assert.match((result as { reason?: string | null }).reason ?? "", /belongs to the operator's file/);
   });
+
+  test("a run whose reviews name an agent its library does not hold ends FAILED before it starts (plan 14 Q5.2)", async () => {
+    const engine = new ProductionEngine({
+      workspaceRoot: "/nonexistent-synapser-workspace",
+      stateDir: "/nonexistent-synapser-state",
+      commands: [],
+      profiles: [fileNative],
+      providers: { "file-provider": FILE_PROVIDER },
+      models: () => {
+        throw new Error("no model is expected: the run must stop before planning");
+      },
+    });
+    const workflow = { conditions: [{ id: "rv", statement: "idiomatic", required: false, checker: { kind: "review", profile: "ghost", rubric: "judge" } }] };
+    const result = await engine.run({ library: snapshot([]), workflow: () => workflow } as unknown as EngineRun);
+    assert.equal(result.status, "FAILED");
+    assert.match((result as { reason?: string | null }).reason ?? "", /does not hold the agents its reviews name: ghost/);
+  });
 });
