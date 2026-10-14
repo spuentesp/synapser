@@ -22,7 +22,7 @@ Design: `design/Synapser_Diseno.docx` (v0.3) and `docs/plans/` (contracts, invar
 
 ## Run
 
-Node ≥ 24 (TypeScript runs through native type stripping). The runtime dependencies are few, and the plan that adds each one justifies it; today there is one, `undici`, for the outbound calls of library providers (plan 15, P15.5).
+Node ≥ 24 (TypeScript runs through native type stripping). The runtime dependencies are few, and the plan that adds each one justifies it. Today there are three, all pinned to an exact version: `undici`, for the outbound calls of library providers (plan 15, P15.5); `@modelcontextprotocol/server`, which answers the MCP protocol (plan 16, P16.2; its `zod` comes with it); and `zod`, which checks the shape of library agents and skills (plan 16, P16.3).
 
 ```console
 $ npm install

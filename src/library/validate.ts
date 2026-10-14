@@ -1,16 +1,16 @@
 // Library entries: what a document must hold to be written, and to be used by a run (plan 14 Q2.6 and Q5.1; plan 15).
-// It reports EVERY problem, so an invalid edit is refused whole, with the full list. The rules are data: the fields a
-// library agent may set, and the shape of each, are tables below. Semantic rules are not copied here: an agent is checked
-// as a profile, by validateProfile, the same rule the operator's file meets. This file adds no dependency.
+// It reports EVERY problem, so an invalid edit is refused whole, with the full list. The shapes of agents and skills are
+// zod schemas (schema.ts, plan 16 P16.3): they decide what each field is, which keys a variant requires, and which keys it
+// does not know. The rules that need the operator's file stay here: an agent is checked as a profile, by validateProfile,
+// the same rule the operator's file meets, and the providers, models, key names and destinations are checked against the
+// policy. zod is the library's one dependency, and it lives in schema.ts.
 
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { type ProviderConfig, validateProviderConfig } from "../model/config.ts";
 import { isBlockedAddress } from "../model/destinations.ts";
 import { isIP } from "node:net";
 import type { LibraryKind } from "./store.ts";
-
-const MAX_SKILL_BYTES = 64 * 1024;
-const MAX_TIMEOUT_MS = 60 * 60 * 1000;
+import { extendingAgentSchema, MAX_SKILL_BYTES, MAX_TIMEOUT_MS, nativeAgentSchema, requiredKeys, skillSchema } from "./schema.ts";
 
 /** A profile a library agent may extend, and whether the operator's file enables it (plan 15 IC1). */
 export interface LibraryBase {
@@ -72,36 +72,32 @@ function providerIdProblems(at: string, id: string, policy: LibraryPolicy): stri
     : [];
 }
 
-// ---- agents (plan 15 IC1, plan 14 Q5.1) ----------------------------------------------------------------------------
+// ---- agents (plan 15 IC1, plan 14 Q5.1, plan 16 P16.3) -------------------------------------------------------------
 
-/** Case (a): an agent that extends a profile sets only these. Everything else is the base's. */
-export const EXTENDING_FIELDS = ["id", "extends", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
-/** Case (b): a native agent of its own. It runs no command, so it has no argv, env, home or permissions. */
-export const NATIVE_FIELDS = ["id", "adapter", "role", "nativeRole", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
-export const NATIVE_REQUIRED = ["adapter", "role", "description", "tags", "timeoutMs", "model", "provider"];
+/** Case (a): an agent that extends a profile sets only these. Everything else is the base's. Derived from the schema. */
+export const EXTENDING_FIELDS = Object.keys(extendingAgentSchema.shape);
+/** Case (b): a native agent of its own. It runs no command, so it has no argv, env, home or permissions. Derived from the schema. */
+export const NATIVE_FIELDS = Object.keys(nativeAgentSchema.shape);
+export const NATIVE_REQUIRED = requiredKeys(nativeAgentSchema.shape);
 /** Fields only the operator's file may set, in either case: they run commands or widen what an agent may do. */
 export const FILE_ONLY_FIELDS = ["argv", "env", "homeOverlay", "permissions", "maxBudgetUsd", "parser", "pool", "steerable", "disabledReason"];
 
-const isString = (v: unknown): boolean => typeof v === "string";
-const isStringList = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === "string");
-const isBoolean = (v: unknown): boolean => typeof v === "boolean";
-const isTier = (v: unknown): boolean => (TIERS as readonly unknown[]).includes(v);
-const isTimeout = (v: unknown): boolean => typeof v === "number" && v > 0 && v <= MAX_TIMEOUT_MS;
-const isTemperature = (v: unknown): boolean => typeof v === "number" && v >= 0 && v <= 2;
-
-/** The shape each agent field must have, and how a problem names it. Semantic rules run only after these hold. */
-const AGENT_SHAPES: Readonly<Record<string, { ok: (v: unknown) => boolean; says: string }>> = {
-  description: { ok: isString, says: "a string" },
-  tags: { ok: isStringList, says: "an array of strings" },
-  tier: { ok: isTier, says: `one of ${TIERS.join(", ")}` },
-  timeoutMs: { ok: isTimeout, says: `a positive number of milliseconds, at most one hour (${MAX_TIMEOUT_MS})` },
-  enabled: { ok: isBoolean, says: "a boolean" },
-  model: { ok: isString, says: "a string" },
-  provider: { ok: isString, says: "a string" },
-  temperature: { ok: isTemperature, says: "a number from 0 to 2" },
-  adapter: { ok: (v) => v === "native", says: `"native"` },
-  role: { ok: (v) => v === "writer" || v === "advisor", says: `"writer" or "advisor"` },
-  nativeRole: { ok: (v) => v === "worker" || v === "repair", says: `"worker" or "repair"` },
+/** How a field reads in a problem: "<field> must be <this>". Typed over the schemas' keys, so a field added to a schema
+ *  without its sentence fails the typecheck here. `id` is not a field a problem can name: it takes anything. */
+type AgentField = Exclude<keyof typeof extendingAgentSchema.shape | keyof typeof nativeAgentSchema.shape, "id">;
+const AGENT_SAYS: Record<AgentField, string> = {
+  extends: "the id of a profile",
+  description: "a string",
+  tags: "an array of strings",
+  tier: `one of ${TIERS.join(", ")}`,
+  timeoutMs: `a positive number of milliseconds, at most one hour (${MAX_TIMEOUT_MS})`,
+  enabled: "a boolean",
+  model: "a string",
+  provider: "a string",
+  temperature: "a number from 0 to 2",
+  adapter: `"native"`,
+  role: `"writer" or "advisor"`,
+  nativeRole: `"worker" or "repair"`,
 };
 
 export interface ResolvedAgent {
@@ -112,35 +108,39 @@ export interface ResolvedAgent {
 
 /** The profile a library agent stands for, or every reason it does not. The write and every run use this one rule. */
 export function resolveAgent(at: string, id: string, d: Record<string, unknown>, policy: LibraryPolicy): ResolvedAgent {
-  const extendsId = d["extends"];
-  const extending = extendsId !== undefined;
-  const allowed = extending ? EXTENDING_FIELDS : NATIVE_FIELDS;
+  const extending = d["extends"] !== undefined;
   const problems: string[] = [];
-  if (extending && typeof extendsId !== "string") problems.push(`${at}: extends must be the id of a profile`);
   if (policy.bases.some((b) => b.profile.id === id)) problems.push(`${at}: ${id} is a built-in or file profile; a library agent may add an id, not take one (plan 14 Q5.1)`);
-  for (const key of Object.keys(d)) {
-    if (allowed.includes(key)) continue;
-    problems.push(
-      FILE_ONLY_FIELDS.includes(key)
-        ? `${at}: ${key} is set by the operator's file, never by a library agent (plan 15 IC1)`
-        : `${at}: ${key} is not allowed in ${extending ? "an agent that extends a profile" : "a native library agent"} (plan 15 IC1)`,
-    );
-  }
-  // only the values whose shape holds reach the semantic rules
-  const values: Record<string, unknown> = {};
-  for (const key of allowed) {
-    if (key === "id" || key === "extends" || d[key] === undefined) continue;
-    const shape = AGENT_SHAPES[key];
-    if (shape?.ok(d[key])) values[key] = d[key];
-    else problems.push(`${at}: ${key} must be ${shape?.says ?? "valid"}`);
-  }
-  if (!extending) {
-    for (const key of NATIVE_REQUIRED) {
-      if (d[key] === undefined) problems.push(`${at}: ${key} is required for a native library agent`);
-    }
-  }
+  // the shape, the required keys and the unknown keys are the schema's. A shape problem stops the rules below it.
+  const checked = extending ? extendingAgentSchema.safeParse(d) : nativeAgentSchema.safeParse(d);
+  if (!checked.success) return { profile: null, problems: [...problems, ...shapeProblems(at, d, checked.error.issues, extending)] };
   if (problems.length) return { profile: null, problems };
-  return extending ? extendedAgent(at, id, String(extendsId), values, policy) : nativeAgent(at, id, values, policy);
+  const values: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(checked.data)) if (key !== "id" && key !== "extends") values[key] = value;
+  return extending ? extendedAgent(at, id, String(d["extends"]), values, policy) : nativeAgent(at, id, values, policy);
+}
+
+/** The words of a schema's issues: one problem per field, and one per key the variant does not take. */
+function shapeProblems(at: string, d: Record<string, unknown>, issues: readonly { code: string; path: readonly PropertyKey[]; keys?: string[] }[], extending: boolean): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const issue of issues) {
+    if (issue.code === "unrecognized_keys") {
+      for (const key of issue.keys ?? []) {
+        problems.push(
+          FILE_ONLY_FIELDS.includes(key)
+            ? `${at}: ${key} is set by the operator's file, never by a library agent (plan 15 IC1)`
+            : `${at}: ${key} is not allowed in ${extending ? "an agent that extends a profile" : "a native library agent"} (plan 15 IC1)`,
+        );
+      }
+      continue;
+    }
+    const key = String(issue.path[0]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    problems.push(d[key] === undefined ? `${at}: ${key} is required for a native library agent` : `${at}: ${key} must be ${AGENT_SAYS[key as AgentField]}`);
+  }
+  return problems;
 }
 
 /** Case (a). The base is the operator's own profile, so what it executes is already decided; the document only tunes it. */
@@ -201,13 +201,16 @@ function keyNameProblems(at: string, d: Record<string, unknown>, policy: Library
     .map((n) => `${at}: apiKeyEnv ${n} is not in providerKeyEnv (the operator's allowlist in synapser.config.json)`);
 }
 
+/** A skill: name, description and content are required, tags are strings if given, and the content is at most
+ *  MAX_SKILL_BYTES bytes (counted in bytes, not characters). */
 function skillProblems(at: string, d: Record<string, unknown>): string[] {
+  const checked = skillSchema.safeParse(d);
+  const bad = new Set<string>(checked.success ? [] : checked.error.issues.map((issue) => String(issue.path[0])));
   const problems: string[] = [];
-  const { name, description, content, tags } = d;
-  if (typeof name !== "string" || !name.trim()) problems.push(`${at}: name is required`);
-  if (typeof description !== "string") problems.push(`${at}: description must be a string`);
-  if (typeof content !== "string" || !content.trim()) problems.push(`${at}: content must be a non-empty string`);
-  else if (Buffer.byteLength(content, "utf8") > MAX_SKILL_BYTES) problems.push(`${at}: content is larger than ${MAX_SKILL_BYTES} bytes`);
-  if (tags !== undefined && (!Array.isArray(tags) || tags.some((t) => typeof t !== "string"))) problems.push(`${at}: tags must be an array of strings`);
+  if (bad.has("name")) problems.push(`${at}: name is required`);
+  if (bad.has("description")) problems.push(`${at}: description must be a string`);
+  if (bad.has("content")) problems.push(`${at}: content must be a non-empty string`);
+  else if (Buffer.byteLength(d["content"] as string, "utf8") > MAX_SKILL_BYTES) problems.push(`${at}: content is larger than ${MAX_SKILL_BYTES} bytes`);
+  if (bad.has("tags")) problems.push(`${at}: tags must be an array of strings`);
   return problems;
 }

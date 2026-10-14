@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: **P16.2 hecho e incorporado a `main`** (`73991d1`; decisión 1 aprobada el 14 oct 2026). P16.3 en curso; el resto, propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: **P16.2 hecho e incorporado a `main`** (`73991d1`; decisión 1 aprobada el 14 oct 2026). P16.3 hecho para agentes y skills de biblioteca (corte de alcance pendiente de tu aprobación; proveedores y workflows pasan a P16.6); el resto, propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -89,20 +89,23 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 
 ## 4. P16.3 — Validación con zod
 
-**Alcance.** Los documentos de biblioteca y los borradores de workflow, porque ambos entran por la API y cruzan la frontera de confianza. La configuración del archivo queda fuera: la escribe el operador y no pasa por la API.
+**Alcance (cortado de la propuesta; decisión del usuario pendiente).** Esta entrega cubre los agentes y las skills de biblioteca, los dos tipos que solo existen en la biblioteca. Quedan para P16.6:
+- Los proveedores de biblioteca. Usan `validateProviderConfig`, que también valida el archivo del operador; migrarlo cambiaría la configuración, que este plan excluye.
+- Los borradores de workflow. Su validador mezcla forma con referencias a ids de comandos y de perfiles, y a rutas del workspace. Necesita su propio corpus, y no es una cuestión de dos fuentes de verdad.
+- Las plantillas siguen sin esquema (decisión abierta de Q3.2).
 
 **Método.**
-- Un esquema zod por tipo de documento: campos, tipos, obligatorios y rechazo de campos desconocidos. Cada rechazo nombra el campo.
-- Las tablas de `validate.ts` se derivan del esquema o se contrastan con él. No hay dos fuentes de verdad.
-- Las reglas semánticas siguen en código: IC1 (`enabled` solo si el archivo activa el perfil base; pool rechazado), IC2 (lista de claves), D3 (destinos literales) y las referencias de Q5.2.
+- `src/library/schema.ts`: un esquema zod por variante de agente (la que extiende un perfil y la nativa) y uno para skills. zod decide el tipo de cada campo, las claves obligatorias y las claves desconocidas (`z.strictObject`).
+- `validate.ts` deriva `EXTENDING_FIELDS`, `NATIVE_FIELDS` y `NATIVE_REQUIRED` de esos esquemas, en lugar de tenerlos escritos a mano. La tabla de textos de los motivos está tipada sobre las claves del esquema: un campo nuevo sin texto no compila.
+- Las reglas semánticas siguen en código y solo corren cuando la forma es válida: IC1 (`enabled` solo si el archivo activa el perfil base; pool rechazado), la existencia del perfil base, del proveedor y del modelo, `validateProfile`, IC2 (lista de claves), D3 (destinos literales) y las referencias de Q5.2.
 
-**Dependencia.** zod es dependencia directa del proyecto, con versión exacta dentro de `^4.2.0`, para que npm la deduplique con la copia del SDK. Si P16.2 no se adopta, zod entra por sí solo y necesita su propia aprobación.
+**Dependencia.** `zod` 4.6.7, exacto, declarado como dependencia directa (aprobado el 14 oct junto con este paso). Es la versión que ya trae `@modelcontextprotocol/server`, así que el árbol de producción no añade paquetes. Quitar la declaración es un cambio de una línea en `package.json`, si el usuario lo prefiere.
 
 **Invariantes y verificación.**
-- **V1 Equivalencia.** Sobre un corpus (los documentos de `test/library/agent-rules.test.ts`, `test/library/read.test.ts`, `test/api/library.test.ts` y los borradores de `test/api/designer.test.ts`), el veredicto (aceptado o rechazado) y el campo que motiva el rechazo son los mismos antes y después. El texto del motivo puede cambiar, y cada cambio se anota.
-- **V2 Reglas intactas.** Las pruebas de IC1 a IC4, de D3 y de referencias no cambian sus aserciones.
-- **V3 Forma estricta.** Un campo desconocido o de tipo incorrecto se rechaza y se nombra.
-- *Falsación:* quitar el esquema de un campo. V1 deja pasar un documento que antes se rechazaba, y la prueba falla.
+- **V1 Equivalencia.** `test/library/validation-golden.test.ts`: 204 casos del corpus `test/library/validation-corpus.ts`, con los motivos que daba `main` antes del cambio (golden de `8d3a0db`, generado desde `73991d1`) y el perfil resuelto de cada agente válido. Los motivos se comparan ordenados, porque el orden no es un contrato: cada problema se informa. Los textos no cambian. Regenerar el golden es un cambio deliberado, como el snapshot X1.
+- **V2 Reglas intactas.** Las pruebas de IC1 a IC4 (`test/library/agent-rules.test.ts`, `read.test.ts`, `references.test.ts`, `resolve.test.ts`), de D3 y de la API de biblioteca pasan sin cambiar sus aserciones.
+- **V3 Forma estricta.** Un campo desconocido se rechaza y se nombra; un campo ausente o de tipo incorrecto se rechaza con su nombre.
+- **Falsación.** Seis cambios al esquema, cada uno hace fallar el golden: límite de temperatura `lte(2)`→`lt(2)` (2 casos), mínimo de timeout `gt(0)`→`gte(0)` (2), etiquetas de skill sin tipo (1), campo obligatorio hecho opcional (1), `strictObject`→`object` (23), tamaño de skill menos un byte (4). Después, el esquema original, restaurado y verificado con `cmp`.
 
 ## 5. P16.4 — Curación de skills
 
