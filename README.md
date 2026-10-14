@@ -76,8 +76,7 @@ $ node scripts/verify-export.ts <run>.ledger.json     # verifies an export with 
 - **Library** holds providers, agents, skills and templates as versioned documents. A refused document lists every
   problem at once. *Test connection* calls a stored provider's endpoint with its key; the report names the environment
   variable the key came from and never shows the key. Limits: a library provider may use only the key names listed in
-  `providerKeyEnv` in the configuration file (empty by default), and a listed key can still be sent to any https address
-  that a library provider names. In operator mode a local process that reads the console's session cookie can write such a provider; in adversarial mode it needs the one-time code that `serve` prints.
+  `providerKeyEnv` in the configuration file (empty by default), and a listed key can still be sent to any public https address that a library provider names. Private and metadata addresses are refused (plan 15 D3). In operator mode a local process that reads the console's session cookie can write such a provider; in adversarial mode it needs the one-time code that `serve` prints.
   A page from another site cannot. This is declared in the design document (section 40) and is not yet closed.
 
 Runs read the library. A run takes the providers and agents as they are when it starts, checks them against the
