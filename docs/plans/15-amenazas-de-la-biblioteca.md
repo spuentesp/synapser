@@ -238,3 +238,17 @@ través del proxy. Preguntar a Nebius por destinos permitidos es una decisión d
 
 - ¿Se hace la prueba de concepto B? Solo Linux, y depende de `pasta` o de un par veth.
 - ¿Se pregunta a Nebius por destinos permitidos? Lo decide el usuario.
+
+### Prueba de concepto (14 oct)
+
+- **Con `pasta`, como se aprobó: no separa un puerto.** Sin mapeos, el espacio no alcanza nada. Con el loopback del host
+  mapeado (`--map-host-loopback`, o el modo por defecto con la dirección de la puerta de enlace), alcanza todos los
+  servicios del host, también los que no son el proxy. No sirve como barrera. Lo que sí hace es dar salida de red cuando
+  el espacio tiene una ruta, y eso no es lo que D5 necesita.
+- **Con `bwrap --unshare-net` (instalado en el host), sí aísla para HTTP.** El espacio no tiene más interfaz que el
+  loopback. Un proxy en el host, sobre un socket Unix, deja pasar solo el host del modelo; un puente dentro del espacio
+  ofrece el proxy en `127.0.0.1:3128`. Verificado: el host del modelo responde a través del proxy; otro destino recibe
+  403; el loopback del host, la puerta de enlace y una IP pública son inalcanzables de forma directa. Sin el espacio de
+  red, las mismas sondas sí llegan, así que la prueba detecta la fuga.
+- **Lo que no está verificado:** `CONNECT` para HTTPS (los proveedores son https, y la prueba usó HTTP); que un CLI real
+  respete el proxy; y el coste de montar el espacio en el host.

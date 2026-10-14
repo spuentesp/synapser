@@ -189,7 +189,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
   commit: 6e43ad1 · prueba: `test/config/trust-mode.test.ts` (operator por defecto; adversarial aceptado; cualquier otro valor refuta el archivo entero) y `test/api/session.test.ts` (cada modo tiene sus pruebas). Falsación hecha: ignorar el modo (la prueba de modo adversario falla).
 - [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: 043b0ad · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
-- [~] P15.9 Prueba de concepto de D5 con `pasta`: un agente dentro de un espacio de red sin salida, salvo a un proxy del host que solo reenvía al host del modelo. Verificación: el host permitido responde, y cualquier otro destino falla (también el DNS y la IP directa). quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [!] P15.9 Prueba de concepto de D5 con `pasta`: un agente dentro de un espacio de red sin salida, salvo a un proxy del host que solo reenvía al host del modelo. Verificación: el host permitido responde, y cualquier otro destino falla (también el DNS y la IP directa).
+  motivo: `pasta` no separa un puerto del loopback del host (verificado; ver plan 15, sección 10). `bwrap --unshare-net` con un proxy en socket Unix sí aísla para HTTP. Falta verificar `CONNECT` para HTTPS y un CLI real. Cambiar el mecanismo aprobado es decisión del usuario.
 
 ### Q5 — La biblioteca en las corridas
 
@@ -262,3 +263,4 @@ Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.
 | 2026-10-14 | Claude Haiku 5.5 | Q5.4: skills de biblioteca en las corridas. El archivo asigna (`agentSkills`), la instantánea aporta el contenido con su digest, el bucle nativo las antepone y la corrida guarda id, digest y mecanismo. Camino CLI conectado, pendiente de prueba extremo a extremo. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.4 y P15.7: el token sale de la cookie HttpOnly; modo de confianza configurable, con código de un solo uso en modo adversario. Entorno: el PATH encontraba el wrapper npm de zoanthrope 0.1.6 (el lock pide el binario de cargo, que ya no está); reconstruido el commit fijado 37ecffa en el scratchpad, con sha256 igual al del lock, y las pruebas se corren con `ZOANTHROPE_BIN`. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.5: destinos de proveedores de biblioteca con `undici` 8.11.2 (dependencia aprobada) y búsqueda guardada; loopback sigue permitido para modelos locales. |
+| 2026-10-14 | Claude Haiku 5.5 | P15.9 (prueba de concepto de D5): `pasta` no separa un puerto del loopback del host; `bwrap --unshare-net` con proxy en socket Unix aísla para HTTP. Bloqueada: el mecanismo aprobado no sirve tal cual. |
