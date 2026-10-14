@@ -10,6 +10,7 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   headless: true,
   structuredOutput: true,
   skills: "native",
+  skillMechanism: "native-dir",
   mcp: false,
   permissionModes: ["read-only", "workspace-write"],
   budgetFlag: false,

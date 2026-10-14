@@ -152,8 +152,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "cheap",
     description: "Kimi Code (configured model: mimo-v2.6-pro) in an isolated copy. -p mode edits AND runs Bash without prompting: isolation is by copy only, not by capability",
     role: "writer",
-    homeOverlay: [".kimi", ".kimi-code"],
-    argv: ["kimi", "-p", "{prompt}", "--output-format", "stream-json"],
+    adapter: "kimi",
+    argv: [],
+    permissions: { mode: "default" },
     parser: "kimi-stream",
     timeoutMs: 300_000,
     tags: ["code", "worker"],
@@ -196,6 +197,11 @@ export function validateProfile(p: AgentProfile): string[] {
     if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`codex permission mode must be one of ${modes.join(", ")}`);
     if (p.maxBudgetUsd !== undefined) errs.push("codex has no per-run USD budget flag");
   }
+  if (adapterOf(p) === "kimi") {
+    const modes = ["default", "yolo", "plan"];
+    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`kimi permission mode must be one of ${modes.join(", ")}`);
+    if (p.maxBudgetUsd !== undefined) errs.push("kimi has no per-run USD budget flag");
+  }
   if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
   if (p.tier !== undefined && !TIERS.includes(p.tier)) errs.push(`tier must be one of ${TIERS.join(", ")}`);
@@ -206,6 +212,7 @@ export function validateProfile(p: AgentProfile): string[] {
   }
   if (p.role === "advisor" && p.argv.some((a) => /dangerously|bypass|yolo|workspace-write|--auto\b/.test(a))) errs.push("an advisor profile must not carry write/bypass flags");
   if (p.role === "advisor" && p.permissions?.mode === "bypassPermissions") errs.push("an advisor profile must not bypass permissions");
+  if (p.role === "advisor" && p.permissions?.mode === "yolo") errs.push("an advisor profile must not use yolo permissions");
   if (p.role === "advisor" && p.permissions?.allowedTools?.some((tool) => /^(Bash|Edit|Write|NotebookEdit)$/.test(tool))) errs.push("an advisor profile must not allow write/shell tools");
   return errs;
 }

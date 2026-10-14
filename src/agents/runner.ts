@@ -166,7 +166,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     if (exec.spawnError) {
       parsed = { outcome: "FAILED", reason: `spawn failed: ${exec.spawnError}`, finalText: null, sessionId: null, permissionDenials: null, toolUse: null, usage: { provenance: "unknown", inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null, costUsd: null, models: [], turns: null, apiMs: null, note: "did not start" } };
     } else {
-      parsed = adapter.parse(exec.stdout, profile, { ...(o.kimi ? { kimi: o.kimi } : {}) });
+      parsed = adapter.parse(exec.stdout, profile, { home, ...(o.kimi ? { kimi: o.kimi } : {}) });
       if (exec.timedOut) parsed = { ...parsed, outcome: "FAILED", reason: `timed out after ${profile.timeoutMs} ms` };
       else if (parsed.outcome === "SUCCEEDED" && exec.code !== 0) parsed = { ...parsed, outcome: "FAILED", reason: `exit code ${String(exec.code)} despite a success event` };
       else if (parsed.outcome === "UNKNOWN" && exec.code !== 0) {

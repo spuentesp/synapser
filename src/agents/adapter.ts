@@ -6,11 +6,13 @@ import type { AdapterId, AgentProfile } from "./profile.ts";
 import { PARSERS, type KimiOptions, type ParsedRun } from "./usage.ts";
 
 export type SkillSupport = "native" | "prompt-prepend" | "none";
+export type SkillMechanism = "native-dir" | "skills-dir-flag" | "prompt-prepend" | "none";
 
 export interface AgentCapabilities {
   headless: boolean;
   structuredOutput: boolean;
   skills: SkillSupport;
+  skillMechanism: SkillMechanism;
   mcp: boolean;
   permissionModes: readonly string[];
   budgetFlag: boolean;
@@ -53,6 +55,8 @@ export interface AgentInvocation {
 
 export interface AgentParseOptions {
   kimi?: KimiOptions;
+  /** The disposable HOME used by this invocation. */
+  home?: string;
 }
 
 export interface AgentAdapter {
@@ -105,6 +109,7 @@ export class ProfileCliAdapter implements AgentAdapter {
     headless: true,
     structuredOutput: false,
     skills: "none",
+    skillMechanism: "none",
     mcp: false,
     permissionModes: [],
     budgetFlag: false,
