@@ -140,11 +140,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
-- [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
+- [~] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
-  motivo: desbloqueada, porque Q5.2 está hecha. El usuario decidió que las corridas leen la biblioteca (decisión 1, 14 oct). Pendiente de construir.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
+  motivo: el usuario respondió «sí, ahora» (14 oct). Las skills se conectan con Q5.4 cuando esté, porque el archivo las asigna (D6).
 - [!] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-  motivo: la investigación está hecha (`docs/plans/14-probar-agente.md`). El diseño va al final, por decisión del usuario (decisión 2, 14 oct), y espera las preguntas que son del usuario en ese documento.
+  motivo: respondidas las tres preguntas (14 oct): tope de tiempo obligatorio en los CLI sin tope en dólares; proveedor de prueba en el archivo; copia borrada al terminar, con el registro. Diseño al final, como decidió el usuario (decisión 2).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
@@ -179,7 +180,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: 638b43e · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
   nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
 - [x] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), cada uno con su verificador y su falsación. commit: c736293 · prueba: IC1 `test/library/agent-rules.test.ts` (49 pruebas, una por campo rechazado y una por campo permitido); IC2 `test/config/provider-key-allowlist.test.ts`, `test/api/library.test.ts` y `test/library/read.test.ts`; IC3 `test/model/redirects.test.ts`; IC4 `test/api/host.test.ts`. Falsación hecha en los cuatro: IC1 con `argv` copiado y sin la regla de `enabled`, IC2 sin la lista de claves, IC3 con `redirect` por defecto, IC4 sin la comprobación de `Host`. Suite completa: 533 pruebas, 524 pasan, 9 omitidas, 0 fallan. Era prerrequisito de Q5.
-- [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.1 a Q5.3; Q5.4 espera a D6.
+- [x] P15.3 Decisiones D1 a D7 del usuario, tomadas el 14 oct (plan 15, sección 6). Lo que falta son sus implementaciones: P15.4 a P15.7. commit: PENDING · prueba: decisiones registradas en el plan 15 y en este tracker.
+- [ ] P15.4 D1 implementación: el token sale de la cookie HttpOnly y no del JSON de `/api/session`. En modo de procesos adversarios (P15.7), además, código de un solo uso impreso por `serve`. Verificación: `/api/session` no devuelve el token; falsación: volver al JSON.
+- [ ] P15.5 D3 implementación: direcciones privadas y de metadatos de nube rechazadas tras resolver el nombre; el loopback sigue para proveedores locales. Verificación: un nombre que resuelve a una privada se rechaza; falsación: quitar la comprobación.
+- [ ] P15.6 D4 implementación: las tarifas que suman al costo vienen solo del archivo; una tarifa de biblioteca se muestra y no suma. Verificación: el costo no cambia con una tarifa de biblioteca; falsación: sumarla.
+- [ ] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
 
 ### Q5 — La biblioteca en las corridas
 
@@ -189,8 +194,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: 2dc2107 · prueba: `test/library/references.test.ts` (3 pruebas: proveedor en uso no se borra, una edición que quita un modelo en uso da 409 con el agente, un revisor de un workflow que aún puede arrancar da 409 y deja de contar al cancelarlo); `test/library/resolve.test.ts` (un revisor que la biblioteca no tiene hace fallar la corrida al arrancar; el pool se rechaza); `test/library/run-e2e.test.ts` (el planificador ve el agente de biblioteca en su catálogo y el revisor corre por el proveedor de biblioteca). Falsación hecha en cuatro sitios: sin 409 al borrar (2 pruebas fallan), sin 409 al editar (1 falla), sin revisión al arrancar (1 falla), y el pool sin rechazo (1 falla).
 - [x] Q5.3 Prueba de extremo a extremo por `ProductionEngine`: un agente y un proveedor de biblioteca hablan con un servidor local, y un revisor de biblioteca evalúa. Falsación en el punto de consumo: cambiar el `baseUrl` del proveedor a mitad de corrida y comprobar que la llamada sigue yendo a la URL original.
   commit: 04a58ad · prueba: `test/library/run-e2e.test.ts`: una corrida real con `ProductionEngine` (diario, Zoanthrope, ejecutor), con un servidor local que hace de endpoint. El revisor de biblioteca corre por el proveedor de biblioteca y el planificador ve al agente en su catálogo. Una edición posterior a la instantánea, y otra hecha mientras se planifica, no llegan a la corrida. Falsación: un `FrozenLibrary` que lee la biblioteca viva manda la revisión al endpoint posterior y la prueba falla.
-- [!] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
-  motivo: bloqueada por D6 (plan 15): quién puede adjuntar una skill a un agente y con qué límite de tamaño y de contenido. Es decisión del usuario. Alternativa provisional que no necesita decisión (no construida): el archivo decide qué skill recibe cada agente y la biblioteca solo aporta el contenido, el mismo patrón que IC2.
+- [ ] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
+  motivo: desbloqueada por D6 (14 oct): el archivo decide qué skill recibe cada agente; la biblioteca aporta el contenido; límites de 64 KiB por skill y 5 por agente.
 - [x] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
   commit: 87a8403 · prueba: `docs/plans/14-probar-agente.md`: investigación con los hechos del código (copia desechable, tope de costo por adaptador, permisos, proveedor sin costo, registro) y sus preguntas al usuario. No construye nada, así que no hay código que falsar.
 
@@ -204,11 +209,13 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] C.2 README: sección de configuración desde la UI. commit: c18a4b0 · prueba: sección `Configure from the console` en README.md, revisada contra el estado real (la biblioteca aún no la leen las corridas, y se dice así).
 - [ ] C.3 Demo integrada y guion de vídeo (el usuario pidió **no** hacerla todavía).
 
-## Decisiones abiertas del usuario (no resolver sin preguntar)
+## Decisiones del usuario
 
-Decisiones del usuario (14 oct): 1) hacer funcionar la biblioteca: las corridas la leen. 2) «probar agente» se diseña al final, tras investigar. 3) excepción decimal aprobada. 4) riesgo de claves: requiere un plan con modelo de amenazas (plan 15); sus decisiones D1 a D7 siguen abiertas. 5) el resto de esta lista sigue igual.
+Ronda 1 (14 oct): 1) hacer funcionar la biblioteca: las corridas la leen. 2) «probar agente» se diseña al final, tras investigar. 3) excepción decimal aprobada. 4) riesgo de claves: plan 15. 5) el resto de la lista sigue igual.
 
-Abiertas: D1 a D7 del plan 15 (token, lista de variables, política de destinos, fuente de tarifas, red de los CLI, skills y alcance del modelo de confianza) · precedencia de la biblioteca: sólo añadir, elegida por Claude y pendiente de confirmación · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de `docs/plans/05` y `06 §15` y del historial git antes de publicar.
+Ronda 2 (14 oct): D1 cookie HttpOnly (en modo adversario, además código de un solo uso). D2 lista de claves en el archivo, vacía. D3 destinos públicos y loopback para locales. D4 tarifas solo del archivo. D5 investigar primero el sandbox; LangSmith queda como vista opcional. D6 el archivo asigna las skills, 64 KiB y 5 por agente. D7 configurable, por defecto operador confiable. Precedencia sólo-añadir confirmada. Probar agente: tope de tiempo obligatorio, proveedor de prueba en el archivo, copia borrada con registro. Publicación: traducción al inglés antes de publicar; skills solo dentro del proyecto (sin -g); los resultados medidos de `docs/plans/05` y `06 §15` se quitan de los archivos, sin reescribir el historial.
+
+Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.7 y Q5.4. Traducción al inglés, sin tarea todavía. Quitar los resultados medidos: pendiente.
 
 ## Bitácora de traspaso
 
@@ -240,3 +247,5 @@ Abiertas: D1 a D7 del plan 15 (token, lista de variables, política de destinos,
 | 2026-10-14 | Claude Haiku 5.5 | Q5.3 se escribió antes de reclamarlo (proceso incumplido, como P15); la reclamación queda registrada aquí. |
 | 2026-10-14 | Claude Haiku 5.5 | Q5.4 bloqueada por D6 (quién adjunta skills y con qué límite); Q3.3 desbloqueada, porque Q5.2 ya está hecha. |
 | 2026-10-14 | Claude Haiku 5.5 | Q5.5: investigación de «probar agente» en `docs/plans/14-probar-agente.md`, sin construir; preguntas al usuario en ese documento. |
+| 2026-10-14 | Claude Haiku 5.5 | Segunda ronda de preguntas: D1 a D7 decididas (ver «Decisiones del usuario»); precedencia confirmada; Q3.4 respondida; publicación: licencia por decidir, track Coding & Agentic Engineering, traducción antes de publicar. |
+| 2026-10-14 | Claude Haiku 5.5 | Q3.3 reclamada: el usuario respondió «sí, ahora». |

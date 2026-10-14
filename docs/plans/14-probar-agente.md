@@ -71,6 +71,14 @@ biblioteca.
 - ¿La marca de proveedor de prueba va en el proveedor o en el archivo? (D4 del plan 15.)
 - ¿La copia se borra siempre, o se conserva para inspección? Propuesta: se borra, y el registro se conserva.
 
+## Respuestas del usuario (14 oct)
+
+- **Tope de tiempo**: obligatorio en los CLI que no tienen tope en dólares (codex, kimi, mimo).
+- **Proveedor de prueba**: se marca en el archivo, como la fuente de tarifas (D4).
+- **Copia**: se borra al terminar; el registro del diario se conserva.
+
+Q3.4 queda al final del plan, como decidió el usuario, con estas respuestas ya dadas.
+
 ## Lo que esta investigación no hace
 
 No construye la prueba, no mide costos y no ejecuta ningún agente. Q3.4 sigue bloqueada hasta que el usuario responda

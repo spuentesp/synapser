@@ -139,6 +139,18 @@ test de rebinding simulado falla.
 
 ## 6. Decisiones que toma el usuario (no se implementan aquí)
 
+### Decisiones tomadas (14 oct)
+
+Su implementación va en las tareas P15.4 a P15.7 del tracker. La lista de abajo se conserva como se propuso.
+
+- **D1. Token**: cookie HttpOnly, fuera del JSON de `/api/session`. En modo de procesos adversarios (D7), además, código de un solo uso impreso por `serve`.
+- **D2. Lista de variables**: en `synapser.config.json`, vacía por defecto. Así está implementada (IC2).
+- **D3. Destinos**: se rechazan direcciones privadas y de metadatos de nube tras resolver el nombre. El loopback sigue permitido para proveedores locales.
+- **D4. Tarifas**: solo del archivo. Una tarifa de biblioteca se muestra y no suma al costo.
+- **D5. Red de los CLI**: investigar primero el sandbox (ver la sección 10). Hasta entonces, el límite declarado. LangSmith queda como vista opcional del registro.
+- **D6. Skills**: el archivo decide qué skill recibe cada agente; la biblioteca aporta el contenido. Límites: 64 KiB por skill y 5 por agente.
+- **D7. Alcance de la confianza**: configurable en `synapser.config.json`, con los dos modos. Por defecto, el operador y sus procesos son confiables.
+
 - **D1. Token.** ¿Se entrega por un archivo con permisos de solo lectura para el operador, por un canal que no sea
   JSON, o se rota por sesión? Cierra T7 junto con IC4.
 - **D2. Lista de variables.** ¿`providerKeyEnv` vive en `synapser.config.json` o en un archivo aparte, y qué valores
