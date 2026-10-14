@@ -9,7 +9,14 @@ export type Tier = "cheap" | "standard" | "advanced";
 export const TIERS: readonly Tier[] = ["cheap", "standard", "advanced"];
 export const tierRank = (t: Tier): number => TIERS.indexOf(t);
 /** How a profile is executed. New implementations (e.g. "orca") plug in behind the AgentRunner port. */
-export type AdapterId = "native" | "cli-oneshot" | "orca";
+export type AdapterId = "native" | "cli-oneshot" | "claude-code" | "codex" | "kimi" | "mimo" | "generic-cli" | "orca";
+
+export interface AgentPermissions {
+  /** Adapter-specific named mode. The adapter validates and translates it to its CLI flag. */
+  mode?: string;
+  allowedTools?: readonly string[];
+  disallowedTools?: readonly string[];
+}
 
 export interface AgentProfile {
   id: string;
@@ -28,6 +35,10 @@ export interface AgentProfile {
   tags: readonly string[];
   /** Extra environment entries. Our own credentials are NEVER inherited (see runner). */
   env?: Readonly<Record<string, string>>;
+  /** Permission policy translated by the selected adapter, never interpolated as a shell string. */
+  permissions?: AgentPermissions;
+  /** Hard per-invocation CLI budget when the adapter supports one. */
+  maxBudgetUsd?: number;
   /**
    * What the CLI needs from the real HOME to authenticate and keep its own settings (relative paths,
    * e.g. ".claude"). Everything else in HOME — ~/.ssh, ~/.gitconfig, ~/.config/gh, ~/.netrc — is NOT
@@ -83,8 +94,12 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "standard",
     description: "Claude Code (Sonnet) editing in an isolated copy; no shell",
     role: "writer",
+    adapter: "claude-code",
     homeOverlay: [".claude", ".claude.json"],
-    argv: ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "sonnet", "--allowedTools", "Read,Glob,Grep,Edit,Write", "--max-budget-usd", "1"],
+    argv: [],
+    model: "sonnet",
+    permissions: { allowedTools: ["Read", "Glob", "Grep", "Edit", "Write"] },
+    maxBudgetUsd: 1,
     parser: "claude-json",
     timeoutMs: 300_000,
     tags: ["code", "refactor", "tests"],
@@ -95,8 +110,12 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "advanced",
     description: "Claude Code (Opus) read-only review/advice",
     role: "advisor",
+    adapter: "claude-code",
     homeOverlay: [".claude", ".claude.json"],
-    argv: ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "opus", "--allowedTools", "Read,Glob,Grep", "--max-budget-usd", "2"],
+    argv: [],
+    model: "opus",
+    permissions: { allowedTools: ["Read", "Glob", "Grep"] },
+    maxBudgetUsd: 2,
     parser: "claude-json",
     timeoutMs: 300_000,
     tags: ["review", "design", "advice"],
@@ -162,6 +181,15 @@ export function validateProfile(p: AgentProfile): string[] {
     if (p.argv.length === 0 || /\s/.test(p.argv[0] ?? " ")) errs.push("argv[0] must be a program name without spaces (no shell strings)");
     if (!p.argv.some((a) => a.includes("{prompt}"))) errs.push("argv must contain {prompt}");
   }
+  if (adapterOf(p) === "claude-code") {
+    if (!p.model) errs.push("a claude-code profile needs a model");
+    const modes = ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
+    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`claude-code permission mode must be one of ${modes.join(", ")}`);
+    for (const [field, tools] of [["allowedTools", p.permissions?.allowedTools], ["disallowedTools", p.permissions?.disallowedTools]] as const) {
+      if (tools?.some((tool) => !tool || tool.includes(","))) errs.push(`claude-code ${field} entries must be non-empty and contain no commas`);
+    }
+  }
+  if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
   if (p.tier !== undefined && !TIERS.includes(p.tier)) errs.push(`tier must be one of ${TIERS.join(", ")}`);
   if (p.endpoint) {
@@ -170,6 +198,8 @@ export function validateProfile(p: AgentProfile): string[] {
     if (!p.endpoint.model || p.endpoint.apiKeyEnv.length === 0) errs.push("endpoint needs a model and at least one apiKeyEnv variable name");
   }
   if (p.role === "advisor" && p.argv.some((a) => /dangerously|bypass|yolo|workspace-write|--auto\b/.test(a))) errs.push("an advisor profile must not carry write/bypass flags");
+  if (p.role === "advisor" && p.permissions?.mode === "bypassPermissions") errs.push("an advisor profile must not bypass permissions");
+  if (p.role === "advisor" && p.permissions?.allowedTools?.some((tool) => /^(Bash|Edit|Write|NotebookEdit)$/.test(tool))) errs.push("an advisor profile must not allow write/shell tools");
   return errs;
 }
 

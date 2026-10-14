@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createApi } from "../src/api/server.ts";
 import { CliOneShotRunner, NativeLoopRunner } from "../src/agents/adapters.ts";
+import { CLAUDE_CODE_ADAPTER } from "../src/agents/claude-code.ts";
 import { AgentRunnerRegistry } from "../src/agents/port.ts";
 import { BUILTIN_PROFILES, type AgentProfile } from "../src/agents/profile.ts";
 import { Executor } from "../src/executor/executor.ts";
@@ -120,7 +121,7 @@ const result = await runMission(
     validation: new LocalRunner({ journal, runId, workspaceRoot: ws, commands: billingAcceptance(FX), generation: lock.generation }),
     orchestration: {
       catalog, profiles: PROFILES, executor, workspaceRoot: ws, generation: lock.generation,
-      registry: new AgentRunnerRegistry([new NativeLoopRunner(brainPort), new CliOneShotRunner()]),
+      registry: new AgentRunnerRegistry([new NativeLoopRunner(brainPort), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER)]),
       approval: { pollMs: 200 },
     },
   },

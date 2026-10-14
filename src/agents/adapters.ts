@@ -16,11 +16,12 @@ import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
 // ---- cli-oneshot -----------------------------------------------------------------------------
 
 export class CliOneShotRunner implements AgentRunner {
-  readonly adapter = "cli-oneshot" as const;
+  readonly adapter: AgentAdapter["id"];
   readonly #cliAdapter: AgentAdapter;
 
   constructor(adapter: AgentAdapter = PROFILE_CLI_ADAPTER) {
     this.#cliAdapter = adapter;
+    this.adapter = adapter.id;
   }
 
   async run(req: AgentRunRequest): Promise<AgentRunOutput> {

@@ -2,7 +2,7 @@
 // invocation surface and the interpretation of the CLI's own output.
 
 import { join } from "node:path";
-import type { AgentProfile } from "./profile.ts";
+import type { AdapterId, AgentProfile } from "./profile.ts";
 import { PARSERS, type KimiOptions, type ParsedRun } from "./usage.ts";
 
 export type SkillSupport = "native" | "prompt-prepend" | "none";
@@ -56,7 +56,7 @@ export interface AgentParseOptions {
 }
 
 export interface AgentAdapter {
-  readonly id: string;
+  readonly id: AdapterId;
   readonly displayName: string;
   readonly capabilities: AgentCapabilities;
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation;

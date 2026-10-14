@@ -129,6 +129,8 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
           ...(tier ? { tier: tier as AgentProfile["tier"] } : {}),
           ...(ep ? { endpoint: ep } : {}),
           ...(Array.isArray(x["homeOverlay"]) ? { homeOverlay: x["homeOverlay"] as string[] } : {}),
+          ...(x["permissions"] && typeof x["permissions"] === "object" ? { permissions: x["permissions"] as AgentProfile["permissions"] } : {}),
+          ...(typeof x["maxBudgetUsd"] === "number" ? { maxBudgetUsd: x["maxBudgetUsd"] } : {}),
           ...(x["steerable"] === "turn" || x["steerable"] === "attempt" ? { steerable: x["steerable"] } : {}),
         };
         const problems = validateProfile(p);

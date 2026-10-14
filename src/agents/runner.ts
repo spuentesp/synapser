@@ -204,7 +204,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     const finalTextBlob = parsed.finalText === null ? null : journal.artifacts.put(Buffer.from(parsed.finalText, "utf8"));
     journal.tx((t) =>
       t.insertAgentRun({
-        agentRunId, runId: o.runId, taskId: o.taskId, profileId: profile.id, role: profile.role, adapter: "cli-oneshot",
+        agentRunId, runId: o.runId, taskId: o.taskId, profileId: profile.id, role: profile.role, adapter: adapter.id,
         startedAt, finishedAt: Date.now(), durationMs, argv: template, baseDigest: snap.digest,
         exitCode: exec.code, signal: exec.signal, timedOut: exec.timedOut, outcome: parsed.outcome, reason: parsed.reason,
         sessionId: parsed.sessionId, models: parsed.usage.models, usageProvenance: parsed.usage.provenance,

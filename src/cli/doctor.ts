@@ -4,7 +4,7 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants, existsSync, mkdirSync } from "node:fs";
 import type { AgentProfile } from "../agents/profile.ts";
-import { BUILTIN_PROFILES } from "../agents/profile.ts";
+import { adapterOf, BUILTIN_PROFILES } from "../agents/profile.ts";
 import type { SynapserConfig } from "../config/load.ts";
 
 export interface Probe {
@@ -54,6 +54,16 @@ export interface DoctorReport {
   suggestions: string[];
 }
 
+const adapterProgram = (profile: AgentProfile): string => {
+  const fixed: Partial<Record<ReturnType<typeof adapterOf>, string>> = {
+    "claude-code": "claude",
+    codex: "codex",
+    kimi: "kimi",
+    mimo: "mimo",
+  };
+  return fixed[adapterOf(profile)] ?? profile.argv[0] ?? "";
+};
+
 export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Promise<DoctorReport> {
   const checks: Check[] = [];
   const major = Number(probe.nodeVersion().split(".")[0]);
@@ -82,11 +92,11 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
     } else if ((p.adapter ?? "cli-oneshot") === "native") {
       agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: "native", available: hasModelKey, enabledInConfig, detail: hasModelKey ? "Nemotron on Token Factory" : "needs a Nebius key" });
     } else {
-      const prog = p.argv[0] ?? "";
+      const prog = adapterProgram(p);
       const path = await probe.which(prog);
       const ver = path ? await probe.version(prog, ["--version"]) : null;
       const usable = path !== null && p.enabled;
-      agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: "cli-oneshot", available: usable, enabledInConfig, detail: !p.enabled ? `disabled: ${p.disabledReason ?? "no reason recorded"}` : path ? `${path}${ver ? ` — ${ver}` : ""}` : `${prog}: not installed` });
+      agents.push({ id: p.id, tier: p.tier ?? "standard", role: p.role, adapter: adapterOf(p), available: usable, enabledInConfig, detail: !p.enabled ? `disabled: ${p.disabledReason ?? "no reason recorded"}` : path ? `${path}${ver ? ` — ${ver}` : ""}` : `${prog}: not installed` });
     }
   }
   const suggestions: string[] = [];

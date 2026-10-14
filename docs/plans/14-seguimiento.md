@@ -46,10 +46,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [x] Q1.1 Interfaz `AgentAdapter` con `capabilities` y `build/parse` (`src/agents/adapter.ts`); el
   `CliOneShotRunner` actual delega en ella sin cambiar el comportamiento. *Prueba:* toda la suite actual verde.
-  commit: c7ff72d (inicio; implementación y cierre en este commit). Prueba: suite completa y regresión
+  commit: fb0b10a. Prueba: suite completa y regresión
   directa de delegación `build/parse` verdes.
-- [~] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
-  quién: GPT-5 Codex · desde: 2026-10-13
+- [x] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
+  commit: 33192b6 (inicio; implementación y cierre en este commit). Prueba: construcción exacta de argv,
+  validación de permisos/presupuesto, parser sobre salida capturada y suite completa verdes.
 - [ ] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
@@ -114,3 +115,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 |---|---|---|
 | 2026-10-14 | Claude Sonnet 5.5 | Tracker creado; Q1–Q4 sin empezar. Último commit del código: `868ff29` |
 | 2026-10-13 | GPT-5 Codex | Q1.1: contrato `AgentAdapter`; el runner CLI delega construcción y parseo sin cambiar su aislamiento. |
+| 2026-10-13 | GPT-5 Codex | Q1.2: adaptador `claude-code`; perfiles con modelo, permisos y presupuesto explícitos. |
