@@ -21,6 +21,24 @@ export interface LibraryEntry {
   actor: string;
 }
 
+/** One library entry as a run saw it when the run started. */
+export interface FrozenEntry {
+  kind: LibraryKind;
+  id: string;
+  digest: Digest;
+}
+
+/**
+ * The library as one run saw it at its start (L3). Reads go by digest to the run's OWN artifacts, so later
+ * edits and deletes in the library cannot change what the run reads, and the run never needs `_server` again.
+ */
+export interface FrozenLibrary {
+  readonly entries: readonly FrozenEntry[];
+  /** The document the run started with for kind/id; null when the library had none then. */
+  get(kind: LibraryKind, id: string): LibraryDocument | null;
+}
+
+const SNAPSHOT_EVENT = "library_snapshot";
 const ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 
 export class LibraryStore {
@@ -96,6 +114,22 @@ export class LibraryStore {
     });
   }
 
+  /**
+   * Snapshot the library into a run's journal (L3): the bytes are copied into the run's own artifacts and the
+   * entries are recorded as one event. The FIRST snapshot of a run wins, so a resumed run keeps what it saw
+   * when it started.
+   */
+  freeze(run: Journal): FrozenLibrary {
+    if (run.runId === "_server") throw new Error("the _server journal is the library itself and has no run snapshot");
+    const recorded = run.listEvents().find((event) => event.entity === SNAPSHOT_EVENT);
+    if (recorded) return frozenFrom(run, (recorded.data as { entries: FrozenEntry[] }).entries);
+    const entries: FrozenEntry[] = this.list().map((entry) => ({ kind: entry.kind, id: entry.id, digest: entry.digest }));
+    for (const entry of entries) run.artifacts.put(this.#journal.artifacts.get(entry.digest));
+    const serverSeq = Math.max(0, ...this.#events().map((event) => event.seq));
+    run.tx((tx) => tx.event(run.runId, SNAPSHOT_EVENT, run.runId, null, "FROZEN", { entries, serverSeq }));
+    return frozenFrom(run, entries);
+  }
+
   /** Rebuild current files from the authoritative ledger; immutable versions are retained. */
   sync(): void {
     for (const event of this.#latest().values()) {
@@ -167,6 +201,20 @@ function checkIdentity(kind: LibraryKind, id: string, actor: string): void {
 function checkKindAndId(kind: LibraryKind, id: string): void {
   if (!LIBRARY_KINDS.includes(kind)) throw new Error(`unknown library kind ${String(kind)}`);
   if (!ID.test(id)) throw new Error(`invalid library id ${JSON.stringify(id)}`);
+}
+
+function frozenFrom(run: Journal, entries: readonly FrozenEntry[]): FrozenLibrary {
+  const byKey = new Map(entries.map((entry) => [`${entry.kind}:${entry.id}`, entry] as const));
+  return Object.freeze({
+    entries: Object.freeze([...entries]),
+    get(kind: LibraryKind, id: string): LibraryDocument | null {
+      checkKindAndId(kind, id);
+      const entry = byKey.get(`${kind}:${id}`);
+      if (!entry) return null;
+      // artifacts.get re-hashes the bytes, so a tampered run artifact is an error, never a silent old value
+      return JSON.parse(run.artifacts.get(entry.digest).toString("utf8")) as LibraryDocument;
+    },
+  });
 }
 
 function durableOnce(path: string, bytes: Uint8Array): void {

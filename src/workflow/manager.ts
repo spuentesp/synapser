@@ -9,6 +9,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { digestOfJson } from "../digest/canonical.ts";
 import { Journal } from "../journal/journal.ts";
+import type { FrozenLibrary, LibraryStore } from "../library/store.ts";
 import type { Advisor } from "../advisor/advisor.ts";
 import { EffectBroker } from "../effects/broker.ts";
 import type { Exec } from "../effects/kinds.ts";
@@ -31,6 +32,8 @@ export interface EngineRun {
   signal: AbortSignal;
   /** The engine reports lifecycle changes; the manager validates them against the state machine. */
   mark: (state: WorkflowState, data?: Record<string, unknown>) => void;
+  /** The library as this run started (L3): the only library content a run may read. Absent without a library. */
+  library?: FrozenLibrary;
 }
 export interface EngineResult {
   status: "DONE" | "FAILED" | "CANCELLED" | "TIMED_OUT";
@@ -87,6 +90,8 @@ export interface ManagerOptions {
   advisor?: (journal: Journal, workflowId: string, workflow: () => Workflow) => Advisor;
   /** Period of the effect ticker, ms (0 disables it; `settleEffects` still works). */
   effectTickMs?: number;
+  /** The operator library. Each run snapshots it when it starts (L3); absent ⇒ runs see no library. */
+  library?: LibraryStore;
 }
 
 const newId = (): string => `wf-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
@@ -261,6 +266,8 @@ export class WorkflowManager {
       this.#transition(j, "PLANNING", "system");
       let res: EngineResult;
       try {
+        // L3: the library is frozen when the run starts; edits made after this point do not reach the run
+        const library = this.#o.library?.freeze(j);
         res = await this.#o.engine.run({
           workflow: () => this.#doc(j)!.workflow,
           revision: () => this.#doc(j)!.revision,
@@ -271,6 +278,7 @@ export class WorkflowManager {
           mark: (state, data) => {
             this.#transition(j, state, "engine", data ?? {});
           },
+          ...(library ? { library } : {}),
         });
       } catch (e) {
         res = { status: "FAILED", reason: `engine error: ${String((e as Error).message ?? e).slice(0, 300)}` };

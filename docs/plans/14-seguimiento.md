@@ -106,8 +106,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   destino; endpoint sin listado; 2xx sin `choices`; error de red solo por nombre; tiempo límite). CLI
   `provider test <id>` probado contra un servidor local: código 0, clave ausente de la salida. No escribe en el
   ledger; devuelve uso y costo estimado. Suite completa.
-- [~] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3. commit: PENDING · prueba:
+  `test/library/freeze.test.ts` y `test/workflow/library-freeze.test.ts` (la instantánea se copia a los artefactos
+  de la corrida y sobrevive sin los de `_server`; la primera instantánea gana; un motor que edita la biblioteca en
+  mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
+  nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
+  en el archivo); el manejador congelado queda como única vía cuando lo haga.
 - [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas.
 - [ ] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
@@ -141,7 +145,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ## Decisiones abiertas del usuario (no resolver sin preguntar)
 
-Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
+precedencia de los proveedores de la biblioteca frente a los del archivo (¿solo añadir, o sobrescribir?; hoy ningún
+consumidor la necesita) · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
 traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de
 `docs/plans/05` y `06 §15` y del historial git antes de publicar.
 
@@ -157,3 +162,5 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-13 | GPT-5 Codex | Q1.5: adaptador `mimo`; skills nativas confirmadas mediante `skills.paths` en config efímera. |
 | 2026-10-13 | GPT-5 Codex | Q1.6: adaptador `generic-cli`; argv declarativo, parser `plain` y fallback `prompt-prepend`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q2.3 tomada tras el reclamo de GPT-5 Codex (`29ff01e`, sin código). Roles del sistema configurables en `synapser.config.json` y validados enteros; runtime y `doctor` los usan. |
+| 2026-10-14 | Claude Haiku 5.5 | Q2.4: prueba de conexión por proveedor (`src/model/connection.ts`) y CLI `provider test`; la clave no aparece en el informe. |
+| 2026-10-14 | Claude Haiku 5.5 | Q2.5: instantánea de la biblioteca por corrida, copiada a sus artefactos; el manejador congelado es la única vía de lectura de la corrida. |

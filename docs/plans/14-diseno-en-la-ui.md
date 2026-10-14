@@ -122,6 +122,11 @@ Verificación y falsación de la inyección:
   través de `createRuntime` llega al proveedor configurado, con su modelo, su clave y su tarifa declarada. Se
   falsa con un runtime que ignora los roles configurados (debe fallar la prueba de extremo a extremo) y con un
   cargador que omite la validación de asignaciones por defecto (debe fallar la prueba de redefinición).
+- L3 se verifica en `test/library/freeze.test.ts` y `test/workflow/library-freeze.test.ts`: la instantánea se
+  copia a los artefactos de la corrida y se lee por digest, así que sobrevive sin los artefactos de `_server`;
+  la primera instantánea de una corrida gana; y un motor que edita la biblioteca en mitad de la corrida sigue
+  leyendo la versión de arranque. Se falsa con lecturas en vivo, que hacen fallar la prueba del motor. Hoy
+  ningún consumidor lee la biblioteca durante una corrida; el manejador congelado es la única vía cuando lo haga.
 
 ## 8. Fases
 

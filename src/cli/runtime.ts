@@ -41,12 +41,15 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     delegation: cfg.delegation,
     ...(cfg.advisor.enabled ? { advisor: { enabled: true, pushback: cfg.advisor.pushback, maxConsults: cfg.advisor.maxConsults, maxPerTask: cfg.advisor.maxPerTask } } : {}),
   });
+  const serverJournal = Journal.open(cfg.stateDir, "_server");
+  const library = new LibraryStore(cfg.stateDir, serverJournal);
   const manager = new WorkflowManager({
     stateDir: cfg.stateDir,
     workspaceRoot: cfg.workspace,
     commandIds: new Set(cfg.commands.map((c) => c.id)),
     profileIds: new Set(cfg.profiles.map((p) => p.id)),
     engine,
+    library,
     startRequiresApproval: cfg.startRequiresApproval,
     ...(cfg.advisor.enabled
       ? {
@@ -57,8 +60,6 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     policy: () => cfg.policy,
     effectIdentity: cfg.identity,
   });
-  const serverJournal = Journal.open(cfg.stateDir, "_server");
-  const library = new LibraryStore(cfg.stateDir, serverJournal);
   const chat = new ChatService({
     model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(serverJournal, systemPrice) }),
     manager,
