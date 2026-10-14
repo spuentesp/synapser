@@ -54,7 +54,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
   commit: b794c1b. Prueba: argv y parser capturados,
   sandbox validado, `CODEX_HOME` descartable y suite completa verdes.
-- [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
+- [~] Q1.4 `kimi`: ídem; `--skills-dir`.
+  quién: GPT-5 Codex · desde: 2026-10-13
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
 - [ ] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
