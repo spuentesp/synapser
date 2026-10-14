@@ -5,6 +5,8 @@
 
 import { type AgentProfile, BUILTIN_PROFILES, TIERS, validateProfile } from "../agents/profile.ts";
 import { type ProviderConfig, validateProviderConfig } from "../model/config.ts";
+import { isBlockedAddress } from "../model/destinations.ts";
+import { isIP } from "node:net";
 import type { LibraryKind } from "./store.ts";
 
 const MAX_SKILL_BYTES = 64 * 1024;
@@ -53,7 +55,7 @@ export function validateLibraryDocument(kind: LibraryKind, id: string, document:
   const idProblems = d["id"] !== undefined && d["id"] !== id ? [`${at}: document id ${JSON.stringify(d["id"])} does not match ${id}`] : [];
   switch (kind) {
     case "providers":
-      return [...idProblems, ...providerIdProblems(at, id, policy), ...validateProviderConfig(id, d), ...keyNameProblems(at, d, policy)];
+      return [...idProblems, ...providerIdProblems(at, id, policy), ...validateProviderConfig(id, d), ...keyNameProblems(at, d, policy), ...destinationProblems(at, d)];
     case "agents":
       return [...idProblems, ...resolveAgent(at, id, d, policy).problems];
     case "skills":
@@ -177,6 +179,18 @@ export function providerOfAgent(d: Record<string, unknown>, policy: LibraryPolic
 }
 
 // ---- providers and skills --------------------------------------------------------------------------------------------
+
+/** D3: a library provider's address written as a literal must be public or loopback. Names are checked when they are called. */
+function destinationProblems(at: string, d: Record<string, unknown>): string[] {
+  if (typeof d["baseUrl"] !== "string") return [];
+  let host: string;
+  try {
+    host = new URL(d["baseUrl"]).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return []; // validateProviderConfig reports a malformed address
+  }
+  return isIP(host) && isBlockedAddress(host) ? [`${at}: baseUrl ${host} is a private address; a library provider may not reach it (plan 15 D3)`] : [];
+}
 
 /** IC2: a library provider may name only the key variables the operator's file allows. */
 function keyNameProblems(at: string, d: Record<string, unknown>, policy: LibraryPolicy): string[] {

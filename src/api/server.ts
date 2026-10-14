@@ -26,6 +26,7 @@ import { Journal } from "../journal/journal.ts";
 import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
 import { EXTENDING_FIELDS, FILE_ONLY_FIELDS, type LibraryPolicy, NATIVE_FIELDS, NATIVE_REQUIRED, NO_LIBRARY_POLICY, providerOfAgent, resolveAgent, validateLibraryDocument } from "../library/validate.ts";
 import { reviewProfilesOf } from "../workflow/model.ts";
+import { libraryFetch } from "../model/destinations.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import { testProviderConnection } from "../model/connection.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
@@ -283,7 +284,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       // the allowlist can change after the document was stored: the test honours the current one
       const refused = validateLibraryDocument(k, key, stored.document, policy).filter((p) => p.includes("providerKeyEnv"));
       if (refused.length) return json(res, 403, { error: "KEY_NOT_ALLOWED", errors: refused });
-      return json(res, 200, { provider: key, ...(await testProviderConnection(stored.document as unknown as ProviderConfig)) });
+      return json(res, 200, { provider: key, ...(await testProviderConnection(stored.document as unknown as ProviderConfig, { fetch: libraryFetch() })) });
     }
     if (method === "GET") {
       let entry: LibraryEntry | null;

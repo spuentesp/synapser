@@ -33,6 +33,7 @@ import { Advisor } from "../advisor/advisor.ts";
 import { PoolLimiter, type PoolSpec } from "../orchestration/pools.ts";
 import { defaultModelConfig, modelConfigForProvider, type ProviderConfig } from "../model/config.ts";
 import { journalRecorder, priceResolverForProviders } from "../model/recorder.ts";
+import { libraryFetch } from "../model/destinations.ts";
 import { OpenAICompatibleProvider } from "../model/openai-compatible-provider.ts";
 import { DelegationBroker } from "../orchestration/delegation.ts";
 import { approvalWaiter, baselineOf, evaluateWorkflow } from "./checkers.ts";
@@ -128,6 +129,8 @@ export class ProductionEngine implements WorkflowEngine {
             config: modelConfigForProvider(p.provider, provider, p.model, p.temperature ?? 0),
             // Bind accounting to the selected provider. Two providers may legally share URL/model.
             // plan 15 D4: tariffs come only from the operator's file. A library provider's prices are never summed into a cost
+            // plan 15 D3: a library provider's calls go through the guarded fetch; the operator's own providers do not
+            fetch: Object.hasOwn(c.providers ?? defaultModelConfig().providers, p.provider) ? undefined : libraryFetch(),
             onCall: journalRecorder(journal, priceResolverForProviders({ [p.provider]: Object.hasOwn(c.providers ?? defaultModelConfig().providers, p.provider) ? provider : { ...provider, models: provider.models.map((m) => ({ id: m.id })) } })),
           });
           own.set(p.id, m);
