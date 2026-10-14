@@ -60,7 +60,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   capturada, HOME descartable, mecanismo `skills-dir-flag` y suite completa verdes.
 - [x] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
-  commit: 4ac2c2b (inicio; implementación y cierre en este commit). Prueba: `--help` y esquema del binario
+  commit: a836569. Prueba: `--help` y esquema del binario
   instalado, argv determinista, parser del 402 capturado y suite completa verdes; llamada pagada omitida por saldo.
 - [ ] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
 - [ ] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
