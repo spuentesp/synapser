@@ -51,7 +51,8 @@ Agent(native) { provider, model, temperature, tier, role, skills[] }
   protocolo (Anthropic API, Gemini) es un adaptador de proveedor nuevo, no un agente nuevo.
 - Los roles de Synapser (planificador, asesor, chat, reparación) se asignan a un **proveedor+modelo**
   desde la UI, no fijos en el código como hoy.
-- Prueba de conexión por proveedor: lista modelos y hace una llamada mínima, sin registrar la clave.
+- Prueba de conexión por proveedor: lista modelos y hace una llamada mínima, sin registrar la clave. La prueba
+  no escribe en el ledger (su `role` sería falso): devuelve su uso y el costo estimado con la tarifa declarada.
 
 ## 3. Skills
 

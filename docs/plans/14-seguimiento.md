@@ -100,8 +100,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `orchestration` y los perfiles nativos llevan proveedor propio (`modelFor`); solo la ruta sin orquestación
   (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
   gobernar también los perfiles nativos.
-- [~] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
+  commit: PENDING · prueba: `test/model/connection.test.ts` (ocho casos: éxito con cabecera y tarifa declarada;
+  sin clave no sale ninguna petición; 401 sin eco de la clave; redirección rechazada sin entregar la clave al
+  destino; endpoint sin listado; 2xx sin `choices`; error de red solo por nombre; tiempo límite). CLI
+  `provider test <id>` probado contra un servidor local: código 0, clave ausente de la salida. No escribe en el
+  ledger; devuelve uso y costo estimado. Suite completa.
 - [ ] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
 - [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas.

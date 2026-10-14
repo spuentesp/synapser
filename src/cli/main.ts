@@ -15,6 +15,7 @@
 //   synapser policy show                      the effect policy in force
 //   synapser serve [--port 4173]              the UI + API + chat over this config (127.0.0.1 only)
 //   synapser doctor [--json]                  what is installed and usable, and what to enable
+//   synapser provider test <id>               list a provider's models and make one minimal call (key never printed)
 //   synapser config show
 // Global: --config FILE  --workspace DIR  --state DIR
 
@@ -22,6 +23,7 @@ import { readFileSync } from "node:fs";
 import { doctor } from "./doctor.ts";
 import { createRuntime } from "./runtime.ts";
 import { ConfigError, loadConfig } from "../config/load.ts";
+import { testProviderConnection } from "../model/connection.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { Actor } from "../workflow/manager.ts";
@@ -59,6 +61,13 @@ async function main(): Promise<void> {
 
   if (cmd === "config" && sub === "show") return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id) });
   if (cmd === "policy" && sub === "show") return say(cfg.policy);
+  if (cmd === "provider" && sub === "test") {
+    const id = a ?? "";
+    if (!Object.hasOwn(cfg.providers, id)) return die(`unknown provider ${JSON.stringify(id)} (configured: ${Object.keys(cfg.providers).join(", ")})`, 2);
+    const rep = await testProviderConnection(cfg.providers[id]!);
+    say({ provider: id, ...rep });
+    return void (process.exitCode = rep.ok ? 0 : 1);
+  }
   if (cmd === "doctor") {
     const rep = await doctor(cfg);
     if (sub === "--json" || argv.includes("--json")) return say(rep);
