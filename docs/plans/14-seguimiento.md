@@ -100,7 +100,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `orchestration` y los perfiles nativos llevan proveedor propio (`modelFor`); solo la ruta sin orquestación
   (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
   gobernar también los perfiles nativos.
-- [ ] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
+- [~] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3.
 - [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas.
