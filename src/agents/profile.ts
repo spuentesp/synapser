@@ -30,6 +30,11 @@ export interface AgentProfile {
   model?: string;
   /** Native agents select a library provider and one of its declared models. */
   provider?: string;
+  /**
+   * CLI agents (plan 17 P17.6): the operator's provider this run is injected with, using `model` as the model
+   * that provider declares. Only the operator's file may set it; a library document is refused by its schema.
+   */
+  injectProvider?: string;
   temperature?: number;
   nativeRole?: "worker" | "repair";
   /** cli-oneshot only: how to read the tool's own events. */
@@ -216,6 +221,12 @@ export function validateProfile(p: AgentProfile): string[] {
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
   if (p.tier !== undefined && !TIERS.includes(p.tier)) errs.push(`tier must be one of ${TIERS.join(", ")}`);
   if (p.provider && adapterOf(p) !== "native") errs.push("only a native agent may reference a provider");
+  const injectable = ["claude-code", "codex", "kimi", "mimo"].includes(adapterOf(p));
+  if (p.injectProvider !== undefined) {
+    if (!injectable) errs.push("injectProvider is only valid for claude-code, codex, kimi or mimo");
+    if (typeof p.injectProvider !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(p.injectProvider)) errs.push("injectProvider must be a lowercase slug");
+    if (!p.model) errs.push("a CLI agent with injectProvider needs the model that provider declares");
+  }
   if (p.provider && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(p.provider)) errs.push("provider must be a lowercase slug");
   if (adapterOf(p) === "native" && (!p.provider || !p.model)) errs.push("a native agent needs provider and model");
   if (adapterOf(p) !== "native" && (p.temperature !== undefined || p.nativeRole !== undefined)) errs.push("temperature and nativeRole are only valid for a native agent");

@@ -168,6 +168,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
           ...(tier ? { tier: tier as AgentProfile["tier"] } : {}),
           ...(typeof x["model"] === "string" ? { model: x["model"] } : {}),
           ...(typeof x["provider"] === "string" ? { provider: x["provider"] } : {}),
+          ...(typeof x["injectProvider"] === "string" ? { injectProvider: x["injectProvider"] } : {}),
           ...(migratedProvider ? { provider: migratedProvider, model: endpoint!.model as string } : {}),
           ...(typeof x["temperature"] === "number" ? { temperature: x["temperature"] } : {}),
           ...(endpoint && typeof endpoint.temperature === "number" ? { temperature: endpoint.temperature } : {}),

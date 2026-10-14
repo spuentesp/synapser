@@ -13,6 +13,8 @@ import type { LoopLimits } from "../agent/loop.ts";
 import { unknownUsage, type UsageRecord } from "./usage.ts";
 import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
 import { prependSkills, validateInjectedSkills } from "./skills.ts";
+import { type InjectedProvider, providerForRun } from "./inject.ts";
+import type { ProviderConfig } from "../model/config.ts";
 
 // ---- cli-oneshot -----------------------------------------------------------------------------
 
@@ -20,9 +22,13 @@ export class CliOneShotRunner implements AgentRunner {
   readonly adapter: AgentAdapter["id"];
   readonly #cliAdapter: AgentAdapter;
 
-  constructor(adapter: AgentAdapter = PROFILE_CLI_ADAPTER) {
+  readonly #providers: (() => Readonly<Record<string, ProviderConfig>>) | undefined;
+
+  /** `providers` is the operator's provider table; without it a profile that asks for an injection is refused. */
+  constructor(adapter: AgentAdapter = PROFILE_CLI_ADAPTER, providers?: () => Readonly<Record<string, ProviderConfig>>) {
     this.#cliAdapter = adapter;
     this.adapter = adapter.id;
+    this.#providers = providers;
   }
 
   async run(req: AgentRunRequest): Promise<AgentRunOutput> {
@@ -37,10 +43,17 @@ export class CliOneShotRunner implements AgentRunner {
       ]
         .filter(Boolean)
         .join("\n\n");
+    // Plan 17 P17.6: an injection request is resolved against the operator's providers, and refused without them.
+    let provider: InjectedProvider | undefined;
+    if (req.profile.injectProvider !== undefined) {
+      if (!this.#providers) throw new Error(`${req.profile.id}: injectProvider needs the operator's providers, and none were given`);
+      provider = providerForRun(req.profile.id, req.profile.injectProvider, req.profile.model ?? "", this.#providers(), process.env);
+    }
     const r = await runAgent({
       profile: req.profile,
       prompt,
       workspaceRoot: req.workspaceRoot,
+      ...(provider ? { provider } : {}),
       runId: req.runId,
       taskId: t.taskId,
       journal: req.journal,

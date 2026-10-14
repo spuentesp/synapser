@@ -1,3 +1,5 @@
+import type { ProviderConfig } from "../model/config.ts";
+
 // Plan 17 P17.5: per-run injection of one operator-declared provider into a CLI.
 // K1: the key never enters argv, a file, the ledger or an error. It travels only in the child's environment,
 // under the variable name the operator declared. K6: a variable Synapser reserves cannot hold a provider key.
@@ -56,6 +58,25 @@ export function checkInjectedProvider(p: InjectedProvider): void {
 
 function need(p: InjectedProvider, protocol: InjectedProvider["protocol"], adapterId: string): void {
   if (p.protocol !== protocol) throw new Error(`${adapterId} needs an ${protocol} provider; ${p.id} speaks ${p.protocol}`);
+}
+
+/**
+ * Resolves a profile's injectProvider against the operator's providers (plan 17 P17.6). Fails closed: an unknown
+ * provider, an undeclared model, or no key variable set in the operator's environment is refused.
+ */
+export function providerForRun(
+  profileId: string,
+  providerId: string,
+  model: string,
+  providers: Readonly<Record<string, ProviderConfig>>,
+  source: NodeJS.ProcessEnv,
+): InjectedProvider {
+  const p = Object.hasOwn(providers, providerId) ? providers[providerId] : undefined;
+  if (!p) throw new Error(`${profileId}: unknown provider ${providerId}`);
+  if (!p.models.some((m) => m.id === model)) throw new Error(`${profileId}: model ${model} is not declared by provider ${providerId}`);
+  const apiKeyEnv = p.apiKeyEnv.find((name) => source[name]);
+  if (!apiKeyEnv) throw new Error(`${profileId}: none of ${p.apiKeyEnv.join(" / ")} is set in the operator's environment`);
+  return { id: providerId, baseUrl: p.baseUrl, apiKeyEnv, model, protocol: p.protocol };
 }
 
 /** Builds what one run needs to talk to the provider through the named CLI. */

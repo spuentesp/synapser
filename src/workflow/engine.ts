@@ -138,7 +138,9 @@ export class ProductionEngine implements WorkflowEngine {
         }
         return m;
       };
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(), new CliOneShotRunner(GENERIC_CLI_ADAPTER), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)], { skillsFor: (profileId) => library.skillsFor.get(profileId) ?? [] });
+      // plan 17 P17.6: CLI runners resolve an injectProvider against the operator's providers, never the library's.
+      const operatorProviders = () => c.providers ?? defaultModelConfig().providers;
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId) => library.skillsFor.get(profileId) ?? [] });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

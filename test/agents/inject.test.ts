@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { NO_INJECTED_SKILLS, type AgentInvocation } from "../../src/agents/adapter.ts";
-import { checkInjectedProvider, planInjection, type InjectedProvider } from "../../src/agents/inject.ts";
+import { checkInjectedProvider, planInjection, providerForRun, type InjectedProvider } from "../../src/agents/inject.ts";
+import { validateProfile } from "../../src/agents/profile.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
@@ -152,5 +153,34 @@ describe("plan 17: library providers stay openai-compatible", () => {
     const { validateLibraryDocument } = await import("../../src/library/validate.ts");
     const problems = validateLibraryDocument("providers", "a1", { protocol: "anthropic", baseUrl: "https://anthropic.example", apiKeyEnv: ["A1_KEY"], models: [{ id: "claude-x" }] });
     assert.match(problems.join(" "), /provider a1: unsupported protocol anthropic/);
+  });
+});
+
+describe("plan 17 P17.6: a profile names its operator provider; the run resolves it or refuses", () => {
+  const providers = { p1: { protocol: "openai-compatible" as const, baseUrl: "https://models.example/v1", apiKeyEnv: ["MISSING_KEY", "P1_KEY"], models: [{ id: "m-large" }] } };
+
+  test("the first key variable that is set is used; the model must be declared", () => {
+    const resolved = providerForRun("w1", "p1", "m-large", providers, { P1_KEY: SECRET });
+    assert.equal(resolved.apiKeyEnv, "P1_KEY");
+    assert.equal(resolved.protocol, "openai-compatible");
+    assert.throws(() => providerForRun("w1", "p1", "other", providers, { P1_KEY: SECRET }), /not declared by provider p1/);
+    assert.throws(() => providerForRun("w1", "nope", "m-large", providers, { P1_KEY: SECRET }), /unknown provider nope/);
+  });
+
+  test("no key variable set is refused, and the message names the variables, never a value", () => {
+    assert.throws(() => providerForRun("w1", "p1", "m-large", providers, {}), /MISSING_KEY \/ P1_KEY is not set|none of MISSING_KEY \/ P1_KEY/);
+  });
+
+  test("validateProfile accepts injectProvider on a CLI agent with a model, and refuses it elsewhere", () => {
+    const cli = BUILTIN_PROFILES.find((p) => p.id === "codex-writer")!;
+    assert.deepEqual(validateProfile({ ...cli, injectProvider: "p1", model: "m-large" }), []);
+    assert.match(validateProfile({ ...cli, injectProvider: "p1" }).join(" "), /needs the model/);
+    const oneshot = BUILTIN_PROFILES.find((p) => p.id === "nemotron-worker")!;
+    assert.match(validateProfile({ ...oneshot, adapter: "cli-oneshot", argv: ["x", "{prompt}"], injectProvider: "p1", model: "m" } as AgentProfile).join(" "), /only valid for/);
+  });
+
+  test("a library document cannot set injectProvider over a CLI base", async () => {
+    const { validateLibraryDocument } = await import("../../src/library/validate.ts");
+    assert.ok(validateLibraryDocument("agents", "w1", { extends: "codex-writer", injectProvider: "p1", model: "m-large" }).length > 0);
   });
 });
