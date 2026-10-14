@@ -112,8 +112,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
   nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
   en el archivo); el manejador congelado queda como única vía cuando lo haga.
-- [ ] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
+- [~] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas.
+  quién: Claude Haiku 5.5 · desde: 2026-10-14
 - [ ] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo.
 
 ### Q3 — Diseñadores y plantillas (UI)
