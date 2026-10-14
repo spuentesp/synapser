@@ -102,9 +102,9 @@ describe("API", () => {
     const named = /import \{([^}]*)\} from "node:fs"/.exec(src)![1]!.split(",").map((x) => x.trim());
     assert.deepEqual(named.filter((n) => /write|rename|unlink|rm|mkdir|copy|append|symlink/i.test(n)), [], "node:fs is imported read-only");
     const before = readdirSync(env.ws).sort();
-    const entities = new Set(env.journal.listEvents().map((e) => e.entity));
     const digest = currentPlanDigest(env.journal);
-    requestApproval(env.journal, RUN, "t8", digest);
+    requestApproval(env.journal, RUN, "t8", digest); // the gate (and its challenge) exist BEFORE the request under test
+    const entities = new Set(env.journal.listEvents().map((e) => e.entity));
     await fetch(`${base}/api/runs/${RUN}/approvals/t8`, { method: "POST", headers: { "content-type": "application/json", "x-synapser-token": api.token }, body: JSON.stringify({ decision: "APPROVED", planDigest: digest }) });
     assert.deepEqual(readdirSync(env.ws).sort(), before, "the workspace is untouched");
     const added = new Set(env.journal.listEvents().map((e) => e.entity));
