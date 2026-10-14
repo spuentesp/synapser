@@ -185,7 +185,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [ ] P15.5 D3 implementación: direcciones privadas y de metadatos de nube rechazadas tras resolver el nombre; el loopback sigue para proveedores locales. Verificación: un nombre que resuelve a una privada se rechaza; falsación: quitar la comprobación.
 - [ ] P15.6 D4 implementación: las tarifas que suman al costo vienen solo del archivo; una tarifa de biblioteca se muestra y no suma. Verificación: el costo no cambia con una tarifa de biblioteca; falsación: sumarla.
 - [ ] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
-- [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: PENDING · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
+- [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: 043b0ad · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
 
 ### Q5 — La biblioteca en las corridas
 
@@ -250,3 +250,4 @@ Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.
 | 2026-10-14 | Claude Haiku 5.5 | Q5.5: investigación de «probar agente» en `docs/plans/14-probar-agente.md`, sin construir; preguntas al usuario en ese documento. |
 | 2026-10-14 | Claude Haiku 5.5 | Segunda ronda de preguntas: D1 a D7 decididas (ver «Decisiones del usuario»); precedencia confirmada; Q3.4 respondida; publicación: licencia por decidir, track Coding & Agentic Engineering, traducción antes de publicar. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.3 reclamada: el usuario respondió «sí, ahora». |
+| 2026-10-14 | Claude Haiku 5.5 | Resultados medidos quitados de `06 §14` y `06 §15`; `05` no tenía. D5 investigada en el plan 15, sección 10 (P15.8). Orden acordado: Q3.3, luego Q5.4, luego seguridad. |
