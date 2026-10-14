@@ -140,7 +140,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [ ] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
 - [ ] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-- [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: PENDING · prueba:
+- [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
   se informa sin llamar a nadie) y navegador real con Chromium headless: crear y guardar un proveedor, probarlo
