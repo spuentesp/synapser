@@ -48,7 +48,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `CliOneShotRunner` actual delega en ella sin cambiar el comportamiento. *Prueba:* toda la suite actual verde.
   commit: c7ff72d (inicio; implementación y cierre en este commit). Prueba: suite completa y regresión
   directa de delegación `build/parse` verdes.
-- [ ] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
+- [~] Q1.2 `claude-code`: invocación, parser, permisos y presupuesto como parámetros del perfil.
+  quién: GPT-5 Codex · desde: 2026-10-13
 - [ ] Q1.3 `codex`: ídem; HOME efímero con `CODEX_HOME`.
 - [ ] Q1.4 `kimi`: ídem; `--skills-dir`.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
