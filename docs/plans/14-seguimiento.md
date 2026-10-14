@@ -154,7 +154,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   se informa sin llamar a nadie) y navegador real con Chromium headless: crear y guardar un proveedor, probarlo
   contra un servidor local falso (la clave solo aparece como nombre de variable) y ver los problemas de un documento
   inválido (capturas `library-test.png` y `library-invalid.png` en `evidence/`). Suite completa.
-- [ ] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
+- [!] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
+  motivo: lo construido (Q3.1, Q3.2 y Q3.5) ya está verificado en navegador con capturas en `evidence/`; "todo lo
+  anterior" incluye Q3.3 y Q3.4, bloqueadas por decisiones abiertas y sin construir, así que no hay nada que verificar.
 
 ### Q4 — Inicio y pantallas sin datos
 
