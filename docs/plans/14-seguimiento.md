@@ -181,7 +181,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [x] C.1 Actualizar el docx (v0.5) con las secciones del plan 14 (script en el scratchpad de la sesión
   anterior; si no está, regenerar con el mismo método: editar el XML sobre `design/Synapser_Diseno.docx`).
-  commit: PENDING · prueba: secciones 37 a 40 (qué cambió, estado, invariantes, límites y decisiones) en el estilo del
+  commit: 6cd70dd · prueba: secciones 37 a 40 (qué cambió, estado, invariantes, límites y decisiones) en el estilo del
   documento; cabecera y pie en 0.5. El paquete se valida (XML bien formado, zip íntegro), convierte a PDF sin errores
   y la página de la sección 37 se revisó en imagen (`docx-section-37.png` en `evidence/`). El script no se versiona.
 - [x] C.2 README: sección de configuración desde la UI. commit: c18a4b0 · prueba: sección `Configure from the console` en README.md, revisada contra el estado real (la biblioteca aún no la leen las corridas, y se dice así).
