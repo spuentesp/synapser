@@ -142,12 +142,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   abierta). Suite completa.
 - [!] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
-  motivo: un diseñador de agentes escribiría documentos que ninguna corrida lee todavía (el motor no consume
-  agentes de la biblioteca). Decisión abierta: si las corridas leen agentes de la biblioteca, y con qué precedencia
-  frente al archivo.
+  motivo: bloqueada hasta Q5.2. El usuario decidió que las corridas leen la biblioteca (decisión 1, 14 oct), así que
+  el diseñador de agentes espera a que esos agentes se consuman de verdad.
 - [!] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-  motivo: «probar agente» lanzaría un agente real con costo sobre una copia de trabajo. Faltan decisiones del
-  usuario: presupuesto y permisos de la prueba, y si se usa un proveedor sin costo para no gastar.
+  motivo: requiere investigación primero (tarea Q5.5). El diseño va al final, por decisión del usuario (decisión 2,
+  14 oct).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
@@ -177,6 +176,21 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   workflow sin efectos lista ninguno; un workflow desconocido se rechaza) y navegador real: el detalle muestra ambas
   secciones con sus estados vacíos y la nota de solo lectura (`workflow-notes.png` en `evidence/`). Suite completa.
 
+### P15 — Amenazas de la biblioteca y de las claves (plan)
+
+- [x] P15.1 Plan y modelo de amenazas: `docs/plans/15-amenazas-de-la-biblioteca.md`, con su entrada en el índice. commit: PENDING · prueba: cada `archivo:línea` citado se comprobó en el código; amenazas T1 a T11 con control, brecha y verificador; decisiones D1 a D7 para el usuario.
+  nota: el plan se escribió antes de reclamar la tarea (proceso incumplido, como en Q3.1; ver bitácora).
+- [ ] P15.2 Controles provisionales IC1 a IC4 (sección 5 del plan), uno a uno, cada uno con su verificador y su falsación. Bloquea Q5.
+- [ ] P15.3 Decisiones D1 a D7 del usuario. Cada mitigación definitiva tendrá su propio plan. No bloquea Q5.
+
+### Q5 — La biblioteca en las corridas
+
+- [ ] Q5.1 Resolvedor de configuración efectiva: proveedores y perfiles de cada corrida desde su instantánea (`r.library`); sin instantánea, sólo el archivo. Precedencia sólo-añadir: un documento de biblioteca con un id del archivo o integrado se rechaza al escribir. *Invariante:* L3. Lo usan el motor, el gestor (validación de ids dinámica), el runtime, la API y MCP.
+- [ ] Q5.2 Agentes de biblioteca en el catálogo, el planificador y los revisores, bajo IC1. Proveedor y modelo validados al escribir; borrar un proveedor o un agente referenciado da 409 con las referencias; un agente de biblioteca no puede usar un `pool` del archivo. Al arrancar, una referencia rota falla la corrida con su motivo.
+- [ ] Q5.3 Prueba de extremo a extremo por `ProductionEngine`: un agente y un proveedor de biblioteca hablan con un servidor local, y un revisor de biblioteca evalúa. Falsación en el punto de consumo: cambiar el `baseUrl` del proveedor a mitad de corrida y comprobar que la llamada sigue yendo a la URL original.
+- [ ] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
+- [ ] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
+
 ### Cierre
 
 - [x] C.1 Actualizar el docx (v0.5) con las secciones del plan 14 (script en el scratchpad de la sesión
@@ -189,13 +203,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ## Decisiones abiertas del usuario (no resolver sin preguntar)
 
-riesgo declarado: la clave de un proveedor puede ser cualquier variable del servidor, la prueba la envía a cualquier
-endpoint https que nombre el documento guardado, y el token de sesión lo puede leer cualquier proceso local (lista
-blanca de variables, confirmación de cambios de baseUrl y modelo de amenaza: ¿cuál quieres?) · precedencia de los proveedores de la biblioteca frente a los del archivo (¿solo añadir, o sobrescribir?; hoy ningún
-consumidor la necesita) · excepción decimal en la forma canónica de la biblioteca (`digest/canonical.ts`, opción
-`decimals`, solo para documentos de biblioteca: ¿aceptable frente a la regla de solo enteros del plan 03 §2?) · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la
-traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de
-`docs/plans/05` y `06 §15` y del historial git antes de publicar.
+Decisiones del usuario (14 oct): 1) hacer funcionar la biblioteca: las corridas la leen. 2) «probar agente» se diseña al final, tras investigar. 3) excepción decimal aprobada. 4) riesgo de claves: requiere un plan con modelo de amenazas (plan 15); sus decisiones D1 a D7 siguen abiertas. 5) el resto de esta lista sigue igual.
+
+Abiertas: D1 a D7 del plan 15 (token, lista de variables, política de destinos, fuente de tarifas, red de los CLI, skills y alcance del modelo de confianza) · precedencia de la biblioteca: sólo añadir, elegida por Claude y pendiente de confirmación · Licencia (MIT sugerida) · track del hackathon (Coding & Agentic Engineering sugerido) · momento de la traducción al inglés · instalación global (-g) de skills · si se limpian resultados medidos de `docs/plans/05` y `06 §15` y del historial git antes de publicar.
 
 ## Bitácora de traspaso
 
@@ -218,3 +228,5 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-14 | Claude Haiku 5.5 | Q3.5: editor de biblioteca (proveedores, agentes, skills, plantillas) y prueba de conexión por POST contra el documento guardado; reclamo previo en `da9c984`. |
 | 2026-10-14 | Claude Haiku 5.5 | Q4.1–Q4.3: inicio (`GET /api/home`), estados vacíos que enlazan al diseñador, y la corrida del workflow seleccionado como contexto. Corregido: sin corridas las vistas quedaban en esqueletos. |
 | 2026-10-14 | Claude Haiku 5.5 | Q4.4: intervenciones del asesor y efectos en el detalle del workflow, solo lectura (`GET …/interventions`, `GET …/effects`). |
+| 2026-10-14 | Claude Haiku 5.5 | P15: plan de amenazas de la biblioteca y de las claves, escrito antes de reclamarlo (proceso incumplido, registrado aquí). |
+| 2026-10-14 | Claude Haiku 5.5 | Decisiones del usuario: 1 hacer funcionar la biblioteca; 2 «probar agente» al final, tras investigar; 3 `decimals` aprobada; 4 riesgo de claves: plan con modelo de amenazas (P15); 5 sin cambios. |

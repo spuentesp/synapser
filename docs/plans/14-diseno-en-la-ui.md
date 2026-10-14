@@ -133,7 +133,7 @@ Verificación y falsación de la inyección:
   HTTP: escrituras sin token o con origen ajeno o malformado no cambian nada, y una configuración inválida se
   rechaza entera con todos sus problemas. Se falsa quitando el guardia o la validación. Los documentos admiten
   decimales (precios); la forma canónica de los digests de peticiones y journal sigue siendo solo enteros
-  (`digest/canonical.ts`, opción `decimals`). Los lectores (`doctor`, `config show`) usan un manejador de solo
+  (`digest/canonical.ts`, opción `decimals`, aprobada por el usuario). Los lectores (`doctor`, `config show`) usan un manejador de solo
   lectura: no sincronizan la proyección ni crean el journal (`test/library/read.test.ts`).
 - L6 se verifica en `test/model/system-roles.test.ts`: sin bloque `roles` la configuración equivale a la
   predeterminada; un rol movido a otro proveedor no hereda fallbacks; un documento con varios problemas los
