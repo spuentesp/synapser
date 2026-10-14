@@ -140,10 +140,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
-- [~] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
+- [x] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
   motivo: el usuario respondió «sí, ahora» (14 oct). Las skills se conectan con Q5.4 cuando esté, porque el archivo las asigna (D6).
+  commit: PENDING · prueba: `test/api/library.test.ts` (`GET /api/library/bases`: perfiles base con su estado en el archivo y los campos que decide el archivo; falsación: sin la ruta falla la prueba). Verificado en navegador, en el sandbox, con capturas en `evidence/` (no versionadas): crear un agente, etiquetas con comas, un guardado rechazado con su motivo, y el cambio entre «extiende un perfil» y «agente nativo propio» con la lista de perfiles y sus estados. Build de la web con `tsc -b`. Falta el campo de skills, que llega con Q5.4.
 - [!] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
   motivo: respondidas las tres preguntas (14 oct): tope de tiempo obligatorio en los CLI sin tope en dólares; proveedor de prueba en el archivo; copia borrada al terminar, con el registro. Diseño al final, como decidió el usuario (decisión 2).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
@@ -154,7 +154,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   inválido (capturas `library-test.png` y `library-invalid.png` en `evidence/`). Suite completa.
 - [!] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
   motivo: lo construido (Q3.1, Q3.2 y Q3.5) ya está verificado en navegador con capturas en `evidence/`; "todo lo
-  anterior" incluye Q3.4, bloqueada por decisiones abiertas, y Q3.3, pendiente y sin construir, así que no hay nada que verificar.
+  anterior" incluye Q3.4, bloqueada por decisiones abiertas, y Q3.3 ya está hecha y verificada en el sandbox, así que solo falta Q3.4.
 
 ### Q4 — Inicio y pantallas sin datos
 
@@ -251,3 +251,4 @@ Abiertas: licencia (decidir más tarde). Pendientes de implementar: P15.4 a P15.
 | 2026-10-14 | Claude Haiku 5.5 | Segunda ronda de preguntas: D1 a D7 decididas (ver «Decisiones del usuario»); precedencia confirmada; Q3.4 respondida; publicación: licencia por decidir, track Coding & Agentic Engineering, traducción antes de publicar. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.3 reclamada: el usuario respondió «sí, ahora». |
 | 2026-10-14 | Claude Haiku 5.5 | Resultados medidos quitados de `06 §14` y `06 §15`; `05` no tenía. D5 investigada en el plan 15, sección 10 (P15.8). Orden acordado: Q3.3, luego Q5.4, luego seguridad. |
+| 2026-10-14 | Claude Haiku 5.5 | Q3.3: diseñador de agentes en la biblioteca, sobre el mismo documento que el editor JSON; ruta `GET /api/library/bases`; verificado en navegador y con falsación de la ruta. Falta el campo de skills (Q5.4). |

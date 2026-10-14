@@ -24,7 +24,7 @@ import { swarmState } from "../audit/state.ts";
 import type { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
 import { LIBRARY_KINDS, type LibraryDocument, type LibraryEntry, type LibraryKind, type LibraryStore } from "../library/store.ts";
-import { type LibraryPolicy, NO_LIBRARY_POLICY, providerOfAgent, resolveAgent, validateLibraryDocument } from "../library/validate.ts";
+import { EXTENDING_FIELDS, FILE_ONLY_FIELDS, type LibraryPolicy, NATIVE_FIELDS, NATIVE_REQUIRED, NO_LIBRARY_POLICY, providerOfAgent, resolveAgent, validateLibraryDocument } from "../library/validate.ts";
 import { reviewProfilesOf } from "../workflow/model.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import { testProviderConnection } from "../model/connection.ts";
@@ -128,6 +128,14 @@ function agentsBrokenBy(lib: LibraryStore, providerId: string, edited: LibraryDo
     });
 }
 
+/** What the agent designer may offer: the profiles a library agent can extend, and the fields the operator's file keeps (plan 14 Q3.3). */
+function libraryBases(policy: LibraryPolicy) {
+  return {
+    bases: policy.bases.map((b) => ({ id: b.profile.id, adapter: b.profile.adapter ?? "cli-oneshot", role: b.profile.role, enabledByFile: b.enabledByFile, pooled: Boolean(b.profile.pool), provider: b.profile.provider ?? null })),
+    fields: { extending: EXTENDING_FIELDS, native: NATIVE_FIELDS, nativeRequired: NATIVE_REQUIRED, fileOnly: FILE_ONLY_FIELDS },
+  };
+}
+
 export function createApi(opts: ApiOptions): ApiServer {
   const token = opts.token ?? randomBytes(16).toString("hex");
   const own = new Map<string, Journal>();
@@ -227,6 +235,7 @@ export function createApi(opts: ApiOptions): ApiServer {
   async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy, reviewers: (agentId: string) => string[]): Promise<void> {
     const [kind, key, sub] = rest;
     if (rest.length > 3) return fail(res, 404, "NOT_FOUND");
+    if (kind === "bases" && rest.length === 1) return method === "GET" ? json(res, 200, libraryBases(policy)) : fail(res, 405, "METHOD_NOT_ALLOWED");
     if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
     if (!(LIBRARY_KINDS as readonly string[]).includes(kind)) return fail(res, 404, "UNKNOWN_KIND");
     const k = kind as LibraryKind;

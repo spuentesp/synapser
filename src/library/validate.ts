@@ -73,12 +73,12 @@ function providerIdProblems(at: string, id: string, policy: LibraryPolicy): stri
 // ---- agents (plan 15 IC1, plan 14 Q5.1) ----------------------------------------------------------------------------
 
 /** Case (a): an agent that extends a profile sets only these. Everything else is the base's. */
-const EXTENDING_FIELDS = ["id", "extends", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
+export const EXTENDING_FIELDS = ["id", "extends", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
 /** Case (b): a native agent of its own. It runs no command, so it has no argv, env, home or permissions. */
-const NATIVE_FIELDS = ["id", "adapter", "role", "nativeRole", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
-const NATIVE_REQUIRED = ["adapter", "role", "description", "tags", "timeoutMs", "model", "provider"];
+export const NATIVE_FIELDS = ["id", "adapter", "role", "nativeRole", "description", "tags", "tier", "timeoutMs", "enabled", "model", "provider", "temperature"];
+export const NATIVE_REQUIRED = ["adapter", "role", "description", "tags", "timeoutMs", "model", "provider"];
 /** Fields only the operator's file may set, in either case: they run commands or widen what an agent may do. */
-const FILE_ONLY_FIELDS = ["argv", "env", "homeOverlay", "permissions", "maxBudgetUsd", "parser", "pool", "steerable", "disabledReason"];
+export const FILE_ONLY_FIELDS = ["argv", "env", "homeOverlay", "permissions", "maxBudgetUsd", "parser", "pool", "steerable", "disabledReason"];
 
 const isString = (v: unknown): boolean => typeof v === "string";
 const isStringList = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === "string");

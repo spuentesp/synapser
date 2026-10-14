@@ -8,6 +8,7 @@ import { type ApiServer, createApi } from "../../src/api/server.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { LibraryStore } from "../../src/library/store.ts";
 import { NO_LIBRARY_POLICY } from "../../src/library/validate.ts";
+import { BUILTIN_PROFILES } from "../../src/agents/profile.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
 
 // Plan 14 Q2.6: /api/library is versioned. Reads are open; writes need the token and the same origin; an
@@ -18,6 +19,9 @@ const PROVIDER = { protocol: "openai-compatible", baseUrl: "https://models.examp
 describe("API library (plan 14 Q2.6)", () => {
   // the key names the operator's file allows (P15 IC2); a test can change it between two requests
   let allowedKeys: string[] = ["LIBRARY_TEST_KEY"];
+  // what the operator's file offers a library agent to extend: one base the file enables, one it does not
+  const baseOf = (id: string) => BUILTIN_PROFILES.find((p) => p.id === id)!;
+  const TEST_BASES = [{ profile: baseOf("codex-writer"), enabledByFile: true }, { profile: baseOf("kimi-writer"), enabledByFile: false }];
   let state: string;
   let ws: string;
   let sj: Journal;
@@ -33,7 +37,7 @@ describe("API library (plan 14 Q2.6)", () => {
     lib = new LibraryStore(state, sj);
     mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
     allowedKeys = ["LIBRARY_TEST_KEY"];
-    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: allowedKeys }) } });
+    api = createApi({ stateDir: state, ssePollMs: 20, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: allowedKeys, bases: TEST_BASES }) } });
     base = `http://127.0.0.1:${await api.listen(0)}`;
     token = api.token;
   });
@@ -196,6 +200,17 @@ describe("API library (plan 14 Q2.6)", () => {
     const r = await call("POST", "/api/library/providers/local/test", undefined, ok());
     assert.equal(r.status, 403);
     assert.equal(((await r.json()) as { error: string }).error, "KEY_NOT_ALLOWED");
+  });
+
+  test("the designer reads the bases a library agent may extend, and the fields the operator's file keeps (plan 14 Q3.3)", async () => {
+    const r = await call("GET", "/api/library/bases");
+    assert.equal(r.status, 200);
+    const body = (await r.json()) as { bases: { id: string; enabledByFile: boolean }[]; fields: { extending: string[]; fileOnly: string[] } };
+    assert.deepEqual(body.bases.find((b) => b.id === "codex-writer"), { id: "codex-writer", adapter: "codex", role: "writer", enabledByFile: true, pooled: false, provider: null });
+    assert.equal(body.bases.find((b) => b.id === "kimi-writer")?.enabledByFile, false);
+    assert.ok(body.fields.fileOnly.includes("argv"), "argv is the operator's file's");
+    assert.ok(!body.fields.extending.includes("argv"), "an extending agent cannot set argv");
+    assert.equal((await call("POST", "/api/library/bases", {}, ok())).status, 405);
   });
 
   test("without a library the routes do not exist", async () => {

@@ -16,6 +16,7 @@ import { api, ApiError } from '@/lib/api'
 import { type Key, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Empty, ErrorNote } from './common'
+import { type Base, LibraryAgentDesigner } from './library-agent-designer'
 
 const KINDS = ['providers', 'agents', 'skills', 'templates'] as const
 type LibKind = (typeof KINDS)[number]
@@ -24,7 +25,7 @@ const KIND_KEY: Record<LibKind, Key> = { providers: 'libraryKindProviders', agen
 /** A starting document per kind: plausible to the form, and the server still decides what is valid. */
 const STARTER: Record<LibKind, (id: string) => Record<string, unknown>> = {
   providers: (id) => ({ id, protocol: 'openai-compatible', baseUrl: 'https://', apiKeyEnv: ['MY_PROVIDER_KEY'], models: [{ id: 'model-id' }] }),
-  agents: (id) => ({ id, description: '', role: 'writer', argv: ['program', '{prompt}'], parser: 'plain', timeoutMs: 300000, tags: [], enabled: true }),
+  agents: (id) => ({ id, adapter: 'native', role: 'writer', description: '', tags: [], timeoutMs: 300000, enabled: true, provider: '', model: '' }),
   skills: (id) => ({ id, name: id, description: '', content: '' }),
   templates: (id) => ({ id, title: '' }),
 }
@@ -59,6 +60,10 @@ export function LibraryView({ token }: { token: string | null }) {
   const [report, setReport] = useState<Report | null>(null)
   const [testing, setTesting] = useState(false)
   const [busy, setBusy] = useState(false)
+  // the agent designer's choices, as the server reports them (plan 14 Q3.3)
+  const [bases, setBases] = useState<Base[]>([])
+  const [fileOnly, setFileOnly] = useState<string[]>([])
+  const [providerIds, setProviderIds] = useState<string[]>([])
 
   const headers = (): Record<string, string> => ({ 'content-type': 'application/json', 'x-synapser-token': token ?? '' })
   const reset = (): void => {
@@ -78,6 +83,19 @@ export function LibraryView({ token }: { token: string | null }) {
   useEffect(() => {
     void load()
   }, [load])
+  useEffect(() => {
+    if (kind !== 'agents') return
+    void (async () => {
+      try {
+        const designer = await api<{ bases: Base[]; fields: { fileOnly: string[] } }>('/api/library/bases')
+        setBases(designer.bases)
+        setFileOnly(designer.fields.fileOnly)
+        setProviderIds((await api<{ entries: Entry[] }>('/api/library/providers')).entries.map((e) => e.id))
+      } catch (e) {
+        setFailure((e as Error).message)
+      }
+    })()
+  }, [kind])
 
   const open = (e: Entry) => {
     reset()
@@ -185,6 +203,7 @@ export function LibraryView({ token }: { token: string | null }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
+                {kind === 'agents' ? <LibraryAgentDesigner text={text} onChange={(doc) => setText(JSON.stringify(doc, null, 2))} bases={bases} providerIds={providerIds} fileOnly={fileOnly} /> : null}
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="library-doc">{t('libraryDocument')}</FieldLabel>
