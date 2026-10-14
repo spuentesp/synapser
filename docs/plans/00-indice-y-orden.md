@@ -21,6 +21,7 @@ Objetivo de salida de la ventana (diseño §11): **S01–S07 pasan sin depender 
 | [13 Centro de mando](13-centro-de-mando.md) | MCP, workflow/condiciones, compuertas de efectos, asesor, pools, chat | 08, 10, 11, 12 |
 | [14 Diseño desde la UI](14-diseno-en-la-ui.md) · [seguimiento](14-seguimiento.md) | adaptadores por agente, proveedores, skills, biblioteca, diseñadores | 13 |
 | [15 Amenazas de la biblioteca](15-amenazas-de-la-biblioteca.md) | modelo de amenazas de claves, agentes y skills de biblioteca; controles provisionales IC1 a IC4 | 14 |
+| [16 Spike, validación, curación y optimización](16-spike-validacion-curacion-optimizacion.md) | dependencias con baja superficie: SDK oficial de MCP, zod, curación de skills con casos de regresión y optimización offline | 14, 15 |
 
 ## Decisiones tomadas en estos planes (para aprobar)
 
