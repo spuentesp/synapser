@@ -359,6 +359,20 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
           return { ok: false, payload: { error: "PATCH_DOES_NOT_APPLY", detail: `${g.path} does not exist; use write_file to create it` }, detail: "missing file", noProgressKey: `patch:${g.path}` };
         }
         const count = cur.split(old).length - 1;
+        // The text IS in the file as read, but an edit you already staged replaced it: say so, instead
+        // of letting the model conclude that it mistyped something and retry the same replacement.
+        const original = contentOf.get(g.path);
+        if (count === 0 && typeof original === "string" && original.includes(old) && staged.some((e) => e.path === g.path)) {
+          return {
+            ok: false,
+            payload: {
+              error: "ALREADY_STAGED",
+              detail: `that text was already replaced by a change you staged in ${g.path}. Staged so far: ${[...new Set(staged.map((e) => e.path))].join(", ")}. Stage only the REMAINING changes, then call apply_changes.`,
+            },
+            detail: "already staged",
+            noProgressKey: `staged:${g.path}`,
+          };
+        }
         if (count !== 1) {
           return {
             ok: false,

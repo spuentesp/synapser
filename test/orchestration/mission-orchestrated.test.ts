@@ -155,4 +155,33 @@ describe("orchestrated mission", () => {
     assert.equal(r.status, "DONE", r.reason ?? "");
     assert.equal(env.journal.listEvents().some((e) => e.entity === "dispatch"), false);
   });
+
+  test("a failed attempt is retried on ANOTHER profile; the retry is on the ledger and the mission completes", async () => {
+    const profiles: AgentProfile[] = [{ ...cli("w-flaky", "error-exit0", "mimo-json"), tags: ["schema"] }, { ...cli("w-good", "edit-schema"), tags: ["schema"] }];
+    // the flaky one is the cheaper known option, so the router picks it first
+    const o = orchestration({ profiles, catalog: buildCatalog(profiles, [], { knownUsdPerRun: { "w-flaky": 0.001, "w-good": 0.02 } }) });
+    const plan: Plan = { tasks: [T("schema", ["app/schema.py"], { tags: ["schema"] })] };
+    const r = await mission(plan, o);
+    assert.equal(r.status, "DONE", r.reason ?? "");
+    const d = env.journal.listEvents().filter((e) => e.entity === "dispatch").map((e) => (e.data as { profile: string }).profile);
+    assert.deepEqual(d, ["w-flaky", "w-good"]);
+    const retry = env.journal.listEvents().filter((e) => e.entity === "task_retry");
+    assert.equal(retry.length, 1);
+    assert.deepEqual((retry[0]!.data as { avoided: string[] }).avoided, ["w-flaky"]);
+    assert.match(env.read("app/schema.py"), /edited by the agent/);
+    assert.deepEqual(ledgerOk(o), []);
+  });
+
+  test("retries are bounded: a task that keeps failing is tried maxTaskAttempts times, then fails the mission", async () => {
+    const profiles: AgentProfile[] = [{ ...cli("w-flaky", "error-exit0", "mimo-json"), tags: ["schema"] }];
+    const o = orchestration({ profiles, catalog: buildCatalog(profiles, [], { knownUsdPerRun: { "w-flaky": 0.001 } }) });
+    const r = await runMission(
+      { executor: env.exec, journal: env.journal, model, validation: validation(), orchestration: o },
+      { runId: RUN, objective: "o", plan: { tasks: [T("schema", ["app/schema.py"], { tags: ["schema"] })] }, acceptance: ["imports"], limits: { maxRepairRounds: 0, maxTaskAttempts: 3, missionMs: 60_000 } },
+    );
+    assert.equal(r.status, "FAILED");
+    assert.equal(env.journal.listEvents().filter((e) => e.entity === "dispatch").length, 3);
+    assert.equal(env.journal.listEvents().filter((e) => e.entity === "task_retry").length, 2);
+  });
 });
+

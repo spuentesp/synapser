@@ -412,3 +412,27 @@ describe("replace_in_file feedback", () => {
     }
   });
 });
+
+describe("staged-state feedback", () => {
+  test("re-sending a replacement the model already staged says ALREADY_STAGED, not 'old not found'", async () => {
+    const env = await makeEnv();
+    try {
+      let seen = "";
+      const OLD = "    subtotal_cents: int\n\n\n@dataclass(frozen=True)\nclass Receipt:";
+      const NEW = "    subtotal_cents: int\n    discount_bps: int = 0\n\n\n@dataclass(frozen=True)\nclass Receipt:";
+      const model = new ScriptedModel((m, n) => {
+        if (n === 1) return { calls: [call("read_files", { paths: ["app/schema.py"] })] };
+        if (n === 2) return { calls: [call("replace_in_file", { path: "app/schema.py", old: OLD, new: NEW })] };
+        if (n === 3) return { calls: [call("replace_in_file", { path: "app/schema.py", old: OLD, new: NEW })] };
+        seen = JSON.stringify(lastTool(m));
+        return { calls: [call("finish", { summary: "x" })] };
+      });
+      await runTask({ model, executor: env.exec, journal: env.journal, runId: RUN }, { taskId: "t1", objective: "o", scope: ["app/schema.py"], criteria: ["c"], planRevision: 1 });
+      assert.match(seen, /ALREADY_STAGED/);
+      assert.match(seen, /Stage only the REMAINING changes/);
+      assert.doesNotMatch(seen, /not in the file/);
+    } finally {
+      await env.close();
+    }
+  });
+});

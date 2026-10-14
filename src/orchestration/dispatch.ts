@@ -39,6 +39,8 @@ export interface StepOutcome {
   ok: boolean;
   label: string;
   detail?: string;
+  /** The profile that ran (or was about to), so a retry can avoid it. */
+  profileId?: string;
 }
 
 export async function dispatchStep(
@@ -46,11 +48,14 @@ export async function dispatchStep(
   ctx: { journal: Journal; runId: string; planDigest: string; deadlineMs: number; budget?: BudgetManager },
   row: StepRow,
   delegation: DelegationPort | null = null,
+  exclude: readonly string[] = [],
 ): Promise<StepOutcome> {
   const kind: StepKind = row.spec.step ?? "write";
   const isRepair = row.spec.kind === "repair";
   const tags = row.spec.tags ?? (isRepair ? ["repair"] : []);
-  const d = route({ kind, suggested: row.spec.profile, tags }, o.catalog);
+  // a retry avoids the profile that just failed — unless nothing else can do the step
+  const first = route({ kind, suggested: row.spec.profile, tags, exclude }, o.catalog);
+  const d = !first.ok && exclude.length ? route({ kind, suggested: row.spec.profile, tags }, o.catalog) : first;
   if (!d.ok) return { ok: false, label: "NO_ROUTE", detail: d.rejected.map((r) => `${r.profileId}:${r.code}`).join(",") };
   const card = o.catalog.find((c) => c.id === d.profileId) as ProfileCard;
   const profile = o.profiles.find((p) => p.id === d.profileId) as AgentProfile;
@@ -88,14 +93,17 @@ export async function dispatchStep(
 
   if (kind !== "write") {
     const run = await o.registry.for(profile).run(req);
-    if (run.changedPaths.length > 0) return { ok: false, label: "ADVISOR_CHANGED_FILES", detail: run.changedPaths.join(",") };
-    return run.outcome === "SUCCEEDED" ? { ok: true, label: "FINISHED" } : { ok: false, label: run.outcome, ...(run.reason ? { detail: run.reason } : {}) };
+    if (run.changedPaths.length > 0) return { ok: false, label: "ADVISOR_CHANGED_FILES", detail: run.changedPaths.join(","), profileId: d.profileId };
+    return run.outcome === "SUCCEEDED"
+      ? { ok: true, label: "FINISHED", profileId: d.profileId }
+      : { ok: false, label: run.outcome, profileId: d.profileId, ...(run.reason ? { detail: run.reason } : {}) };
   }
   const res = await runAndIntegrate(o.registry, req);
   const landed = res.integration.status === "INTEGRATED" || res.integration.status === "DIRECT" || res.integration.status === "NO_CHANGES";
-  if (res.run.outcome === "SUCCEEDED" && landed) return { ok: true, label: "FINISHED" };
+  if (res.run.outcome === "SUCCEEDED" && landed) return { ok: true, label: "FINISHED", profileId: d.profileId };
   return {
     ok: false,
+    profileId: d.profileId,
     label: res.run.outcome !== "SUCCEEDED" ? res.run.outcome : res.integration.status,
     ...(res.integration.detail ?? res.run.reason ? { detail: String(res.integration.detail ?? res.run.reason) } : {}),
   };

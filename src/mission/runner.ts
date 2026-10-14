@@ -22,7 +22,7 @@ export interface MissionSpec {
   plan: Plan;
   /** Ids of allowlisted commands; ALL must pass on the same consistent snapshot. */
   acceptance: string[];
-  limits?: { concurrency?: number; maxRepairRounds?: number; missionMs?: number; loop?: Partial<LoopLimits> };
+  limits?: { concurrency?: number; maxRepairRounds?: number; missionMs?: number; maxTaskAttempts?: number; loop?: Partial<LoopLimits> };
 }
 
 export interface MissionDeps {
@@ -66,7 +66,7 @@ interface Outcome {
 
 export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<MissionResult> {
   const { journal, executor } = deps;
-  const L = { concurrency: 3, maxRepairRounds: 1, missionMs: 15 * 60_000, ...(spec.limits ?? {}) };
+  const L = { concurrency: 3, maxRepairRounds: 1, missionMs: 15 * 60_000, maxTaskAttempts: 2, ...(spec.limits ?? {}) };
   const deadline = Date.now() + L.missionMs;
   const emit = (kind: string, taskId?: string, detail?: unknown) => {
     try {
@@ -143,9 +143,11 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
     : null;
 
   // ---- task executors ------------------------------------------------------------------------
-  const runAgent = async (id: string): Promise<Outcome> => {
+  const announced = new Set<string>();
+  const attemptOnce = async (id: string, exclude: readonly string[]): Promise<Outcome & { profileId?: string }> => {
     const row = specOf(id)!;
-    if (deps.intent) {
+    if (deps.intent && !announced.has(id)) {
+      announced.add(id);
       await announceIntent(deps.intent, journal, runId, { taskId: id, objective: String(row.spec.objective), scope: row.scope, criteria: (row.spec.criteria as string[]) ?? [] });
     }
     const isRepair = row.spec.kind === "repair";
@@ -155,8 +157,9 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
         { journal, runId, planDigest: digest(), deadlineMs: deadline, ...(deps.budget ? { budget: deps.budget } : {}) },
         { taskId: id, scope: row.scope, spec: row.spec } as StepRow,
         broker,
+        exclude,
       );
-      return { taskId: id, ok: o.ok, label: o.label, ...(o.detail ? { detail: o.detail } : {}) };
+      return { taskId: id, ok: o.ok, label: o.label, ...(o.profileId ? { profileId: o.profileId } : {}), ...(o.detail ? { detail: o.detail } : {}) };
     }
     const r: TaskRunResult = await runTask(
       {
@@ -174,6 +177,26 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       { taskId: id, objective: row.spec.objective, scope: row.scope, criteria: row.spec.criteria, context: row.spec.context ?? [], planRevision: 1 },
     );
     return { taskId: id, ok: r.status === "FINISHED", label: r.status, ...(r.detail ? { detail: r.detail } : {}) };
+  };
+
+  // A failed attempt is not yet a failed task: some failures are about THAT attempt (the model lost its
+  // way, a profile is weak at this), so retry — on another profile when the router has one — before
+  // the mission pays for it. Bounded, and every retry is on the ledger.
+  const RETRYABLE = new Set(["NEEDS_REPLAN", "STEP_LIMIT", "INVALID_OUTPUT", "NO_TOOL_CALL", "MODEL_UNAVAILABLE", "FAILED", "UNKNOWN", "STALE_VIEW", "WAITING_RESOURCE", "NOT_INTEGRATED", "REJECTED"]);
+  const runAgent = async (id: string): Promise<Outcome> => {
+    const tried: string[] = [];
+    announced.delete(id);
+    let last: Outcome = { taskId: id, ok: false, label: "NOT_RUN" };
+    for (let attempt = 1; attempt <= Math.max(1, L.maxTaskAttempts); attempt++) {
+      const r = await attemptOnce(id, tried);
+      last = { taskId: id, ok: r.ok, label: r.label, ...(r.detail ? { detail: r.detail } : {}) };
+      if (r.ok) return last;
+      if (r.profileId) tried.push(r.profileId);
+      if (!RETRYABLE.has(r.label) || attempt >= L.maxTaskAttempts || Date.now() > deadline) break;
+      journal.tx((t) => t.event(runId, "task_retry", id, null, `ATTEMPT_${attempt + 1}`, { after: r.label, detail: r.detail ?? null, avoided: [...tried] }));
+      emit("task.retry", id, { attempt: attempt + 1, after: r.label });
+    }
+    return last;
   };
 
   const runValidation = async (id: string): Promise<Outcome> => {

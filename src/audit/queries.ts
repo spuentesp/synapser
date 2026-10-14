@@ -74,6 +74,8 @@ const summarize = (e: Ev): string => {
       return `search ${e.toState}${d.query ? `: "${String(d.query).slice(0, 80)}"` : " (refused)"} → ${(d.urls ?? []).length} source(s)${d.cached ? " [cached]" : ""}${d.error ? ` — ${d.error}` : ""}`;
     case "acceptance_check":
       return `check ${d.check}: ${e.toState} — ${d.detail}`;
+    case "task_retry":
+      return `${e.entityId} retried (${e.toState?.toLowerCase().replace("_", " ")}) after ${d.after}${(d.avoided ?? []).length ? `, avoiding ${(d.avoided as string[]).join(",")}` : ""}`;
     case "task_dep":
       return `${e.entityId} now also waits for ${d.depends_on}`;
     case "agent_step":
