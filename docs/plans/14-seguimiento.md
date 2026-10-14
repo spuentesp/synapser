@@ -55,7 +55,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: b794c1b. Prueba: argv y parser capturados,
   sandbox validado, `CODEX_HOME` descartable y suite completa verdes.
 - [x] Q1.4 `kimi`: ídem; `--skills-dir`.
-  commit: 65f65f3 (inicio; implementación y cierre en este commit). Prueba: argv y parser sobre sesión
+  commit: 0a30408. Prueba: argv y parser sobre sesión
   capturada, HOME descartable, mecanismo `skills-dir-flag` y suite completa verdes.
 - [ ] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
