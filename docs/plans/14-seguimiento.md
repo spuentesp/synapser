@@ -106,7 +106,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   destino; endpoint sin listado; 2xx sin `choices`; error de red solo por nombre; tiempo límite). CLI
   `provider test <id>` probado contra un servidor local: código 0, clave ausente de la salida. No escribe en el
   ledger; devuelve uso y costo estimado. Suite completa.
-- [x] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3. commit: PENDING · prueba:
+- [x] Q2.5 Congelar la biblioteca al iniciar un workflow. *Invariante:* L3. commit: 2e0fb44 · prueba:
   `test/library/freeze.test.ts` y `test/workflow/library-freeze.test.ts` (la instantánea se copia a los artefactos
   de la corrida y sobrevive sin los de `_server`; la primera instantánea gana; un motor que edita la biblioteca en
   mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
