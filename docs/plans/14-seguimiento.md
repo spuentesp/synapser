@@ -69,8 +69,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2. commit: 41a06a2 · prueba:
   suite completa; falsación de procedencia/digest/rutas y de ampliación de permisos; corrida del runner
   con archivo de skill en HOME efímero y auditoría en fila + evento.
-- [ ] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
+- [~] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
   `--help` del binario real (omitida si el binario no está).
+  quién: GPT-5 Codex · desde: 2026-10-14
 - [ ] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
 
 ### Q2 — Biblioteca, proveedores y API
