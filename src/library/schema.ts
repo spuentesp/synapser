@@ -1,8 +1,9 @@
 // The shapes of the library documents this layer owns: agents and skills (plan 16, P16.3). zod decides what each field is,
 // which fields a variant requires, and which keys it does not know, so none of that is kept in tables a second time. What
 // a document may do stays in validate.ts, with the rules that need the operator's file: the profiles an agent may extend,
-// the pools, the providers and their models, the key names and the destinations. Providers and workflow drafts are not
-// here: their validators are shared with the operator's file and with the workflow manager.
+// the pools, the providers and their models, the key names and the destinations. Providers are not here: their validator is
+// shared with the operator's file. Workflow drafts are not here either: their validator mixes shape with references to
+// commands, profiles and workspace paths, and it moves in its own step (P16.6).
 
 import { z } from "zod";
 import { TIERS, type Tier } from "../agents/profile.ts";
