@@ -74,7 +74,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   flags construidos y `capabilities.cliFlags`; contraste con `--help` real de Claude, Codex, Kimi y MiMo;
   suite completa.
 - [x] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
-  commit: 0000000 · prueba: Claude Code instalado creó en la copia aislada el único archivo ordenado por
+  commit: 27e89c4 · prueba: Claude Code instalado creó en la copia aislada el único archivo ordenado por
   una skill cuyo marcador no estaba en el prompt ni en el workspace; id, digest y mecanismo coincidieron
   en el resultado y `agent_runs`; suite completa.
 
