@@ -78,6 +78,9 @@ Agent(native) { provider, model, temperature, tier, role, skills[] }
   constructor de condiciones por tipo de verificador (con validación en vivo contra el validador real);
   vista previa del JSON; **plantillas** parametrizadas (`library/templates`), con unas integradas
   (cambio acotado con pruebas, investigación con citas, revisión de PR, migración con no-metas).
+Implementado (Q3.2): las cuatro plantillas integradas son presets con parámetros declarados (`workflow-templates.ts`):
+rellenan el formulario y el validador del servidor decide qué se guarda. Las plantillas guardadas en la biblioteca
+siguen sin esquema: es decisión abierta.
 - **Comprobación en vivo** (Q3.1): el diseñador consulta el validador del servidor (`POST /api/designer/check`), que
   no escribe nada; «Guardar» solo se habilita con un documento que ese validador acepta.
 - **Diseñador de agente**: elegir adaptador, nivel, rol, permisos, presupuesto, pool, skills; botón

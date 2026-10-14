@@ -135,9 +135,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   y origen) y navegador real con Chromium headless (capturas en `evidence/`): un borrador válido se guarda; uno
   inválido lista sus problemas y deja Guardar deshabilitado; un borrador se edita y guarda con PUT. Suite completa.
   nota: esta tarea se empezó sin commit de reclamo previo (ver bitácora).
-- [~] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
-  revisión, migración con no-metas.
-  quién: Claude Haiku 5.5 · desde: 2026-10-14
+- [x] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
+  revisión, migración con no-metas. commit: PENDING · prueba: navegador real: cada plantilla, con parámetros, rellena
+  el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
+  validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
+  abierta). Suite completa.
 - [!] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
   motivo: un diseñador de agentes escribiría documentos que ninguna corrida lee todavía (el motor no consume

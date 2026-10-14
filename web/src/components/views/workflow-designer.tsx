@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError } from '@/lib/api'
 import { type Key, useI18n } from '@/lib/i18n'
 import { ErrorNote } from './common'
+import { TEMPLATES } from './workflow-templates'
 
 // The checker kinds a condition may use (model.ts, Checker): seven choices, so a Select rather than a ToggleGroup.
 const KINDS = ['diff', 'command', 'citations', 'file', 'approval', 'review', 'effect'] as const
@@ -163,10 +164,24 @@ interface Check {
   errors: string[]
 }
 
+/** The non-goal guards a document carries, by statement: the form keeps them although it cannot edit them. */
+const guardsOf = (d: { nonGoals?: { statement: string; guard?: Record<string, unknown> }[] } | null): Map<string, Record<string, unknown>> =>
+  new Map((d?.nonGoals ?? []).flatMap((n) => (n.guard ? [[n.statement, n.guard] as const] : [])))
+
 export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel }: { token: string | null; initial: WorkflowDoc | null; editingId: string | null; onSaved: (id: string) => void; onCancel: () => void }) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<Draft>(() => (initial ? draftOf(initial) : emptyDraft()))
-  const [guards] = useState<Map<string, Record<string, unknown>>>(() => new Map((initial?.nonGoals ?? []).flatMap((n) => (n.guard ? [[n.statement, n.guard] as const] : []))))
+  const [guards, setGuards] = useState<Map<string, Record<string, unknown>>>(() => guardsOf(initial))
+  // a built-in template fills the form with its parameters (plan 14 Q3.2); the person adjusts it before saving
+  const [tpl, setTpl] = useState('')
+  const [tplParams, setTplParams] = useState<Record<string, string>>({})
+  const selectedTpl = TEMPLATES.find((x) => x.id === tpl) ?? null
+  const applyTemplate = () => {
+    if (!selectedTpl) return
+    const doc = selectedTpl.build(tplParams)
+    setDraft(draftOf(doc))
+    setGuards(guardsOf(doc))
+  }
   const [commands, setCommands] = useState<string[]>([])
   const [profiles, setProfiles] = useState<string[]>([])
   const [check, setCheck] = useState<Check | null>(null)
@@ -328,6 +343,36 @@ export function WorkflowDesigner({ token, initial, editingId, onSaved, onCancel 
         <CardTitle>{t(editingId ? 'designerEdit' : 'designerNew')}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-6">
+        {!editingId ? (
+          <section className="grid gap-3 rounded-xl border p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('tplTitle')}</h3>
+            <FieldGroup>
+              <Field>
+                <FieldLabel>{t('tplChoose')}</FieldLabel>
+                <Select value={tpl} onValueChange={(v) => { if (v) { setTpl(v); setTplParams({}) } }}>
+                  <SelectTrigger className="w-full"><SelectValue>{(v: string | null) => (v ? t(TEMPLATES.find((x) => x.id === v)?.title ?? 'tplTitle') : '—')}</SelectValue></SelectTrigger>
+                  <SelectContent><SelectGroup>{TEMPLATES.map((x) => <SelectItem key={x.id} value={x.id}>{t(x.title)}</SelectItem>)}</SelectGroup></SelectContent>
+                </Select>
+                {selectedTpl ? <FieldDescription>{t(selectedTpl.description)}</FieldDescription> : null}
+              </Field>
+              {selectedTpl?.params.map((p) => (
+                <Field key={p.name}>
+                  <FieldLabel htmlFor={`tpl-${p.name}`}>{t(p.label)}</FieldLabel>
+                  {p.multiline ? (
+                    <Textarea id={`tpl-${p.name}`} rows={2} value={tplParams[p.name] ?? ''} onChange={(e) => setTplParams((x) => ({ ...x, [p.name]: e.target.value }))} />
+                  ) : (
+                    <Input id={`tpl-${p.name}`} value={tplParams[p.name] ?? ''} onChange={(e) => setTplParams((x) => ({ ...x, [p.name]: e.target.value }))} />
+                  )}
+                </Field>
+              ))}
+            </FieldGroup>
+            {selectedTpl ? (
+              <div>
+                <Button size="sm" variant="outline" onClick={applyTemplate}>{t('tplApply')}</Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="wf-title">{t('designerTitleField')}</FieldLabel>
