@@ -33,7 +33,8 @@ y la prueba que la cubre) · `[!]` bloqueada (con motivo).
   entradas, permisos y presupuesto y recoge el cambio. No tienen canal de vuelta (subtareas, efectos, MCP).
 - El runner de CLI corre con HOME efímero, sin credenciales y con git apuntando a la nada
   (`src/agents/runner.ts`); la inyección de skills debe usar ese HOME, no el del usuario.
-- Los modos headless están verificados en el plan 14 §1. Falta confirmar dónde lee skills `mimo`.
+- Los modos headless están verificados en el plan 14 §1. `mimo` lee skills nativas desde
+  `skills.paths` en `mimocode.jsonc`; la inyección usa el XDG config efímero, nunca el del usuario.
 
 ## Estado heredado (plan 13): hecho
 
@@ -57,9 +58,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] Q1.4 `kimi`: ídem; `--skills-dir`.
   commit: 0a30408. Prueba: argv y parser sobre sesión
   capturada, HOME descartable, mecanismo `skills-dir-flag` y suite completa verdes.
-- [~] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
+- [x] Q1.5 `mimo`: ídem; averiguar el mecanismo de skills o declarar `prompt-prepend`. Hoy está
   deshabilitado por saldo (402): la prueba real puede quedar como omitida con motivo.
-  quién: GPT-5 Codex · desde: 2026-10-13
+  commit: 4ac2c2b (inicio; implementación y cierre en este commit). Prueba: `--help` y esquema del binario
+  instalado, argv determinista, parser del 402 capturado y suite completa verdes; llamada pagada omitida por saldo.
 - [ ] Q1.6 `generic-cli`: envoltorio con parser `plain` (ya existe el parser).
 - [ ] Q1.7 Inyección de skills por mecanismo (`native-dir`, `skills-dir-flag`, `prompt-prepend`) y registro
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2.
@@ -123,3 +125,4 @@ traducción al inglés · instalación global (-g) de skills · si se limpian re
 | 2026-10-13 | GPT-5 Codex | Q1.2: adaptador `claude-code`; perfiles con modelo, permisos y presupuesto explícitos. |
 | 2026-10-13 | GPT-5 Codex | Q1.3: adaptador `codex`; sandbox por perfil y `CODEX_HOME` dentro del HOME descartable. |
 | 2026-10-13 | GPT-5 Codex | Q1.4: adaptador `kimi`; parser de sesión aislado y mecanismo `--skills-dir` declarado. |
+| 2026-10-13 | GPT-5 Codex | Q1.5: adaptador `mimo`; skills nativas confirmadas mediante `skills.paths` en config efímera. |

@@ -10,6 +10,7 @@ import { runAgent } from "../../src/agents/runner.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
+import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { makeEnv, RUN, T1 } from "../executor/env.ts";
 
 const wanted = (process.env["SYNAPSER_LIVE_CLIS"] ?? "").split(",").filter(Boolean);
@@ -23,7 +24,7 @@ for (const id of wanted) {
     try {
       const { incarnation } = env.exec.beginSession(T1);
       const before = env.read("app/schema.py");
-      const adapter = profile.adapter === "claude-code" ? CLAUDE_CODE_ADAPTER : profile.adapter === "codex" ? CODEX_ADAPTER : profile.adapter === "kimi" ? KIMI_ADAPTER : undefined;
+      const adapter = profile.adapter === "claude-code" ? CLAUDE_CODE_ADAPTER : profile.adapter === "codex" ? CODEX_ADAPTER : profile.adapter === "kimi" ? KIMI_ADAPTER : profile.adapter === "mimo" ? MIMO_ADAPTER : undefined;
       const run = await runAgent({ profile, prompt: PROMPT, workspaceRoot: env.ws, runId: RUN, taskId: "t1", journal: env.journal, generation: env.lock.generation, ...(adapter ? { adapter } : {}) });
       assert.equal(env.read("app/schema.py"), before, "isolation: nothing changed in the real workspace during the run");
 

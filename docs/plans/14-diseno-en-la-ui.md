@@ -11,7 +11,7 @@ cómo se usa cada agente, desde la consola.
 | claude 2.1 | `-p` | `--output-format json\|stream-json`, `--json-schema` | `--append-system-prompt`, `--system-prompt`, `--agents <json>`, `--plugin-dir` (plugins con skills), `--settings`, `--setting-sources`, `--disable-slash-commands`; `.claude/skills/<n>/SKILL.md` en el proyecto | `--allowedTools`, `--disallowedTools`, `--tools`, `--permission-mode`, `--max-budget-usd`, `--strict-mcp-config` + `--mcp-config` |
 | codex 0.160 | `codex exec` | `--json`, `--output-schema`, `-o` | `$CODEX_HOME/skills/<n>/SKILL.md`, `AGENTS.md` en el directorio, `-c key=value`, `--ignore-user-config`, `--ignore-rules` | `-s read-only\|workspace-write`, `--ephemeral`, `-C` |
 | kimi 2.1 | `-p` | `--output-format stream-json` | `--skills-dir <dir>` (repetible), `--agent-file <md>`, `--agent` | `--yolo`, `--auto`, `--plan` |
-| mimo | `mimo run` | `--format json` | `--agent <n>` (`mimo agent create`), `-f` adjuntar archivos, `--pure` | `--dangerously-skip-permissions` |
+| mimo | `mimo run` | `--format json` | `skills.paths` en `mimocode.jsonc`, `--agent <n>` (`mimo agent create`), `-f` adjuntar archivos, `--pure` | `--dangerously-skip-permissions` |
 
 Consecuencia: la inyección de skills **no es uniforme**. Cada agente tiene su mecanismo nativo; donde no
 existe, se cae a anteponer el texto de la skill al prompt (declarado como `prompt-prepend`).

@@ -13,6 +13,7 @@ import { CliOneShotRunner, NativeLoopRunner } from "../src/agents/adapters.ts";
 import { CLAUDE_CODE_ADAPTER } from "../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../src/agents/kimi.ts";
+import { MIMO_ADAPTER } from "../src/agents/mimo.ts";
 import { AgentRunnerRegistry } from "../src/agents/port.ts";
 import { type AgentProfile, BUILTIN_PROFILES } from "../src/agents/profile.ts";
 import { Executor } from "../src/executor/executor.ts";
@@ -120,7 +121,7 @@ const result = await runMission(
     ...(MISSION === "currency" ? { extraChecks: [citationCheck(journal, ws)] } : {}),
     orchestration: {
       catalog, profiles: PROFILES, executor, workspaceRoot: ws, generation: lock.generation,
-      registry: new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER)]),
+      registry: new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research), new CliOneShotRunner(), new CliOneShotRunner(CLAUDE_CODE_ADAPTER), new CliOneShotRunner(CODEX_ADAPTER), new CliOneShotRunner(KIMI_ADAPTER), new CliOneShotRunner(MIMO_ADAPTER)]),
       approval: { pollMs: 300 },
     },
   },

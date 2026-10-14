@@ -5,6 +5,7 @@ import { NO_INJECTED_SKILLS } from "../../src/agents/adapter.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
+import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/cli/${name}`, import.meta.url), "utf8");
@@ -94,6 +95,29 @@ describe("KimiAdapter", () => {
     assert.equal(parsed.outcome, "SUCCEEDED");
     assert.equal(parsed.usage.provenance, "log");
     assert.ok(validateProfile({ ...profile, permissions: { mode: "auto" } }).some((problem) => /kimi permission mode/.test(problem)));
+    assert.ok(validateProfile({ ...profile, maxBudgetUsd: 1 }).some((problem) => /no per-run USD budget/.test(problem)));
+  });
+});
+
+describe("MimoAdapter", () => {
+  test("builds a pure headless invocation and declares the installed native skills mechanism", () => {
+    const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === "mimo-writer")!;
+    const invocation = MIMO_ADAPTER.build(
+      profile,
+      { prompt: "fix one thing", cwd: "/isolated/work", home: "/isolated/home", envSource: { PATH: "/bin", HOME: "/real/home" } },
+      NO_INJECTED_SKILLS,
+    );
+    assert.deepEqual(invocation.argv, ["mimo", "run", "fix one thing", "--format", "json", "--pure", "--dir", "/isolated/work"]);
+    assert.equal(invocation.env["HOME"], "/isolated/home");
+    assert.equal(MIMO_ADAPTER.capabilities.skillMechanism, "native-dir");
+  });
+
+  test("parses the captured 402 as failure and rejects controls MiMo cannot enforce", () => {
+    const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === "mimo-writer")!;
+    const parsed = MIMO_ADAPTER.parse(fixture("mimo-error.jsonl"), profile);
+    assert.equal(parsed.outcome, "FAILED");
+    assert.match(parsed.reason ?? "", /402/);
+    assert.ok(validateProfile({ ...profile, permissions: { mode: "never-ask" } }).some((problem) => /mimo permission mode/.test(problem)));
     assert.ok(validateProfile({ ...profile, maxBudgetUsd: 1 }).some((problem) => /no per-run USD budget/.test(problem)));
   });
 });

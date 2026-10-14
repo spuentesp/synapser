@@ -165,8 +165,9 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
     tier: "cheap",
     description: "MiMo Code CLI",
     role: "writer",
-    homeOverlay: [".mimo", ".mimocode"],
-    argv: ["mimo", "run", "{prompt}", "--format", "json"],
+    adapter: "mimo",
+    argv: [],
+    permissions: { mode: "default" },
     parser: "mimo-json",
     timeoutMs: 300_000,
     tags: ["code", "worker"],
@@ -201,6 +202,11 @@ export function validateProfile(p: AgentProfile): string[] {
     const modes = ["default", "yolo", "plan"];
     if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`kimi permission mode must be one of ${modes.join(", ")}`);
     if (p.maxBudgetUsd !== undefined) errs.push("kimi has no per-run USD budget flag");
+  }
+  if (adapterOf(p) === "mimo") {
+    const modes = ["default", "yolo"];
+    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`mimo permission mode must be one of ${modes.join(", ")}`);
+    if (p.maxBudgetUsd !== undefined) errs.push("mimo has no per-run USD budget flag");
   }
   if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");
