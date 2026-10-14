@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: **P16.2 hecho en la rama `spike/mcp-sdk`, pendiente la decisión 1**; el resto, propuesto (14 oct 2026). Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: **P16.2 hecho e incorporado a `main`** (`73991d1`; decisión 1 aprobada el 14 oct 2026). P16.3 en curso; el resto, propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -85,7 +85,7 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 
 **Lo que la adopción compra:** la negociación de las revisiones 2025 y los tipos del protocolo, mantenidos por el SDK. No compra la revisión `2026-07-28`, y el encuadre y `tools/call` siguen siendo nuestros.
 
-**Decisión 1, pendiente.** Incorporar `@modelcontextprotocol/server` 2.3.1 a `main` con esta lista de diferencias. Recomendación: sí, sabiendo que el beneficio es la negociación de revisiones 2025, no la era nueva.
+**Decisión 1, aprobada (14 oct).** Incorporada a `main` en `73991d1`, con esta lista de diferencias. El beneficio es la negociación de revisiones 2025, no la era nueva.
 
 ## 4. P16.3 — Validación con zod
 
@@ -197,8 +197,8 @@ Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la
 
 | # | Decisión | Recomendación | Por qué requiere aprobación |
 |---|---|---|---|
-| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | sí; X1, X2 y X4 cumplidos, X3 con Claude Code y codex (mimo conecta sin llamada) | es dependencia nueva |
-| 2 | zod en versión exacta, dentro de `^4.2.0` | sí, en P16.3 | es dependencia nueva, aunque el SDK la trae |
+| 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | aprobada el 14 oct; incorporada en `73991d1` | es dependencia nueva |
+| 2 | zod en versión exacta, dentro de `^4.2.0` | aprobada con P16.3 (14 oct), en 4.6.7, la que ya trae el SDK | es dependencia directa nueva; el árbol de producción no cambia |
 | 3 | Dónde viven los casos de regresión | un tipo de documento `cases` en la biblioteca, enlazado por el id de la skill | cambia el modelo de la biblioteca |
 | 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | cambia la máquina de estados de la biblioteca |
 | 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | define qué cuenta como fallo |
