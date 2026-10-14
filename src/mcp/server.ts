@@ -1,4 +1,5 @@
-// Synapser as an MCP server (plan 13 §3). Newline-delimited JSON-RPC over stdio, protocol 2024-11-05.
+// Synapser as an MCP server (plan 13 §3). Newline-delimited JSON-RPC over stdio. The protocol is the official SDK's
+// (plan 16, P16.2); the tools are ours.
 //
 // Trust model:
 //   M1 a `worker` session has no approval tools; M2 the ROLE is fixed by whoever launched this process,
@@ -7,6 +8,7 @@
 // The approval CODE (plan 13 E2) is never produced by any tool: it is only visible on human channels.
 
 import { createHash } from "node:crypto";
+import { InMemoryTransport, type JSONRPCMessage, Server } from "@modelcontextprotocol/server";
 import type { ProfileCard } from "../orchestration/catalog.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates } from "../orchestration/gates.ts";
 import type { Journal } from "../journal/journal.ts";
@@ -26,12 +28,51 @@ interface Tool {
   description: string;
   roles: readonly McpRole[];
   readOnly: boolean;
-  inputSchema: Record<string, unknown>;
+  inputSchema: { type: "object"; [key: string]: unknown };
   run(args: Record<string, unknown>, s: McpSession): Promise<unknown> | unknown;
 }
 
-const PROTOCOL = "2024-11-05";
 const str = (d: string, extra: Record<string, unknown> = {}) => ({ type: "string", description: d, ...extra });
+
+/** The params of a tools/call as the client sent them: nothing is assumed until #call checks them. */
+type CallParams = { name?: unknown; arguments?: unknown };
+
+/** A message as a client sent it. Nothing is read from it before it has been checked. A client may also send a reply. */
+type Incoming = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown; result?: unknown; error?: unknown };
+
+/** JSON-RPC params are an object, or none. The SDK does not answer a request whose params are anything else, and the
+ *  hand-written server ignored them, so anything else is dropped. */
+function objectParams(params: unknown): Record<string, unknown> | undefined {
+  return typeof params === "object" && params !== null && !Array.isArray(params) ? (params as Record<string, unknown>) : undefined;
+}
+
+/** What the SDK needs from an initialize, and what the hand-written server did without: a protocol revision (2024-11-05,
+ *  the one it always answered), and a clientInfo with a name and a version. The client's values win. The client's
+ *  capabilities are not sent: this server reads none of them, and the SDK refuses some odd values the server accepted. */
+function initializeFields(params: Record<string, unknown> | undefined): Record<string, unknown> {
+  const ci = objectParams(params?.["clientInfo"]) ?? {};
+  return {
+    protocolVersion: typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : "2024-11-05",
+    capabilities: {},
+    clientInfo: { ...ci, name: typeof ci["name"] === "string" ? ci["name"] : "unknown", version: typeof ci["version"] === "string" ? ci["version"] : "unknown" },
+  };
+}
+
+/** Methods whose params the hand-written server never read. The SDK would refuse some of them (a tools/list cursor that
+ *  is not a string), and the answer does not depend on them, so they are not sent. */
+const UNREAD_PARAMS = new Set(["ping", "tools/list"]);
+
+/** The message as the SDK reads it. The hand-written server never checked jsonrpc, so it is set to 2.0 here. */
+function toSdk(msg: Incoming, keepId: boolean): JSONRPCMessage {
+  const params = objectParams(msg.params);
+  const body = msg.method === "initialize" ? { ...params, ...initializeFields(params) } : UNREAD_PARAMS.has(msg.method as string) ? undefined : params;
+  return {
+    jsonrpc: "2.0",
+    method: msg.method as string,
+    ...(keepId ? { id: msg.id as string | number } : {}),
+    ...(body === undefined ? {} : { params: body }),
+  } as JSONRPCMessage;
+}
 
 export interface McpOptions {
   manager: WorkflowManager;
@@ -43,19 +84,36 @@ export interface McpOptions {
   /** Journal for calls that belong to no workflow (list, catalog). */
   serverJournal: Journal;
   version?: string;
+  /** How long a request may wait for the protocol layer before it is answered with an error. A guard against one
+   *  unanswered request freezing the whole connection (plan 16, P16.2); well-formed traffic never reaches it. */
+  answerTimeoutMs?: number;
 }
 
 export class McpServer {
   readonly #o: McpOptions;
   readonly #tools: Tool[];
+  readonly #sdk: Server;
+  readonly #client: InMemoryTransport;
+  readonly #ready: Promise<void>;
+  readonly #answerMs: number;
+  /** Replies still owed to `handle`, by request id. */
+  readonly #waiting = new Map<unknown, (reply: Record<string, unknown>) => void>();
   #session: McpSession;
   #n = 0;
-  #initialized = false;
 
   constructor(o: McpOptions) {
     this.#o = o;
     this.#session = { id: `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, role: o.role ?? "initiator", client: "unknown" };
     this.#tools = this.#buildTools();
+    this.#answerMs = o.answerTimeoutMs ?? 10_000;
+    // The SDK answers the lifecycle (initialize with revision negotiation, ping, notifications) and the method errors.
+    // The tool handlers stay ours, so the trust rules and the ledger record of every call are unchanged.
+    this.#sdk = new Server({ name: "synapser", version: o.version ?? "0.1.0" }, { capabilities: { tools: {} } });
+    this.#sdk.setRequestHandler("tools/list", () => ({ tools: this.#listed() }));
+    const [client, server] = InMemoryTransport.createLinkedPair();
+    this.#client = client;
+    this.#client.onmessage = (message) => this.#deliver(message as unknown as Record<string, unknown>);
+    this.#ready = this.#sdk.connect(server).then(() => this.#client.start());
   }
 
   get session(): McpSession {
@@ -319,53 +377,79 @@ export class McpServer {
     );
   }
 
-  async handle(msg: { jsonrpc?: string; id?: number | string | null; method?: string; params?: Record<string, unknown> }): Promise<Record<string, unknown> | null> {
-    const id = msg.id ?? null;
-    const reply = (result: unknown) => ({ jsonrpc: "2.0", id, result });
-    const error = (code: number, message: string) => ({ jsonrpc: "2.0", id, error: { code, message } });
-    switch (msg.method) {
-      case "initialize": {
-        const ci = (msg.params?.["clientInfo"] ?? {}) as { name?: unknown };
-        // M2: only the client NAME is taken from the caller; its role never is.
-        if (typeof ci.name === "string" && ci.name.trim()) this.#session = { ...this.#session, client: ci.name.trim().slice(0, 60) };
-        this.#initialized = true;
-        return reply({ protocolVersion: PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: "synapser", version: this.#o.version ?? "0.1.0" } });
-      }
-      case "notifications/initialized":
-      case "notifications/cancelled":
-        return null;
-      case "ping":
-        return reply({});
-      case "tools/list":
-        return reply({
-          tools: this.#tools.filter((t) => t.roles.includes(this.#session.role)).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
-        });
-      case "tools/call": {
-        if (!this.#initialized) return error(-32002, "server not initialized");
-        const name = String(msg.params?.["name"] ?? "");
-        const args = (msg.params?.["arguments"] ?? {}) as Record<string, unknown>;
-        const tool = this.#tools.find((t) => t.name === name);
-        const wf = typeof args["workflow_id"] === "string" ? (args["workflow_id"] as string) : null;
-        if (!tool || !tool.roles.includes(this.#session.role)) {
-          this.#record(name || "(unknown)", args, false, wf && this.#o.manager.status(wf) ? wf : null);
-          return reply({ isError: true, content: [{ type: "text", text: JSON.stringify({ error: "UNKNOWN_TOOL", tool: name }) }] });
-        }
-        let out: unknown;
-        try {
-          out = await tool.run(args, this.#session);
-        } catch (e) {
-          out = { error: "INTERNAL", detail: String((e as Error).message ?? e).slice(0, 200) };
-        }
-        const failed = typeof out === "object" && out !== null && "error" in out;
-        // a creation belongs to the workflow it just made
-        const made = typeof out === "object" && out !== null && typeof (out as { workflow_id?: unknown }).workflow_id === "string" ? (out as { workflow_id: string }).workflow_id : null;
-        const target = wf ?? made;
-        this.#record(name, args, !failed, target && this.#o.manager.status(target) ? target : null);
-        return reply({ isError: failed, content: [{ type: "text", text: JSON.stringify(out) }] });
-      }
-      default:
-        return msg.id === undefined ? null : error(-32601, `method not found: ${String(msg.method)}`);
+  /** One message in, its reply out (null for a notification). Only a request with a string method and an id the
+   *  protocol can answer reaches the SDK; the rest is answered here, as the hand-written server answered it. */
+  async handle(msg: Incoming): Promise<Record<string, unknown> | null> {
+    await this.#ready;
+    const { id } = msg;
+    if (typeof msg.method !== "string") {
+      return id === undefined ? null : { jsonrpc: "2.0", id: id ?? null, error: { code: -32601, message: `method not found: ${String(msg.method)}` } };
     }
+    // tools/call is answered here, not by the SDK: the SDK checks its params before our code runs, which would keep a
+    // nameless call out of the ledger (M3), and it cannot express the -32002 of an uninitialized session.
+    if (msg.method === "tools/call") return this.#callReply(msg);
+    // a notification has no id; one that carries an id is still a notification, and gets no reply
+    if (id === undefined || msg.method.startsWith("notifications/")) {
+      await this.#client.send(toSdk(msg, false));
+      return null;
+    }
+    if (typeof id !== "string" && typeof id !== "number") {
+      return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "invalid request: id must be a string or a number" } };
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.#waiting.delete(id);
+        resolve({ jsonrpc: "2.0", id, error: { code: -32603, message: "no answer from the protocol layer" } });
+      }, this.#answerMs);
+      this.#waiting.set(id, (reply) => {
+        clearTimeout(timer);
+        resolve(reply);
+      });
+      void this.#client.send(toSdk(msg, true));
+    });
+  }
+
+  #deliver(message: Record<string, unknown>): void {
+    const wait = this.#waiting.get(message["id"]);
+    if (!wait) return;
+    this.#waiting.delete(message["id"]);
+    wait(message);
+  }
+
+  #listed() {
+    return this.#tools.filter((t) => t.roles.includes(this.#session.role)).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+  }
+
+  async #callReply(msg: Incoming): Promise<Record<string, unknown>> {
+    const id = (msg.id ?? null) as number | string | null;
+    if (!this.#sdk.getClientVersion()) return { jsonrpc: "2.0", id, error: { code: -32002, message: "server not initialized" } };
+    return { jsonrpc: "2.0", id, result: await this.#call((msg.params ?? {}) as CallParams) };
+  }
+
+  async #call(request: CallParams): Promise<Record<string, unknown>> {
+    // M2: the client NAME comes from the SDK's initialize, trimmed and cut as before; the role never does.
+    const raw = this.#sdk.getClientVersion()?.name?.trim() ?? "";
+    if (raw) this.#session = { ...this.#session, client: raw.slice(0, 60) };
+    const name = String(request.name ?? "");
+    const args = (request.arguments ?? {}) as Record<string, unknown>;
+    const tool = this.#tools.find((t) => t.name === name);
+    const wf = typeof args["workflow_id"] === "string" ? (args["workflow_id"] as string) : null;
+    if (!tool || !tool.roles.includes(this.#session.role)) {
+      this.#record(name || "(unknown)", args, false, wf && this.#o.manager.status(wf) ? wf : null);
+      return { isError: true, content: [{ type: "text", text: JSON.stringify({ error: "UNKNOWN_TOOL", tool: name }) }] };
+    }
+    let out: unknown;
+    try {
+      out = await tool.run(args, this.#session);
+    } catch (e) {
+      out = { error: "INTERNAL", detail: String((e as Error).message ?? e).slice(0, 200) };
+    }
+    const failed = typeof out === "object" && out !== null && "error" in out;
+    // a creation belongs to the workflow it just made
+    const made = typeof out === "object" && out !== null && typeof (out as { workflow_id?: unknown }).workflow_id === "string" ? (out as { workflow_id: string }).workflow_id : null;
+    const target = wf ?? made;
+    this.#record(name, args, !failed, target && this.#o.manager.status(target) ? target : null);
+    return { isError: failed, content: [{ type: "text", text: JSON.stringify(out) }] };
   }
 }
 
