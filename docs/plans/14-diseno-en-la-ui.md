@@ -35,6 +35,24 @@ Adaptadores: `claude-code`, `codex`, `kimi`, `mimo`, `native` (bucle propio, cua
 `generic-cli` (envoltorio con parser plain). El perfil elige adaptador y sobreescribe parámetros; añadir un
 agente nuevo = un archivo adaptador + pruebas contra su binario real.
 
+### 2.1 Proveedores (el modo `native`)
+
+`native` no es un CLI: es el bucle de Synapser conectado **directamente a un proveedor de modelos**.
+Por eso el proveedor es una entidad propia, separada del agente:
+
+```
+Provider { id, protocol: openai-compatible, baseUrl, apiKeyEnv[], models[{id, usdPer1MIn, usdPer1MOut}] }
+Agent(native) { provider, model, temperature, tier, role, skills[] }
+```
+
+- Un proveedor se define una vez (Nebius Token Factory, OpenAI, OpenRouter, vLLM/Ollama local…) y lo
+  usan varios agentes, con modelos y precios distintos; el precio declarado alimenta el costo conocido.
+- Hoy solo existe el protocolo `openai-compatible` (Nemotron va por ahí). Un proveedor con otro
+  protocolo (Anthropic API, Gemini) es un adaptador de proveedor nuevo, no un agente nuevo.
+- Los roles de Synapser (planificador, asesor, chat, reparación) se asignan a un **proveedor+modelo**
+  desde la UI, no fijos en el código como hoy.
+- Prueba de conexión por proveedor: lista modelos y hace una llamada mínima, sin registrar la clave.
+
 ## 3. Skills
 
 - **Biblioteca** en el directorio de estado (`library/skills/<id>/SKILL.md` + `meta.json`), no en el repo.
@@ -82,6 +100,6 @@ dicen qué hacer y enlazan al diseñador, y la corrida del workflow seleccionado
 | Fase | Entrega | Verificación |
 |---|---|---|
 | Q1 | Adaptadores por agente + capacidades + inyección de skills por mecanismo nativo | pruebas por adaptador; L2, L5; corrida real por CLI |
-| Q2 | Biblioteca (skills, plantillas, agentes) + API + eventos | L1, L3, L4 |
+| Q2 | Biblioteca (proveedores, skills, plantillas, agentes) + API + eventos; roles del sistema asignables a proveedor+modelo | L1, L3, L4 |
 | Q3 | Diseñadores de workflow y agente, plantillas integradas, «probar agente» | prueba en navegador real |
 | Q4 | Inicio y estados vacíos | capturas |
