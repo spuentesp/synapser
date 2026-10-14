@@ -4,6 +4,12 @@ export type Lang = 'es' | 'en'
 
 const dict = {
   es: {
+    chat: 'Chat', workflows: 'Workflows', agents: 'Agentes', send: 'Enviar', chatHint: 'Pide un workflow, pregunta qué pasa o consulta al asesor…',
+    chatNote: 'Nemotron puede redactar y explicar; iniciar, cancelar y aprobar son botones tuyos.', draftReady: 'Borrador listo', openWorkflow: 'Abrir',
+    noWorkflows: 'Aún no hay workflows. Pídelo en el chat o crea uno desde JSON.', startWorkflow: 'Iniciar', cancelWorkflow: 'Cancelar',
+    saveDraft: 'Guardar', newWorkflow: 'Nuevo workflow (JSON)', conditionsLabel: 'Condiciones', required: 'obligatoria', optional: 'informativa',
+    tierLabel: 'nivel', poolLabel: 'pool', capabilities: 'capacidades', enabled: 'habilitado', disabled: 'deshabilitado', policyLabel: 'Política de efectos',
+    thinking: 'Pensando…', you: 'Tú', assistant: 'Nemotron',
     run: 'Corrida', swarm: 'Enjambre', timeline: 'Línea de tiempo', why: 'Por qué', cost: 'Costo',
     coordination: 'Coordinación', approvals: 'Aprobaciones', integrity: 'Integridad',
     live: 'En vivo', replay: 'Reproducción', noRuns: 'No hay corridas en este directorio de estado.',
@@ -28,6 +34,12 @@ const dict = {
     gateStart: 'Inicio del workflow', gateStep: 'Paso del plan', gateCondition: 'Condición', gateEffect: 'Efecto', gateIntervention: 'Intervención del asesor',
   },
   en: {
+    chat: 'Chat', workflows: 'Workflows', agents: 'Agents', send: 'Send', chatHint: 'Ask for a workflow, ask what is going on, or consult the advisor…',
+    chatNote: 'Nemotron can draft and explain; starting, cancelling and approving are buttons for you.', draftReady: 'Draft ready', openWorkflow: 'Open',
+    noWorkflows: 'No workflows yet. Ask in the chat or create one from JSON.', startWorkflow: 'Start', cancelWorkflow: 'Cancel',
+    saveDraft: 'Save', newWorkflow: 'New workflow (JSON)', conditionsLabel: 'Conditions', required: 'required', optional: 'informational',
+    tierLabel: 'tier', poolLabel: 'pool', capabilities: 'capabilities', enabled: 'enabled', disabled: 'disabled', policyLabel: 'Effect policy',
+    thinking: 'Thinking…', you: 'You', assistant: 'Nemotron',
     run: 'Run', swarm: 'Swarm', timeline: 'Timeline', why: 'Why', cost: 'Cost',
     coordination: 'Coordination', approvals: 'Approvals', integrity: 'Integrity',
     live: 'Live', replay: 'Replay', noRuns: 'No runs in this state directory.',

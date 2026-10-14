@@ -382,3 +382,11 @@ cerebro; el uso se registra y un modelo sin precio queda como costo desconocido)
 CLI** (parser `plain`: solo código de salida y resultado de aceptación, uso desconocido). Configuración
 rechazada entera con todos los problemas (K2). `synapser doctor` sondea qué hay instalado y usable y
 sugiere qué habilitar sin habilitar nada. El costo se aprende del historial de corridas anteriores.
+
+**P5 (hecho):** `src/chat/chat.ts` — Nemotron como interfaz de chat (rol `chat`): herramientas
+`draft_workflow`, `edit_draft`, `list_workflows`, `explain_run`, `show_gates`, `list_agents`, `ask_advisor`;
+**no existe** herramienta para iniciar, cancelar ni aprobar (H1); borradores por el mismo validador, con
+errores devueltos al modelo (H2); hechos con el `seq` del ledger y conversación como eventos (H3).
+API: `/api/workflows` (crear, editar = revisión, iniciar, cancelar), `/api/chat`, `/api/catalog`,
+`/api/config`; escrituras con token y mismo origen, actor fijo `ui:operator`; el servidor sigue sin camino
+al ejecutor (U1). `synapser serve`. UI: vistas Chat, Workflows y Agentes (React + Tailwind + shadcn).

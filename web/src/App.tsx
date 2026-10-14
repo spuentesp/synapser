@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Coins, GitBranch, History, Languages, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
+import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { EvidenceProvider } from '@/components/evidence'
+import { AgentsView } from '@/components/views/agents-view'
+import { ChatView } from '@/components/views/chat-view'
+import { WorkflowsView } from '@/components/views/workflows-view'
 import { ApprovalsView } from '@/components/views/approvals-view'
 import { Empty, ErrorNote, Loading } from '@/components/views/common'
 import { CoordinationView } from '@/components/views/coordination-view'
@@ -18,15 +21,15 @@ import { shortHash } from '@/lib/format'
 import { I18nContext, makeT, type Key, type Lang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-const VIEWS = ['swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
+const VIEWS = ['chat', 'workflows', 'agents', 'swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
 type View = (typeof VIEWS)[number]
 const ICON: Record<View, typeof Users> = {
-  swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
+  chat: MessageSquare, workflows: Workflow, agents: Bot, swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
 }
 
 const readHash = (): View => {
   const h = decodeURIComponent(location.hash.slice(1)).split('?')[0] as View
-  return VIEWS.includes(h) ? h : 'swarm'
+  return VIEWS.includes(h) ? h : 'chat'
 }
 
 export default function App() {
@@ -42,6 +45,7 @@ export default function App() {
     return s ? s === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
   })
   const [view, setView] = useState<View>(readHash)
+  const [wfId, setWfId] = useState<string | null>(null)
   const L = useLedger()
   const t = useMemo(() => makeT(lang), [lang])
   const i18n = useMemo(() => ({ lang, t, setLang: (l: Lang) => (localStorage.setItem('lang', l), setLang(l)) }), [lang, t])
@@ -62,10 +66,17 @@ export default function App() {
   }
   const pending = L.state?.pendingApprovals.length ?? 0
   const run = L.run
-  const labels: Record<View, Key> = { swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
+  const labels: Record<View, Key> = { chat: 'chat', workflows: 'workflows', agents: 'agents', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
 
+  const GLOBAL: View[] = ['chat', 'workflows', 'agents']
   let body: React.ReactNode
-  if (L.error && !run) body = <ErrorNote code={L.error} />
+  if (GLOBAL.includes(view)) {
+    body = {
+      chat: <ChatView token={L.token} onOpen={(id) => { setWfId(id); go('workflows') }} />,
+      workflows: <WorkflowsView token={L.token} tick={L.tick} selected={wfId} onSelect={setWfId} />,
+      agents: <AgentsView />,
+    }[view as 'chat' | 'workflows' | 'agents']
+  } else if (L.error && !run) body = <ErrorNote code={L.error} />
   else if (!run || !L.state || !L.runId) body = L.runs.length === 0 && L.state === null && !L.error ? <Loading /> : <Empty>{t('noRuns')}</Empty>
   else {
     const id = L.runId
@@ -77,7 +88,7 @@ export default function App() {
       coordination: <CoordinationView runId={id} tick={L.tick} />,
       approvals: <ApprovalsView runId={id} state={L.state} token={L.token} onDecided={L.refresh} />,
       integrity: <IntegrityView runId={id} tick={L.tick} onVerify={L.refresh} />,
-    }[view]
+    }[view as 'swarm']
   }
 
   return (
