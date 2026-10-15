@@ -18,7 +18,8 @@
     "test:live": "node --env-file=.env --test --test-reporter=spec \"test/live/**/*.test.ts\"",
     "verify": "node scripts/verify.ts",
     "test:contract": "node --test --test-reporter=spec \"test/contract/**/*.test.ts\"",
-    "test:coverage": "mkdir -p evidence/coverage && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=evidence/coverage/lcov.info \"test/**/*.test.ts\""
+    "test:coverage": "mkdir -p evidence/coverage && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=evidence/coverage/lcov.info \"test/**/*.test.ts\"",
+    "contracts:update": "node scripts/contracts-update.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

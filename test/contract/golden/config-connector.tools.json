@@ -1,0 +1,59 @@
+[
+  {
+    "name": "config_put_provider",
+    "description": "Create or replace an operator provider: {id, provider}. The change is validated against the whole configuration, written to the operator's file and applied at once. Key values are never accepted: only variable names.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "provider"
+      ]
+    }
+  },
+  {
+    "name": "config_put_agent",
+    "description": "Create or replace an operator agent: {id, agent}, written in the same form as the operator file. The whole file must load; a broken agent changes nothing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "agent"
+      ]
+    }
+  },
+  {
+    "name": "config_put_role",
+    "description": "Assign a system role: {role, assignment}, where assignment is {provider, model, temperature?, fallbacks?}. The provider must declare the model.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "assignment": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "role",
+        "assignment"
+      ]
+    }
+  }
+]
