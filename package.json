@@ -19,11 +19,13 @@
     "verify": "node scripts/verify.ts",
     "test:contract": "node --test --test-reporter=spec \"test/contract/**/*.test.ts\"",
     "test:coverage": "mkdir -p evidence/coverage && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=evidence/coverage/lcov.info \"test/**/*.test.ts\"",
-    "contracts:update": "node scripts/contracts-update.ts"
+    "contracts:update": "node scripts/contracts-update.ts",
+    "arch:check": "depcruise src web/src test --config .dependency-cruiser.cjs"
   },
   "devDependencies": {
     "@stryker-mutator/core": "10.0.0",
     "@types/node": "^24.0.0",
+    "dependency-cruiser": "18.6.0",
     "fast-check": "4.10.2",
     "typescript": "^5.9.0"
   },

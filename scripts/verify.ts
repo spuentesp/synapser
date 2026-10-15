@@ -29,6 +29,8 @@ async function checkBinary(): Promise<void> {
 
 await checkBinary();
 run("typecheck", "npx", ["tsc", "--noEmit"]);
+// Plan 18 H12.2 and H12.3: layer rules and cycles.
+run("architecture rules", "npx", ["depcruise", "src", "web/src", "test", "--config", ".dependency-cruiser.cjs"]);
 if (existsSync(new URL("test/contract", root))) {
   run("contract tests", "node", ["--test", "--test-reporter=spec", "test/contract/**/*.test.ts"]);
 }
