@@ -108,6 +108,16 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 - **V4 Nombres de prototipo.** Un documento leído de JSON puede traer una clave propia `__proto__`, `constructor` o `toString`, y un proveedor o una base con esos nombres. Se rechazan con su motivo, y nunca se leen de `Object.prototype`. Una sonda comparó el validador anterior con el nuevo sobre estos casos: sin diferencias, salvo los proveedores con nombre de prototipo, que lanzaban `TypeError` y ahora se rechazan (corregido en el mismo paso; pruebas en `test/library/agent-rules.test.ts`).
 - **Falsación.** Seis cambios al esquema, cada uno hace fallar el golden: límite de temperatura `lte(2)`→`lt(2)` (2 casos), mínimo de timeout `gt(0)`→`gte(0)` (2), etiquetas de skill sin tipo (1), campo obligatorio hecho opcional (1), `strictObject`→`object` (23), tamaño de skill menos un byte (4). Después, el esquema original, restaurado y verificado con `cmp`.
 
+### P16.6 — Proveedores y borradores de workflow
+
+**Alcance.** zod gobierna las formas de proveedor (incluido el archivo del operador, que comparte `validateProviderConfig`) y los borradores de workflow. No se cambia la política de proveedores: slug, protocolo por contexto, destinos, allowlist de claves, precios en pareja y modelos duplicados siguen como reglas semánticas. En workflows siguen en código las referencias a comandos/perfiles, rutas del workspace, unicidad de condiciones, evidencia secundaria y la condición obligatoria no exenta. Claves desconocidas se siguen ignorando, sin reescribir ni quitar datos del archivo.
+
+**Normalización que no cambia.** `goals` y `nonGoals` ausentes pasan a `[]`; una cadena de `nonGoals` pasa a `{statement}`; `required` ausente pasa a `true`; `citations.min` ausente pasa a `1`; listas `diff` vacías se omiten. Un paso de guardado conserva su validación completa y atómica.
+
+**Invariantes y verificación.** V1: corpus dorado de proveedores y workflows generado antes del cambio, comparando veredicto, problemas en orden y objeto normalizado. V2: las pruebas existentes de config del operador, hot reload, biblioteca, workflow, referencias, rutas e invariantes siguen pasando. V3: sin claves desconocidas nuevas rechazadas ni dependencias de ejecución añadidas. Goldens: `test/model/provider-validation-golden.test.ts` y `test/workflow/validation-golden.test.ts`; regeneración deliberada con `test/regen-p166-validation-golden.ts`.
+
+**Falsación.** Cambiar `providerBaseUrlShape` de string a número debe diferir del golden de proveedor; cambiar la forma de `required` o de las cadenas de workflow debe diferir del golden de workflow. Un cambio intencional de contrato actualiza el corpus y explica la nueva regla; no se regenera para silenciar una diferencia accidental.
+
 ## 5. P16.4 — Curación de skills
 
 **Idea.** Una versión de skill entra en uso solo después de pasar sus casos de regresión.
