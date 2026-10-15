@@ -142,9 +142,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
-- [~] Q3.3 quién: GPT-6 Codex · desde: 2026-10-15. Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
+- [x] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
   nota: D6 reserva al archivo del operador la asignación de skills; el diseñador las muestra como solo lectura. IC1 reserva permisos, presupuesto CLI y pool al perfil que fija el operador.
+  commit: 6b8823f · prueba: `GET /api/library/bases` entrega adaptador, rol, nivel, permisos, límite, pool y estado del archivo; Chromium real muestra esos valores como heredados, el modo nativo sin controles CLI, las skills asignadas por D6 como solo lectura y los campos file-only traducidos (`test/ui/agent-designer.spec.ts`, captura `evidence/agent-designer.png`, gitignored). `test/library/agent-rules.test.ts` sigue rechazando permisos, presupuesto y pool desde el documento; suite completa, typecheck y build web.
 - [x] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas. commit: 716bb7c · prueba: `test/agents/trial.test.ts` ejecuta un proceso real en la copia temporal usando el Zoanthrope fijado, verifica que el workspace original no cambie y que el ledger guarde solo el informe y la salida como artefacto; `test/api/agent-trial.test.ts` verifica token, mismo origen, payload y rechazo; `npm run test:ui -- --grep "agent trial sends"` en Chromium comprueba formulario y resultado. El POST de navegador usa respuesta controlada; el proceso/runner y el Zoo se prueban aparte contra los binarios reales. Evidencia: `evidence/agent-trial.png` (gitignored).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
