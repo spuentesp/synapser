@@ -5,6 +5,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
+import { loadConfig } from "../../src/config/load.ts";
 
 const CLI = new URL("../../src/cli/main.ts", import.meta.url).pathname;
 const TOKEN = "config-put-test-operator-token-0123456789";
@@ -86,7 +87,7 @@ describe("operator config CLI", () => {
 
     const applied = await run(["config", "put", "providers", "fixture", document], dir, env);
     assert.equal(applied.code, 0, applied.stderr);
-    const loaded = await fetch(`${base}/api/config`).then((response) => response.json()) as { providers: Record<string, { models: { id: string }[] }> };
+    const loaded = loadConfig({ path: path });
     assert.equal(loaded.providers["fixture"]?.models[0]?.id, "config-put-model");
     assert.equal(`${applied.stdout}${applied.stderr}`.includes(TOKEN), false);
   });
