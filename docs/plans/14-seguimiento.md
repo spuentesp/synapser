@@ -80,10 +80,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q2 — Biblioteca, proveedores y API
 
-- [~] Q2.1 quién: GPT-6 Codex · desde: 2026-10-15. Reabierta por auditoría L4: el protocolo `anthropic` retorna antes de acumular errores independientes del proveedor. Almacén `library/` en el estado: proveedores, skills, plantillas, agentes; versión por digest;
-  cada cambio es un evento en el ledger del servidor. *Invariante:* L4. commit: f65802a · prueba: cuatro
+- [x] Q2.1 Almacén `library/` en el estado: proveedores, skills, plantillas, agentes; versión por digest;
+  cada cambio es un evento en el ledger del servidor. *Invariante:* L4. commit: f65802a (reapertura corregida en b5312dd) · prueba: cuatro
   colecciones versionadas por digest, cambios y borrados encadenados con actor en `_server`, idempotencia,
-  rechazo de identidades inseguras y reparación de una proyección adulterada; suite completa.
+  rechazo de identidades inseguras y reparación de una proyección adulterada; `test/library/validate.survivors.test.ts` acumula también el rechazo de protocolo Anthropic con los errores independientes; suite completa y typecheck.
 - [x] Q2.2 `Provider` (protocolo, baseUrl, apiKeyEnv, modelos con precio) y agentes `native` que lo
   referencian; migrar `endpoint` de perfiles a proveedor; precio declarado → costo conocido.
   commit: ebee726 · prueba: validación acumulada de proveedores, modelos y precios; migración
