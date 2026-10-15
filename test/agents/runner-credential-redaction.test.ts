@@ -17,10 +17,12 @@ test("an injected credential is redacted from output and withheld from changed-f
   mkdirSync(bin);
   mkdirSync(home);
   const secret = "never-persist-this-provider-key-7a9d";
+  writeFileSync(join(workspace, "existing-secret.txt"), secret);
   const cli = join(bin, "codex");
   writeFileSync(cli, `#!/usr/bin/env node
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 writeFileSync('leak.txt', process.env.TEST_PROVIDER_KEY);
+unlinkSync('existing-secret.txt');
 console.log(JSON.stringify({ type: 'thread.started', thread_id: 'credential-test' }));
 console.log(JSON.stringify({ type: 'turn.started' }));
 console.log(JSON.stringify({ type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: process.env.TEST_PROVIDER_KEY } }));
@@ -47,7 +49,7 @@ console.error(process.env.TEST_PROVIDER_KEY);
     assert.deepEqual(result.changes, []);
     assert.equal(JSON.stringify(result).includes(secret), false);
     const row = journal.listAgentRuns()[0]!;
-    for (const blob of [row.stdoutBlob, row.stderrBlob, row.finalTextBlob, ...row.changes.flatMap((change) => [change.beforeBlob, change.afterBlob])]) {
+    for (const blob of [row.stdoutBlob, row.stderrBlob, row.finalTextBlob]) {
       if (blob) assert.equal(journal.artifacts.get(blob).includes(Buffer.from(secret)), false);
     }
   } finally {

@@ -203,6 +203,11 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     // What changed in the copy, with the bytes needed to integrate it later.
     const changes: FileChange[] = [];
     let credentialWrittenToWorkspace = false;
+    const containsCredential = (path: string): boolean => {
+      if (credentialValues.length === 0) return false;
+      const bytes = readFileSync(path);
+      return credentialValues.some((secret) => bytes.includes(Buffer.from(secret)));
+    };
     const after = new Map<string, string>();
     for (const f of listTree(work)) {
       if (f.split("/").some((seg) => AGENT_METADATA.has(seg))) continue;
@@ -213,16 +218,20 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       seen.add(f);
       const o2 = observeFile(join(work, f));
       if (o2.kind !== "file") continue;
-      if (credentialValues.some((secret) => readFileSync(join(work, f)).includes(Buffer.from(secret)))) {
+      const b = base.get(f);
+      if (containsCredential(join(work, f)) || (b && containsCredential(join(baseDir, f)))) {
         credentialWrittenToWorkspace = true;
         continue;
       }
-      const b = base.get(f);
       if (b && b.digest === o2.digest) continue;
       changes.push(toChange(work, baseDir, f, b ? "modify" : "create", b?.digest ?? null, o2.digest, o2.mode, o2.size, journal));
     }
     for (const [p2, b] of base) {
       if (seen.has(p2) || p2.split("/").some((seg) => AGENT_METADATA.has(seg))) continue;
+      if (containsCredential(join(baseDir, p2))) {
+        credentialWrittenToWorkspace = true;
+        continue;
+      }
       changes.push(toChange(work, baseDir, p2, "delete", b.digest, null, null, 0, journal));
     }
     changes.sort((x, y) => (x.path < y.path ? -1 : 1));
