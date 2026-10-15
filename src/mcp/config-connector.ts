@@ -14,6 +14,11 @@ export const CONFIG_TOOLS = [
     inputSchema: { type: "object", properties: { id: { type: "string" }, provider: OBJECT }, required: ["id", "provider"] },
   },
   {
+    name: "config_put_agent",
+    description: "Create or replace an operator agent: {id, agent}, written in the same form as the operator file. The whole file must load; a broken agent changes nothing.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, agent: OBJECT }, required: ["id", "agent"] },
+  },
+  {
     name: "config_put_role",
     description: "Assign a system role: {role, assignment}, where assignment is {provider, model, temperature?, fallbacks?}. The provider must declare the model.",
     inputSchema: { type: "object", properties: { role: { type: "string" }, assignment: OBJECT }, required: ["role", "assignment"] },
@@ -68,6 +73,10 @@ export class ConfigConnector {
       if (typeof args["id"] !== "string" || !args["provider"]) return toolText("id and provider are required", true);
       path = `/api/config/providers/${encodeURIComponent(args["id"])}`;
       body = args["provider"];
+    } else if (params.name === "config_put_agent") {
+      if (typeof args["id"] !== "string" || !args["agent"]) return toolText("id and agent are required", true);
+      path = `/api/config/agents/${encodeURIComponent(args["id"])}`;
+      body = args["agent"];
     } else if (params.name === "config_put_role") {
       if (typeof args["role"] !== "string" || !args["assignment"]) return toolText("role and assignment are required", true);
       path = `/api/config/roles/${encodeURIComponent(args["role"])}`;

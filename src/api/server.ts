@@ -334,7 +334,7 @@ export function createApi(opts: ApiOptions): ApiServer {
     const [top, id, action] = parts as [string, string | undefined, string | undefined];
     if (method !== "GET" && !writeAllowed(req, res)) return;
     // plan 17 P17.8: PUT /api/config/providers/<id> and PUT /api/config/roles/<role>. Checked before the id rules below.
-    if (top === "config" && (id === "providers" || id === "roles") && method === "PUT" && action !== undefined && c.configWrite) {
+    if (top === "config" && (id === "providers" || id === "roles" || id === "agents") && method === "PUT" && action !== undefined && c.configWrite) {
       const body = await readBody(req, res);
       if (body === undefined) return;
       try {

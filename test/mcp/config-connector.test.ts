@@ -55,9 +55,9 @@ describe("plan 17 P17.8 step 3: the configuration connector", () => {
     assert.throws(() => new ConfigConnector({ apiUrl: "http://127.0.0.1:1", token: "short" }), /at least 32 characters/);
   });
 
-  test("it lists exactly the two configuration tools", async () => {
+  test("it lists exactly the three configuration tools", async () => {
     const r = (await connector.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };
-    assert.deepEqual(r.result.tools.map((t) => t.name), ["config_put_provider", "config_put_role"]);
+    assert.deepEqual(r.result.tools.map((t) => t.name), ["config_put_provider", "config_put_agent", "config_put_role"]);
   });
 
   test("a provider change goes through the API: applied, written, and reported without the token", async () => {
