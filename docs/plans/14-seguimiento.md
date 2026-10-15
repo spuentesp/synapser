@@ -143,8 +143,8 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   puede y no controlar en cada modo.
   motivo: el usuario respondió «sí, ahora» (14 oct). Las skills se conectan con Q5.4 cuando esté, porque el archivo las asigna (D6).
   commit: 30eddf8 · prueba: `test/api/library.test.ts` (`GET /api/library/bases`: perfiles base con su estado en el archivo y los campos que decide el archivo; falsación: sin la ruta falla la prueba). Verificado en navegador, en el sandbox, con capturas en `evidence/` (no versionadas): crear un agente, etiquetas con comas, un guardado rechazado con su motivo, y el cambio entre «extiende un perfil» y «agente nativo propio» con la lista de perfiles y sus estados. Build de la web con `tsc -b`. Falta el campo de skills, que llega con Q5.4.
-- [!] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-  motivo: respondidas las tres preguntas (14 oct): tope de tiempo obligatorio en los CLI sin tope en dólares; proveedor de prueba en el archivo; copia borrada al terminar, con el registro. Diseño al final, como decidió el usuario (decisión 2).
+- [~] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
+  quién: GPT-6 Codex · desde: 2026-10-15. Las decisiones ya están contestadas y se llegó al final del plan como pidió el usuario; se implementa con esos límites y el estado de red declarado.
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
