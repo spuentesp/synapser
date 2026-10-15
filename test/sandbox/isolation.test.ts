@@ -59,3 +59,17 @@ describe("H6.4 a process that never ends is stopped at its time limit", { skip }
   });
   test("cleanup", () => rmSync(ws, { recursive: true, force: true }));
 });
+
+describe("H6.4 the memory limit is inherited inside the sandbox", { skip }, () => {
+  const ws = mkdtempSync(join(tmpdir(), "sbx-resource-ws-"));
+  test("an allocation beyond RLIMIT_AS fails inside the sandbox", () => {
+    const r = runSandboxed({ workspace: ws, memoryLimitBytes: 96 * 1024 * 1024 }, [
+      "python3", "-c",
+      "try: bytearray(256*1024*1024)\nexcept MemoryError: print('memory-limit-hit'); raise SystemExit(42)\nraise SystemExit(0)",
+    ]);
+    assert.equal(r.status, 42, r.stderr);
+    assert.match(r.stdout, /memory-limit-hit/);
+  });
+
+  test("cleanup", () => rmSync(ws, { recursive: true, force: true }));
+});
