@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { sha256Bytes } from "../../src/digest/file.ts";
+import { verifyChain } from "../../src/audit/chain.ts";
 import {
   IllegalTransition,
   Journal,
@@ -54,6 +55,14 @@ describe("journal", () => {
     const ev = j.listEvents();
     assert.equal(ev.length, 1);
     assert.deepEqual([ev[0]?.entity, ev[0]?.fromState, ev[0]?.toState], ["action", null, "PREPARED"]);
+    assert.deepEqual(ev[0]?.data, {
+      task_id: "t1",
+      actor_owner: `${RUN}:t1`,
+      incarnation: 1,
+      request_digest: digest("req-a1"),
+      files: ["a.py", "z.py"],
+    });
+    assert.equal(verifyChain(RUN, j.eventChain()).ok, true);
   });
 
   test("same key + same digest → duplicate (with receipt); other body → digest_conflict", () => {
