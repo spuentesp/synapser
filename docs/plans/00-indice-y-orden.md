@@ -23,6 +23,7 @@ Objetivo de salida de la ventana (diseño §11): **S01–S07 pasan sin depender 
 | [15 Amenazas de la biblioteca](15-amenazas-de-la-biblioteca.md) | modelo de amenazas de claves, agentes y skills de biblioteca; controles provisionales IC1 a IC4 | 14 |
 | [16 Spike, validación, curación y optimización](16-spike-validacion-curacion-optimizacion.md) | dependencias con baja superficie: SDK oficial de MCP, zod, curación de skills con casos de regresión y optimización offline | 14, 15 |
 | [17 Inyección de configuración a los CLIs](17-inyeccion-de-configuracion-a-los-clis.md) | proveedores y modelos del operador inyectados a cada CLI; claves por variables de entorno; dos conectores MCP (tareas y configuración) | 14, 15 |
+| [18 Infraestructura de pruebas](18-infraestructura-de-pruebas.md) | trece épicas: contratos por herramienta, propiedades, mutación, fixtures, sandbox, MCP e2e, oráculo oculto, UI con Playwright, verificación formal opcional, arquitectura y gobierno | 14, 15, 17 |
 
 ## Decisiones tomadas en estos planes (para aprobar)
 
