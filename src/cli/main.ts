@@ -17,6 +17,7 @@
 //   synapser doctor [--json]                  what is installed and usable, and what to enable
 //   synapser provider test <id>               list a provider's models and make one minimal call (key never printed)
 //   synapser config show
+//   synapser config put <providers|roles|agents> <id> <file.json>  write through the authenticated API
 // Global: --config FILE  --workspace DIR  --state DIR
 
 import { readFileSync } from "node:fs";
@@ -47,6 +48,36 @@ const die = (msg: string, code = 1): never => {
 
 const OPERATOR: Actor = { id: `cli:${process.env["USER"] ?? "operator"}`, role: "operator" };
 
+async function putConfig(kind: string | undefined, id: string | undefined, file: string | undefined): Promise<void> {
+  if (kind !== "providers" && kind !== "roles" && kind !== "agents") return die("usage: synapser config put <providers|roles|agents> <id> <file.json>", 2);
+  if (!id || !file) return die("usage: synapser config put <providers|roles|agents> <id> <file.json>", 2);
+  const token = process.env["SYNAPSER_OPERATOR_TOKEN"];
+  if (!token || token.length < 32) return die("SYNAPSER_OPERATOR_TOKEN must be set to the operator token (at least 32 characters)", 2);
+  let api: URL;
+  let value: unknown;
+  try {
+    api = new URL(process.env["SYNAPSER_API_URL"] ?? "http://127.0.0.1:4173");
+    if (api.protocol !== "http:" && api.protocol !== "https:") throw new Error("unsupported protocol");
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    return die(error instanceof SyntaxError ? `invalid JSON in ${file}` : error instanceof Error && error.message === "unsupported protocol" ? "SYNAPSER_API_URL must use HTTP or HTTPS" : `cannot read configuration document: ${file}`, 2);
+  }
+  try {
+    const response = await fetch(new URL(`/api/config/${kind}/${encodeURIComponent(id)}`, api), {
+      method: "PUT",
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+      headers: { "content-type": "application/json", "x-synapser-token": token, origin: api.origin },
+      body: JSON.stringify(value),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return die(JSON.stringify(body), response.status === 401 ? 1 : 2);
+    return say({ ok: true, kind, id });
+  } catch {
+    return die("configuration API request failed; check SYNAPSER_API_URL and that Synapser serve is running", 1);
+  }
+}
+
 async function main(): Promise<void> {
   const cfgPath = flag("config");
   const ws = flag("workspace");
@@ -72,6 +103,7 @@ async function main(): Promise<void> {
     }
     return say({ ...cfg, profiles: cfg.profiles.map((p) => p.id), library });
   }
+  if (cmd === "config" && sub === "put") return await putConfig(a, b, argv[4]);
   if (cmd === "policy" && sub === "show") return say(cfg.policy);
   if (cmd === "provider" && sub === "test") {
     const id = a ?? "";
