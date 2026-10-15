@@ -62,7 +62,8 @@ describe("adapter flag invariant L5", () => {
 
     test(`${entry.adapter.id}: declared flags exist in the real --help`, (t) => {
       const executable = entry.adapter.id === "claude-code" ? "claude" : entry.adapter.id;
-      const result = spawnSync(executable, entry.help, { encoding: "utf8", timeout: 10_000 });
+      // The limit only stops a hang: this reads a help text, and under the full suite's load a cold start can exceed 10 s.
+      const result = spawnSync(executable, entry.help, { encoding: "utf8", timeout: 60_000 });
       if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
         t.skip(`${executable} is not installed`);
         return;

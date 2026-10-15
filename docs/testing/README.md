@@ -29,8 +29,8 @@
 
 Lista abierta al cierre de este documento. Cada entrada tiene fecha y se corrige o se aísla antes del cierre del plan.
 
-- **Ejecutor de `kimi --help` en `test/agents/adapter-help.test.ts`:** con carga alta de la suite completa, el comando supera el límite de 10 s. Ejecutada sola, pasa. Pendiente: subir el límite con razón escrita o medir sin carga.
-- **S13 en `test/executor/` (tiempo de proceso hijo):** falló una vez en una ejecución completa y pasó en las dos siguientes. Pendiente: revisar con reloj inyectado (E11).
+- **`kimi --help` en `test/agents/adapter-help.test.ts`:** el límite pasó de 10 s a 60 s. Es un límite contra cuelgues, no una medida de velocidad; con la suite completa en marcha el comando puede tardar más de 10 s. Queda abierto solo si vuelve a superar 60 s.
+- **S13 en `test/zoo/s13-timeout.test.ts`:** el mismo límite de llamada cubría el handshake de un proceso recién lanzado. El handshake tiene ahora su propio presupuesto (10 s) y el límite de llamada es 1 s. Causa probable, no reproducida; si vuelve a fallar, se revisa con el reloj inyectado.
 
 ### Presupuesto de tiempo (H13.2, H13.3)
 

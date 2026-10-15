@@ -19,7 +19,9 @@ test("S13: timeout → child killed and confirmed → quarantined → reconcile 
     command: process.execPath,
     args: [FAKE],
     env: { ...process.env, FAKE_ZOO_MARKER: marker },
-    callTimeoutMs: 300,
+    // A hang is detected at this budget. The fresh child's handshake has its own budget (handshakeTimeoutMs), so a cold start
+    // under load is not taken for a hang. The intermittent failure is not reproduced; this is the limit that was shared before.
+    callTimeoutMs: 1_000,
     killGraceMs: 2000,
   });
   const zoo = new ZooAdapter(t);

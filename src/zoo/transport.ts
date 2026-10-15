@@ -18,6 +18,8 @@ export interface TransportOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   callTimeoutMs?: number; // default 10_000
+  /** The handshake of a fresh child has its own budget: a cold start is not a hang (default 10_000). */
+  handshakeTimeoutMs?: number;
   killGraceMs?: number; // default 3_000
   onWire?: (r: WireRecord) => void;
 }
@@ -62,7 +64,7 @@ export class ZooTransport {
       protocolVersion: "2024-11-05",
       capabilities: {},
       clientInfo: { name: "synapser", version: "0.0.1" },
-    });
+    }, this.#opts.handshakeTimeoutMs ?? 10_000);
     this.#write({ jsonrpc: "2.0", method: "notifications/initialized" });
     this.#state = "ready";
     return init;
@@ -161,11 +163,11 @@ export class ZooTransport {
     this.#child?.stdin.write(line + "\n");
   }
 
-  #rpc(method: string, params: unknown): Promise<unknown> {
+  #rpc(method: string, params: unknown, timeoutMs?: number): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.#child) return reject(new ZooError("TRANSPORT_CLOSED", "no child process"));
       const id = this.#nextId++;
-      const timer = setTimeout(() => void this.#onTimeout(id, method), this.#opts.callTimeoutMs);
+      const timer = setTimeout(() => void this.#onTimeout(id, method), timeoutMs ?? this.#opts.callTimeoutMs);
       this.#pending = { id, resolve, reject, timer };
       this.#write({ jsonrpc: "2.0", id, method, params });
     });
