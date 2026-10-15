@@ -230,7 +230,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 ### P18 — Infraestructura de pruebas (plan)
 
 - [x] P18.0 Plan 18: `docs/plans/18-infraestructura-de-pruebas.md`, con su entrada en el índice. Propuesto, sin código. commit: 0fbb66e · prueba: el plan lista épicas e historias con criterio de aceptación y herramientas.
-- [~] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). quién: Claude Haiku 5.5; desde: 2026-10-15. *Verificación:* ver el plan 18, épica E1.
+- [x] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). commit: 1aee822 · prueba: `npm run verify` falla ante un binario con otro hash (VERSION_MISMATCH) y pasa con el binario fijado.
 - [ ] P18.2 E2 Contratos por herramienta (inventario, esquemas zod, pruebas y golden de contrato, compatibilidad, banderas de adaptadores). *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.3 E3 Pruebas basadas en propiedades (fast-check): digests, ledger, validadores, inyección, escritura de configuración. *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.4 E4 Mutación (Stryker) con umbral por módulo de seguridad. *Verificación:* ver el plan 18, épica correspondiente.
