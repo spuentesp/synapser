@@ -235,6 +235,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
         turns: parsed.usage.turns, apiMs: parsed.usage.apiMs, networkIsolated: false, permissionDenials: parsed.permissionDenials,
         promptBlob, stdoutBlob, stderrBlob, finalTextBlob, toolUse: parsed.toolUse,
         skills: recordedSkills,
+        injection: o.provider ? { provider: o.provider.id, model: o.provider.model, endpoint: o.provider.baseUrl, keyVariable: o.provider.apiKeyEnv, protocol: o.provider.protocol } : null,
         changes: changes.map((c) => ({ path: c.path, op: c.op, beforeDigest: c.beforeDigest, afterDigest: c.afterDigest })),
       }),
     );

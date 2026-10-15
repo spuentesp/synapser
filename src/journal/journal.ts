@@ -103,6 +103,8 @@ export interface AgentRunInsert {
   finalTextBlob: string | null;
   toolUse: Record<string, number> | null;
   skills?: { id: string; digest: string; mechanism: "native-dir" | "skills-dir-flag" | "prompt-prepend" }[];
+  /** K4 (plan 17): the injected provider of this run, by name and endpoint only. Never a key value. */
+  injection?: { provider: string; model: string; endpoint: string; keyVariable: string; protocol: string } | null;
   changes: { path: string; op: string; beforeDigest: string | null; afterDigest: string | null }[];
 }
 export interface ModelCallInsert {
@@ -390,15 +392,15 @@ export class Tx {
         `INSERT INTO agent_runs(agent_run_id,run_id,task_id,profile_id,role,adapter,started_at,finished_at,duration_ms,argv_json,base_digest,
            exit_code,signal,timed_out,outcome,reason,session_id,models_json,usage_provenance,input_tokens,output_tokens,cache_read_tokens,
            cache_write_tokens,reasoning_tokens,cost_usd,turns,api_ms,network_isolated,permission_denials,prompt_blob,stdout_blob,stderr_blob,
-           final_text_blob,tool_use_json,changes_json,skills_json)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           final_text_blob,tool_use_json,changes_json,skills_json,injection_json)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.agentRunId, r.runId, r.taskId, r.profileId, r.role, r.adapter, r.startedAt, r.finishedAt, r.durationMs, JSON.stringify(r.argv), r.baseDigest,
         r.exitCode, r.signal, r.timedOut ? 1 : 0, r.outcome, r.reason, r.sessionId, JSON.stringify(r.models), r.usageProvenance, r.inputTokens,
         r.outputTokens, r.cacheReadTokens, r.cacheWriteTokens, r.reasoningTokens, r.costUsd, r.turns, r.apiMs, r.networkIsolated ? 1 : 0,
         r.permissionDenials, r.promptBlob, r.stdoutBlob, r.stderrBlob, r.finalTextBlob, r.toolUse === null ? null : JSON.stringify(r.toolUse), JSON.stringify(r.changes),
-        JSON.stringify(r.skills ?? []),
+        JSON.stringify(r.skills ?? []), r.injection ? JSON.stringify(r.injection) : null,
       );
     this.event(r.runId, "agent_run", r.agentRunId, null, r.outcome, {
       profile: r.profileId,
@@ -787,6 +789,7 @@ export class Journal {
       toolUse: r["tool_use_json"] ? JSON.parse(r["tool_use_json"] as string) : null,
       changes: JSON.parse(r["changes_json"] as string),
       skills: JSON.parse((r["skills_json"] as string | null) ?? "[]"),
+      injection: r["injection_json"] ? JSON.parse(r["injection_json"] as string) : null,
     }));
   }
 
