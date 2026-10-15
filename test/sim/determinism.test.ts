@@ -6,7 +6,8 @@ import { env, seededRandom, withEnv } from "../../src/sim/env.ts";
 // Plan 18 E11 (H11.1, H11.3). H11.1: the recovery core takes time, randomness and identifiers only from src/sim/env.ts.
 // H11.3: a simulated environment with a seed reproduces the same values, so a failing sequence can be replayed.
 const CORE = ["journal", "executor", "recovery"];
-const FORBIDDEN = [/Date\.now\(/, /new Date\(\)/, /Math\.random\(/, /randomUUID\(/, /randomBytes\(/];
+// A reference counts as much as a call: `opts.now ?? Date.now` takes the real clock just as `Date.now()` does.
+const FORBIDDEN = [/Date\.now\b/, /new Date\(\)/, /Math\.random\b/, /randomUUID\b/, /randomBytes\b/];
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

@@ -9,6 +9,7 @@ import { eventHash, genesisHash } from "../audit/chain.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION, seedTransitionsSql } from "./schema.ts";
 import { type ActionState, isLegalTransition } from "./transitions.ts";
+import { env } from "../sim/env.ts";
 
 export class JournalError extends Error {
   constructor(message: string, cause?: unknown) {
@@ -588,7 +589,8 @@ export class Journal {
       }
       throw e instanceof JournalError ? e : new JournalError(`cannot open journal: ${String(e)}`, e);
     }
-    return new Journal(runId, dir, db, opts.now ?? Date.now);
+    // The clock is read at each event, through the simulated environment when a test installs one (plan 18 H11.1).
+    return new Journal(runId, dir, db, opts.now ?? (() => env.now()));
   }
 
   /** BEGIN IMMEDIATE … COMMIT; rolls back on any throw. Not reentrant. */

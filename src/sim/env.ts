@@ -39,3 +39,14 @@ export function seededRandom(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** The same as withEnv for an asynchronous run: the simulated environment holds until the promise settles. */
+export async function withEnvAsync<T>(overrides: Partial<SimEnv>, fn: () => Promise<T>): Promise<T> {
+  const previous = current;
+  current = { ...current, ...overrides };
+  try {
+    return await fn();
+  } finally {
+    current = previous;
+  }
+}
