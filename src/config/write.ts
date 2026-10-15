@@ -1,8 +1,12 @@
 // Plan 17 P17.8 step 2: the operator's providers and roles change at run time (hot reload). A change is validated
 // against the whole table first, then written atomically to the operator's file, then applied in place to the objects
 // the runtime already holds, so every holder sees it without a restart. Nothing is written when validation fails.
+// Step 4 (registro): every change, applied or refused, is appended to <stateDir>/config-changes.jsonl. The record holds
+// the kind, the id, the outcome, the problems, and a digest of the table before and after, never a key value.
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { metadataEndpointProblems, type ProviderConfig, type RoleConfig, SYSTEM_ROLES, systemModelConfig, validateProviderConfig } from "../model/config.ts";
 import { ModelError, type Role } from "../model/types.ts";
 
@@ -18,6 +22,8 @@ export type ConfigChange = { kind: "providers"; id: string; value: unknown } | {
 
 export interface LiveConfig {
   configPath?: string | null;
+  /** Where the change log is kept: <stateDir>/config-changes.jsonl. Absent ⇒ no log (tests only). */
+  stateDir?: string;
   providers: Record<string, ProviderConfig>;
   roles: Record<Role, RoleConfig>;
 }
@@ -29,7 +35,35 @@ function replaceInPlace(target: object, next: object): void {
   for (const [key, value] of Object.entries(next)) t[key] = value;
 }
 
+const digest = (live: LiveConfig): string => createHash("sha256").update(JSON.stringify({ providers: live.providers, roles: live.roles })).digest("hex").slice(0, 16);
+
+/** One line per change. Problems are validator messages, which name variables and never carry a key value. */
+function audit(live: LiveConfig, change: ConfigChange, outcome: "applied" | "refused", before: string, problems: string[], after: string | null): void {
+  if (!live.stateDir) return;
+  const line = {
+    at: new Date().toISOString(),
+    kind: change.kind,
+    id: change.id,
+    outcome,
+    digestBefore: before,
+    digestAfter: after,
+    problems,
+  };
+  appendFileSync(join(live.stateDir, "config-changes.jsonl"), `${JSON.stringify(line)}\n`, { mode: 0o600 });
+}
+
 export function writeLiveConfig(live: LiveConfig, change: ConfigChange): void {
+  const before = digest(live);
+  try {
+    applyChange(live, change);
+  } catch (e) {
+    if (e instanceof ConfigWriteError) audit(live, change, "refused", before, e.errors, null);
+    throw e;
+  }
+  audit(live, change, "applied", before, [], digest(live));
+}
+
+function applyChange(live: LiveConfig, change: ConfigChange): void {
   const path = live.configPath;
   if (!path) throw new ConfigWriteError(["there is no operator file to write: create synapser.config.json first"]);
   const providers: Record<string, ProviderConfig> = { ...live.providers };
