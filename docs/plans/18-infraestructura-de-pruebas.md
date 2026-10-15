@@ -221,7 +221,7 @@ Cerradas: E1, E2, E3, E5, E10, E12, E13. En curso: E4, E6, E7, E9, E11 (cada una
 ### Hecho en esta pasada
 
 - **E4:** suelos de mutación por módulo: `inject.ts` y `write.ts` en 95 %; validadores de biblioteca en 88 % (`npm run test:mutation`, fuera de `verify` por tiempo). El suelo solo sube.
-- **E7:** H7.4 (conector de configuración de punta a punta) y el rechazo de configuración sin escritura parcial.
+- **E7:** H7.3 tal como está escrita (tarea que el agente no completa: FALLA, repositorio intacto) y H7.4 (conector de configuración de punta a punta, rechazo sin escritura parcial).
 - **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza).
 - **E9:** defecto de desmontaje al salir de `chat` corregido en el código (no en la prueba). H9.3 (workflow creado en el servidor y visible en la lista), H9.6 (accesibilidad WCAG 2.x A/AA en las doce vistas, en tema claro y oscuro).
 - **E11:** H11.2 en la parte de escrituras parciales, con doce semillas fijas.
@@ -229,8 +229,7 @@ Cerradas: E1, E2, E3, E5, E10, E12, E13. En curso: E4, E6, E7, E9, E11 (cada una
 ### Pendiente de código o de prueba
 
 - **H4.1** ejecutor y journal: mutación con un comando de pruebas por módulo, porque el comando se repite por cada mutante. `validate.ts` tiene 32 sobrevivientes que llevar al suelo.
-- **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado.
-- **H7.3** tal como está escrita: una tarea que el agente no puede completar termina en el estado declarado, sin cambios parciales. Lo hecho hasta ahora cubre el rechazo de configuración, no esta historia.
+- **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado. La prueba stdio existente llega a la compuerta; la planificación necesita un modelo falso conectado al proveedor inyectado, que no está escrito.
 - **H9.4** biblioteca: el error de validación que se muestra en la interfaz es el mismo que devuelve la API.
 - **H11.2** fallo de `fsync`: requiere una capa de sistema de archivos que pierda datos no sincronizados. Y la reproducción completa de una corrida desde su semilla.
 
