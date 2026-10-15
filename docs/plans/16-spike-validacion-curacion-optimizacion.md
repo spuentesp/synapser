@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: P16.2, P16.3, P16.4 y P16.6 incorporados a `main`; P16.4 completado el 15 oct 2026 (`d14d4ff`); P16.5 bloqueado según el [seguimiento](14-seguimiento.md), pendiente de autorización para comparar con proveedor real y decidir dependencias. Cada tarea se reclama allí antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias en el proyecto: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: el SDK de P16.2 y las migraciones P16.3, P16.4 y P16.6 están incorporados a `main`; P16.2 no se considera cerrada porque X3 sigue incompleto para Mimo y el modo headless de Kimi. P16.4 completado el 15 oct 2026 (`d14d4ff`). P16.5 bloqueado según el [seguimiento](14-seguimiento.md), pendiente de proveedor/modelo y límite de llamadas o costo para una comparación real. Cada tarea se reclama allí antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias en el proyecto: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -95,7 +95,7 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 - Las plantillas siguen sin esquema (decisión abierta de Q3.2).
 
 **Método.**
-- `src/library/schema.ts`: un esquema zod por variante de agente (la que extiende un perfil y la nativa) y uno para skills. zod decide el tipo de cada campo, las claves obligatorias y las claves desconocidas (`z.strictObject`).
+- `src/library/schema.ts`: un esquema zod por variante de agente (la que extiende un perfil y la nativa) y uno para skills. zod decide el tipo de cada campo y las claves obligatorias. Los esquemas de agente usan `z.strictObject` y rechazan claves desconocidas; el esquema de skill usa `z.object` y conserva la compatibilidad anterior, que ignora claves desconocidas.
 - `validate.ts` deriva `EXTENDING_FIELDS`, `NATIVE_FIELDS` y `NATIVE_REQUIRED` de esos esquemas, en lugar de tenerlos escritos a mano. La tabla de textos de los motivos está tipada sobre las claves del esquema: un campo nuevo sin texto no compila.
 - Las reglas semánticas siguen en código y solo corren cuando la forma es válida: IC1 (`enabled` solo si el archivo activa el perfil base; pool rechazado), la existencia del perfil base, del proveedor y del modelo, `validateProfile`, IC2 (lista de claves), D3 (destinos literales) y las referencias de Q5.2.
 
@@ -104,7 +104,7 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 **Invariantes y verificación.**
 - **V1 Equivalencia.** `test/library/validation-golden.test.ts`: 204 casos del corpus `test/library/validation-corpus.ts`, con los motivos que daba `main` antes del cambio (golden de `8d3a0db`, generado desde `73991d1`) y el perfil resuelto de cada agente válido. Los motivos se comparan ordenados, porque el orden no es un contrato: cada problema se informa. Los textos no cambian. Regenerar el golden es un cambio deliberado, como el snapshot X1.
 - **V2 Reglas intactas.** Las pruebas de IC1 a IC4 (`test/library/agent-rules.test.ts`, `read.test.ts`, `references.test.ts`, `resolve.test.ts`), de D3 y de la API de biblioteca pasan sin cambiar sus aserciones.
-- **V3 Forma estricta.** Un campo desconocido se rechaza y se nombra; un campo ausente o de tipo incorrecto se rechaza con su nombre.
+- **V3 Forma equivalente.** En documentos de agente, un campo desconocido se rechaza y se nombra; en documentos de skill, las claves desconocidas se ignoran como antes. Un campo ausente o de tipo incorrecto se rechaza con su nombre.
 - **V4 Nombres de prototipo.** Un documento leído de JSON puede traer una clave propia `__proto__`, `constructor` o `toString`, y un proveedor o una base con esos nombres. Se rechazan con su motivo, y nunca se leen de `Object.prototype`. Una sonda comparó el validador anterior con el nuevo sobre estos casos: sin diferencias, salvo los proveedores con nombre de prototipo, que lanzaban `TypeError` y ahora se rechazan (corregido en el mismo paso; pruebas en `test/library/agent-rules.test.ts`).
 - **Falsación.** Seis cambios al esquema, cada uno hace fallar el golden: límite de temperatura `lte(2)`→`lt(2)` (2 casos), mínimo de timeout `gt(0)`→`gte(0)` (2), etiquetas de skill sin tipo (1), campo obligatorio hecho opcional (1), `strictObject`→`object` (23), tamaño de skill menos un byte (4). Después, el esquema original, restaurado y verificado con `cmp`.
 
