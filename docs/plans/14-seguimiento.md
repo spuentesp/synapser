@@ -233,9 +233,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). commit: 1aee822 · prueba: `npm run verify` falla ante un binario con otro hash (VERSION_MISMATCH) y pasa con el binario fijado.
 - [x] P18.2 E2 Contratos por herramienta. commit: 36e883a · prueba: `test/contract/` (contratos de configuración contra API real, instantáneas de herramientas MCP de tareas y del ledger, regla de compatibilidad). Inventario en `docs/contracts/README.md`.
 - [x] P18.3 E3 Pruebas basadas en propiedades (fast-check 4.10.2). commit: 12ee2df · prueba: `test/property/` (digests, validadores totales, fuga de clave en todos los adaptadores, escritura de configuración). Una propiedad encontró un fallo en `validateProfile`, ya corregido.
-- [ ] P18.4 E4 Mutación (Stryker) con umbral por módulo de seguridad. *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.5 E5 Fixtures realistas (repositorios desechables, agentes CLI programados, endpoint falso compartido). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.6 E6 Sandbox de ejecución (bwrap, pruebas de aislamiento, centinelas generalizados, límites de recursos). *Verificación:* ver el plan 18, épica correspondiente.
+- [~] P18.4 E4 Mutación (Stryker 10.0.0). Avance (commit 4f34be3): compuerta por módulo en `verify`; `inject.ts` 98,64 % (umbral 95), `write.ts` 89,04 % (umbral 89, a subir). quién: Claude Haiku 5.5; desde: 2026-10-15. Pendiente: ejecutor, journal y validadores de biblioteca.
+- [x] P18.5 E5 Fixtures realistas. commit: 1d52b70 · prueba: `test/fixtures/` (repositorio reproducible, endpoint falso compartido, agente con modos nuevos).
+- [x] P18.6 E6 Sandbox de ejecución con bwrap. commit: 1d52b70 · prueba: `test/sandbox/` (escritura, red, credenciales ocultas, tiempo). Pendiente H6.3 (pasta) hasta P15.9.
 - [ ] P18.7 E7 MCP de punta a punta (cliente stdio, tarea completa, rechazo, conector de configuración). *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.8 E8 Oráculo oculto y anti-trampas (pruebas fuera del espacio del agente, combinaciones, registro de intentos). *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.9 E9 Interfaz con Playwright (flujos, pantalla de configuración si se aprueba, accesibilidad). *Verificación:* ver el plan 18, épica correspondiente.
@@ -336,4 +336,5 @@ Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (di
 | 2026-10-15 | Claude Haiku 5.5 | Plan 18 escrito (commit 0fbb66e): infraestructura de pruebas en trece épicas, pendientes de ejecutar en orden de dependencias. |
 | 2026-10-15 | Claude Haiku 5.5 | P18.1 hecha (commit 1aee822): `npm run verify` con control del binario, tipado, contratos y pruebas. P18.2 en curso (commit 4925a0e). `verify` en verde: 873 pruebas, 864 aprobadas, 0 fallos, 9 omitidas. |
 | 2026-10-15 | Claude Haiku 5.5 | P18.2 y P18.3 hechas (commits 36e883a, 12ee2df). `npm run verify` en verde: 889 pruebas. El disco de /data estuvo al 100 %; un archivo quedó truncado por un error de escritura y se restauró desde git. |
+| 2026-10-15 | Claude Haiku 5.5 | E4 en curso (commit 4f34be3), E5 y E6 hechas (commit 1d52b70). `verify` en verde: 930 pruebas, 921 aprobadas, 0 fallos. Un fallo de disco (ENOSPC) truncó un archivo; se restauró desde git. |
 | 2026-10-14 | Claude Haiku 5.5 | Protocolo `anthropic` añadido al esquema de proveedores (commit 72d2597). claude-code y kimi inyectables; roles, agentes nativos y biblioteca siguen en `openai-compatible`. Puerta K8 con centinela pasada para claude-code. Suite completa: 825 pruebas, 816 aprobadas, 0 fallos, 9 omitidas. |
