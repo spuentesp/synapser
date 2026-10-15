@@ -16,7 +16,7 @@ import {
 } from "../journal/journal.ts";
 import { PathRejected, resolveInWorkspace, resolveSet, type WorkspacePath } from "../workspace/paths.ts";
 import { type ClaimResult, type ClaimView, type RejoinResult, type ReleaseResult, ZooError } from "../zoo/types.ts";
-import { absPath, commitFile, stageFile } from "./fs-applier.ts";
+import { absPath, commitFile, stageFile, type WorkspaceDurability } from "./fs-applier.ts";
 import { readFileSync } from "node:fs";
 import { env } from "../sim/env.ts";
 
@@ -41,6 +41,8 @@ export interface ExecutorDeps {
   journal: Journal;
   zoo: ZooPort;
   generation: number;
+  /** Optional workspace durability boundary; production uses fsync-backed Node operations. */
+  workspaceDurability?: WorkspaceDurability;
   failpoint?: FailpointHook;
   /** Test hook: called right before each rename, to assert INV1 from outside. */
   beforeRename?: (info: { actionId: string; actor: string; path: string }) => void | Promise<void>;
@@ -544,10 +546,10 @@ export class Executor {
         tmpName: f.tmpName as string,
       };
       try {
-        const staged = stageFile(this.#root, w);
+        const staged = stageFile(this.#root, w, this.#d.workspaceDurability);
         await this.#fp("after-temp-written", a.actionId);
         await this.#d.beforeRename?.({ actionId: a.actionId, actor: a.actorOwner, path: f.path });
-        commitFile(this.#root, w, staged);
+        commitFile(this.#root, w, staged, this.#d.workspaceDurability);
         if (n === 0) await this.#fp("after-first-rename", a.actionId);
         else await this.#fp("between-renames", a.actionId);
       } catch (e) {

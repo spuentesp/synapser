@@ -156,6 +156,9 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 
 - **H11.1** Inyección del reloj y del generador aleatorio en el journal y el ejecutor. *Criterio:* ninguna llamada directa a `Date.now` o `Math.random` en el núcleo, comprobada por una regla de lint.
 - **H11.2** Disco simulado con fallos programados (escritura parcial, falta de `fsync`). *Criterio:* la recuperación del plan 04 pasa para todas las semillas de un rango fijo.
+  - **Invariantes:** el modelo separa imágenes durables del inode (bytes y modo, tras `fsync` de archivo) de entradas de directorio (tras `fsync` del directorio); sincronizar un archivo no hace durable su nombre. El journal conserva la intención; el executor y `recoverRun` reales deciden el roll-forward.
+  - **Verificador:** `test/recovery/torn-writes.test.ts`, `test/recovery/lost-renames.test.ts` y `test/recovery/fsync-loss.test.ts`, con semillas fijas, estado durable restaurado tras `SIGKILL`, journal/Zoanthrope reales y `checkInvariants` al final.
+  - **Falsación:** si bytes o entradas no sincronizados sobreviven en el estado restaurado, si se omite una llamada al límite de sincronización, o si la recuperación deja contenido/modo incompleto, temporales, claims o acciones abiertas, el caso debe fallar. Un control confirma que un renombre sincronizado sí sobrevive.
 - **H11.3** Reproducción: cualquier fallo imprime la semilla. *Criterio:* `SEED=<n>` reproduce el mismo orden de eventos.
 
 *Herramientas:* ninguna nueva. Es trabajo de diseño sobre el código existente. Se decide después de E7, porque cambia el núcleo.

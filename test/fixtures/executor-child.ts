@@ -6,6 +6,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Edit } from "../../src/digest/canonical.ts";
 import { Executor } from "../../src/executor/executor.ts";
+import { simulatedWorkspaceDurability } from "../recovery/disk.ts";
 import { envFailpoint } from "../../src/failpoints.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { acquireWorkspaceLock } from "../../src/journal/lock.ts";
@@ -19,7 +20,18 @@ const say = (o: unknown) => console.log(JSON.stringify(o));
 const lock = acquireWorkspaceLock(stateDir, ws);
 const journal = Journal.open(stateDir, RUN);
 const zoo = await ZooAdapter.open(loadPin(), ws);
-const exec = new Executor({ workspace: ws, runId: RUN, journal, zoo, generation: lock.generation, failpoint: envFailpoint() });
+const durableSnapshot = process.env["SYNAPSER_DURABLE_SNAPSHOT"];
+const diskFault = process.env["SYNAPSER_DISK_SYNC_FAULT"];
+const diskTrace = process.env["SYNAPSER_DISK_SYNC_TRACE"];
+const exec = new Executor({
+  workspace: ws,
+  runId: RUN,
+  journal,
+  zoo,
+  generation: lock.generation,
+  failpoint: envFailpoint(),
+  ...(durableSnapshot && diskFault && diskTrace ? { workspaceDurability: simulatedWorkspaceDurability(ws, durableSnapshot, diskFault, diskTrace) } : {}),
+});
 
 const task = { taskId: "t1", scope: ["app/billing.py", "app/client.py", "app/schema.py"], planRevision: 1 };
 const { incarnation } = exec.beginSession(task);
