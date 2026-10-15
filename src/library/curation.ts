@@ -25,7 +25,12 @@ export interface HoldoutReport {
   checks: HoldoutCheck[];
 }
 
-export type SkillCaseExecutor = (input: { task: string; skillContent: string }) => Promise<string> | string;
+export type SkillCaseExecutor = (input: {
+  caseId: string;
+  repetition: number;
+  task: string;
+  skillContent: string;
+}) => Promise<string> | string;
 
 /**
  * Run only holdout cases, keeping their expected values away from the candidate executor.
@@ -53,7 +58,7 @@ export async function evaluateSkillHoldout(
   const checks: HoldoutCheck[] = [];
   for (const item of holdout) {
     for (let repetition = 1; repetition <= item.k; repetition += 1) {
-      const output = await execute({ task: item.task, skillContent: candidate.content });
+      const output = await execute({ caseId: item.id, repetition, task: item.task, skillContent: candidate.content });
       checks.push({ caseId: item.id, repetition, passed: output.includes(item.expectedIncludes) });
     }
   }
