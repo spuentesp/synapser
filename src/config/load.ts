@@ -13,6 +13,8 @@ import type { AllowedCommand } from "../validation/runner.ts";
 
 export interface SynapserConfig {
   workspace: string;
+  /** The operator file this configuration was read from; null when there is none (plan 17 P17.8). */
+  configPath?: string | null;
   stateDir: string;
   commands: AllowedCommand[];
   providers: Record<string, ProviderConfig>;
@@ -322,7 +324,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   }
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, providers, roles, providerKeyEnv, agentSkills, profiles, pools, policy, identity, advisor,
+    workspace, stateDir, commands, providers, roles, providerKeyEnv, agentSkills, profiles, pools, policy, identity, advisor, configPath: path,
     trustMode: trustMode === "adversarial" ? "adversarial" : "operator",
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),

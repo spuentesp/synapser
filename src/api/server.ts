@@ -54,7 +54,11 @@ export interface ApiControl {
   library?: LibraryStore;
   /** What the operator's file allows library documents (plan 15): the configuration this process loaded at start. Absent ⇒ nothing. */
   libraryPolicy?: () => LibraryPolicy;
+  /** Validated provider and role changes, written to the operator file and applied in place (plan 17 P17.8). */
+  configWrite?: (change: ConfigChange) => void;
 }
+
+import { type ConfigChange, ConfigWriteError } from "../config/write.ts";
 
 const OPERATOR: Actor = { id: "ui:operator", role: "operator" };
 
@@ -329,6 +333,18 @@ export function createApi(opts: ApiOptions): ApiServer {
     const parts = path.split("/").filter(Boolean).slice(1); // after "api"
     const [top, id, action] = parts as [string, string | undefined, string | undefined];
     if (method !== "GET" && !writeAllowed(req, res)) return;
+    // plan 17 P17.8: PUT /api/config/providers/<id> and PUT /api/config/roles/<role>. Checked before the id rules below.
+    if (top === "config" && (id === "providers" || id === "roles") && method === "PUT" && action !== undefined && c.configWrite) {
+      const body = await readBody(req, res);
+      if (body === undefined) return;
+      try {
+        c.configWrite({ kind: id, id: action, value: body } as ConfigChange);
+        return json(res, 200, { ok: true });
+      } catch (e) {
+        if (e instanceof ConfigWriteError) return json(res, 400, { error: "INVALID_CONFIG", errors: e.errors });
+        throw e;
+      }
+    }
     const asResult = <T>(r: { ok: true } & T | { ok: false; code: string; errors?: string[] }) =>
       r.ok ? json(res, 200, r) : json(res, 409, { error: (r as { code: string }).code, errors: (r as { errors?: string[] }).errors ?? [] });
     if (id !== undefined && !RUN_ID.test(id)) return fail(res, 400, "BAD_ID");
