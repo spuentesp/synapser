@@ -1,6 +1,6 @@
 # Plan 18 — Infraestructura de pruebas
 
-Estado: **propuesto** (15 oct 2026). Sin código. Este documento es la lista de tareas: trece épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
+Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. Sin código. Este documento es la lista de tareas: trece épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
 
 ## 1. Problema
 
@@ -208,8 +208,8 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 - Las épicas E10 y E11 se cierran o se descartan por decisión registrada.
 - La lista de intermitentes está vacía.
 
-## 7. Preguntas abiertas
+## 7. Decisiones
 
-- ¿Aprobamos E10 (TLA+) y E11 (simulación determinista), o los dejamos fuera de este plan?
-- ¿P17.9 con pantalla (H9.5) entra en E9, o queda como CLI solo?
-- ¿Aceptamos el umbral de mutación por módulo de seguridad en H4.3 desde el primer ciclo, o empezamos sin umbral?
+- **E10 (TLA+) y E11 (simulación determinista):** aprobadas el 15 oct. Entran en el plan.
+- **Pantalla de configuración (H9.5):** fuera de este ciclo. P17.9 queda con su parte de CLI y API; la pantalla se decide más adelante.
+- **Umbral de mutación (H4.3):** desde el primer ciclo, para los módulos de seguridad.
