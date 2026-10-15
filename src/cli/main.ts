@@ -117,6 +117,14 @@ async function main(): Promise<void> {
         await serveStdio(srv, process.stdin, process.stdout);
         return;
       }
+      case "mcp-config": {
+        // plan 17 P17.8 step 3: the configuration connector. Its token comes from the environment and is never printed.
+        const { ConfigConnector } = await import("../mcp/config-connector.ts");
+        const connector = new ConfigConnector({ apiUrl: process.env["SYNAPSER_API_URL"] ?? "http://127.0.0.1:4173", token: process.env["SYNAPSER_OPERATOR_TOKEN"] ?? "" });
+        process.stderr.write("synapser mcp-config: configuration connector ready (token from SYNAPSER_OPERATOR_TOKEN)\n");
+        await serveStdio(connector, process.stdin, process.stdout);
+        return;
+      }
       case "workflow": {
         if (sub === "create") {
           if (!a) return die("usage: synapser workflow create <file.json>", 2);

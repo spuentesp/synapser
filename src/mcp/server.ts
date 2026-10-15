@@ -454,7 +454,7 @@ export class McpServer {
 }
 
 /** Serve one session over a pair of streams (stdin/stdout in production). */
-export function serveStdio(server: McpServer, input: NodeJS.ReadableStream, output: NodeJS.WritableStream): Promise<void> {
+export function serveStdio(server: { handle(msg: Incoming): Promise<Record<string, unknown> | null> }, input: NodeJS.ReadableStream, output: NodeJS.WritableStream): Promise<void> {
   return new Promise((resolve) => {
     let buf = "";
     let chain = Promise.resolve();
