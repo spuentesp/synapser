@@ -86,4 +86,10 @@ describe("plan 17 P17.8 step 3: the configuration connector", () => {
     assert.equal(names.some((n) => n.startsWith("config_")), false);
     assert.equal(existsSync(join(dir, "synapser.config.json")), true);
   });
+
+  test("the task connector lists no configuration tools to a worker either (K3, both roles)", async () => {
+    const worker = new McpServer({ manager: mgr, serverJournal: sj, role: "worker", bound: { workflowId: "wf-x", taskId: "t1" } });
+    const r = (await worker.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };
+    assert.equal(r.result.tools.some((t) => t.name.startsWith("config_")), false);
+  });
 });
