@@ -161,10 +161,14 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: f5cc434 · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
   una ejecución de agente con costo registrado suma en USD y una sin costo se cuenta aparte, nunca como cero; el planificador suma y el chat no) y navegador real: captura
   `home.png` en `evidence/`. Suite completa.
-- [~] Q4.2 quién: GPT-6 Codex · desde: 2026-10-15. Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
-  Costo, Coordinación, Aprobaciones, Integridad). Las siete vistas y el CTA directo se verificarán en Chromium.
-- [~] Q4.3 quién: GPT-6 Codex · desde: 2026-10-15. La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
-- [~] Q4.4 quién: GPT-6 Codex · desde: 2026-10-15. Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP); verificación con datos en Chromium.
+- [x] Q4.2 Estados vacíos que dicen qué hacer y abren directamente el diseñador (Enjambre, Línea de tiempo, Por qué,
+  Costo, Coordinación, Aprobaciones, Integridad). commit: 7c1d858 · prueba: `test/ui/empty-views.spec.ts` en Chromium recorre las siete vistas,
+  abre el formulario desde cada CTA y comprueba que volver a Workflows no reabre el diseñador; suite completa.
+- [x] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida. commit: 7c1d858 · prueba:
+  `test/ui/workflow.spec.ts` en Chromium crea dos borradores, selecciona uno y comprueba que Run contiene su id; suite completa.
+- [x] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP). commit: 7c1d858 · prueba:
+  `test/ui/workflow-notes-data.spec.ts` en Chromium contra el API real y fixture determinista comprueba trigger, motivo, tarea, estado,
+  kind, regla y resumen, sin controles de decisión; `test/api/workflow-notes.test.ts`; suite completa.
 
 ### P15 — Amenazas de la biblioteca y de las claves (plan)
 
