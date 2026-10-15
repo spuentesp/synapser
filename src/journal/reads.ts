@@ -4,7 +4,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Digest } from "../digest/file.ts";
 import type { ActionState } from "./transitions.ts";
-import type { ActionFileRow, ActionRow, ResearchCallRow, SessionRow, EventRow, ChildRow, AgentRunInsert } from "./journal.ts";
+import type { ActionFileRow, ActionRow, ResearchCallRow, SessionRow, EventRow, ChildRow, AgentRunInsert } from "./rows.ts";
 
 type Row = Record<string, unknown>;
 
