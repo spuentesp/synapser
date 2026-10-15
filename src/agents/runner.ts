@@ -128,6 +128,8 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     const recordedSkills = validateInjectedSkills(injected, adapter.capabilities.skillMechanism);
     const envSource = o.envSource ?? process.env;
     const injection = o.provider ? planInjection(adapter.id, o.provider, envSource) : undefined;
+    const credentialValues = injection ? Object.values(injection.env).filter((value) => value.length > 0) : [];
+    const redactCredentials = (value: string): string => credentialValues.reduce((text, secret) => text.split(secret).join("[REDACTED]"), value);
     const adapterTask = { prompt: o.prompt, cwd: work, home, envSource, ...(injection ? { injection } : {}) };
     const invocation = adapter.build(
       profile,
@@ -200,6 +202,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
 
     // What changed in the copy, with the bytes needed to integrate it later.
     const changes: FileChange[] = [];
+    let credentialWrittenToWorkspace = false;
     const after = new Map<string, string>();
     for (const f of listTree(work)) {
       if (f.split("/").some((seg) => AGENT_METADATA.has(seg))) continue;
@@ -210,6 +213,10 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       seen.add(f);
       const o2 = observeFile(join(work, f));
       if (o2.kind !== "file") continue;
+      if (credentialValues.some((secret) => readFileSync(join(work, f)).includes(Buffer.from(secret)))) {
+        credentialWrittenToWorkspace = true;
+        continue;
+      }
       const b = base.get(f);
       if (b && b.digest === o2.digest) continue;
       changes.push(toChange(work, baseDir, f, b ? "modify" : "create", b?.digest ?? null, o2.digest, o2.mode, o2.size, journal));
@@ -220,9 +227,13 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     }
     changes.sort((x, y) => (x.path < y.path ? -1 : 1));
 
+    if (credentialWrittenToWorkspace) parsed = { ...parsed, outcome: "FAILED", reason: "provider credential appeared in an agent output file; change withheld" };
+    parsed = { ...parsed, reason: parsed.reason === null ? null : redactCredentials(parsed.reason), finalText: parsed.finalText === null ? null : redactCredentials(parsed.finalText) };
+    const safeStdout = redactCredentials(exec.stdout);
+    const safeStderr = redactCredentials(exec.stderr);
     const durationMs = Date.now() - startedAt;
-    const stdoutBlob = journal.artifacts.put(Buffer.from(exec.stdout, "utf8"));
-    const stderrBlob = journal.artifacts.put(Buffer.from(exec.stderr, "utf8"));
+    const stdoutBlob = journal.artifacts.put(Buffer.from(safeStdout, "utf8"));
+    const stderrBlob = journal.artifacts.put(Buffer.from(safeStderr, "utf8"));
     const finalTextBlob = parsed.finalText === null ? null : journal.artifacts.put(Buffer.from(parsed.finalText, "utf8"));
     journal.tx((t) =>
       t.insertAgentRun({

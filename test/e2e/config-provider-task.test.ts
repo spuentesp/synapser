@@ -85,8 +85,9 @@ if (!response.ok) process.exit(33);
 appendFileSync('README.md', 'after from injected provider\\n');
 console.log(JSON.stringify({ type: 'thread.started', thread_id: 'fake-codex' }));
 console.log(JSON.stringify({ type: 'turn.started' }));
-console.log(JSON.stringify({ type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: 'done' } }));
+console.log(JSON.stringify({ type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: 'done ' + process.env.HOT_KEY } }));
 console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+console.error(process.env.HOT_KEY);
 `);
   chmodSync(codexPath, 0o755);
 
@@ -174,6 +175,9 @@ console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, o
       assert.deepEqual(row.changes.map((change) => change.path), ["README.md"], "the ledger records only the in-scope change");
       assert.deepEqual(row.injection, { provider: "hot", model: MODEL, endpoint: baseUrl, keyVariable: "HOT_KEY", protocol: "openai-compatible" });
       assert.equal(JSON.stringify(row).includes(HOT_KEY), false, "the key value is absent from K4 ledger evidence");
+      assert.equal(j.artifacts.get(row.stdoutBlob!).includes(Buffer.from(HOT_KEY)), false, "stdout artifact redacts the provider key");
+      assert.equal(j.artifacts.get(row.stderrBlob!).includes(Buffer.from(HOT_KEY)), false, "stderr artifact redacts the provider key");
+      assert.equal(j.artifacts.get(row.finalTextBlob!).includes(Buffer.from(HOT_KEY)), false, "final-text artifact redacts the provider key");
     } finally {
       j.close();
     }
