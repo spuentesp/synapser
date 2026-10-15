@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
@@ -30,7 +30,7 @@ async function freePort(): Promise<number> {
 
 const json = (body: unknown) => JSON.stringify(body);
 
-test("H7.4 mcp-config changes a provider and a new MCP task process uses it, recorded in the K4 ledger", { timeout: 60_000 }, async () => {
+test("H7.2/H7.4 an approved MCP task uses the updated provider and records K4", { timeout: 60_000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "e2e-cfg-task-"));
   const workspace = join(dir, "workspace");
   const stateDir = join(dir, "state");
@@ -59,7 +59,7 @@ test("H7.4 mcp-config changes a provider and a new MCP task process uses it, rec
   const oldProvider = { protocol: "openai-compatible", baseUrl: initialUrl, apiKeyEnv: ["HOT_KEY"], models: [{ id: MODEL }] };
   const changedProvider = { ...oldProvider, baseUrl };
   const config = {
-    workspace, stateDir, profiles: ["codex-writer"],
+    workspace, stateDir, profiles: ["codex-writer"], startRequiresApproval: true,
     providers: { hot: oldProvider },
     roles: { supervisor: { provider: "hot", model: MODEL, temperature: 0 } },
     agents: [{ id: "codex-hot", extends: "codex-writer", injectProvider: "hot", model: MODEL }],
@@ -136,7 +136,18 @@ console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, o
     const workflowId = String(created["workflow_id"]);
     assert.match(workflowId, /^wf-/);
     const started = await call("workflow_start", { workflow_id: workflowId });
-    assert.ok(["PLANNING", "RUNNING"].includes(String(started["state"])), JSON.stringify(started));
+    assert.equal(started["state"], "AWAITING_START", JSON.stringify(started));
+    const pending = await call("gate_list", { workflow_id: workflowId });
+    assert.equal((pending["gates"] as { gate: string }[])[0]?.gate, "start");
+    const challenge = JSON.parse(execFileSync(process.execPath, [CLI, "gate", "show", workflowId, "start", "--config", configPath], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, HOT_KEY, ZOANTHROPE_BIN: ZOO, PATH: `${binDir}${delimiter}${process.env["PATH"] ?? ""}` },
+    })) as { code: string };
+    assert.match(challenge.code, /^[A-Z2-9]{6}$/);
+    assert.deepEqual(await call("gate_approve", { workflow_id: workflowId, gate: "start", code: challenge.code }), {
+      ok: true, gate: "start", decision: "APPROVED",
+    });
 
     let status: Record<string, unknown> = {};
     const deadline = Date.now() + 30_000;
@@ -160,6 +171,7 @@ console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, o
     try {
       const row = j.listAgentRuns().find((run) => run.profileId === "codex-hot");
       assert.ok(row, "the fake Codex invocation is recorded in the production journal");
+      assert.deepEqual(row.changes.map((change) => change.path), ["README.md"], "the ledger records only the in-scope change");
       assert.deepEqual(row.injection, { provider: "hot", model: MODEL, endpoint: baseUrl, keyVariable: "HOT_KEY", protocol: "openai-compatible" });
       assert.equal(JSON.stringify(row).includes(HOT_KEY), false, "the key value is absent from K4 ledger evidence");
     } finally {
