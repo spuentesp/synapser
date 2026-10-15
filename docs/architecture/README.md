@@ -49,12 +49,12 @@ El estado actual: cero violaciones.
 
 ## 4. Hallazgos (H12.5)
 
-Cada hallazgo indica el principio y el cambio propuesto. Ninguno se aplica sin su prueba antes. Estado: aplicados los hallazgos 1 y 5; los hallazgos 2, 3 y 4 quedan pendientes, cada uno como refactor propio con su prueba previa.
+Cada hallazgo indica el principio y el cambio propuesto. Ninguno se aplica sin su prueba antes. Estado: aplicados los hallazgos 1, 2, 3 y 5. El 4 está aplicado en lo que el SDK puede llevar: el ciclo de vida (initialize, ping, notificaciones) ya se delega en el SDK. `tools/call` y el error -32002 se mantienen en el servidor por dos restricciones que el SDK no cubre: el ledger debe registrar la llamada antes de validar sus parámetros (M3), y el SDK no puede expresar el -32002 de una sesión no inicializada. Las pruebas de caracterización siguen cubriendo ambos casos.
 
 1. **Dos carpetas con nombres casi iguales, `agent/` (bucle nativo) y `agents/` (adaptadores y runner).** Principio: nombres que describen una sola responsabilidad. Aplicado: el bucle está en `agents/native/` (`loop`, `prompts`, `schema`, `tools`).
 2. **`api/server.ts` concentra enrutado, validación de cuerpos y autorización en un solo archivo (654 líneas).** Principio: responsabilidad única. Cambio propuesto: una función de rutas por recurso (`config`, `library`, `workflows`), con la autorización en un solo sitio.
 3. **`journal/journal.ts` mezcla esquema, escritura de filas y lecturas (867 líneas).** Principio: separación de lectura y escritura. Cambio propuesto: un módulo de lecturas que use solo la conexión.
-4. **`mcp/server.ts` mantiene su propio despacho JSON-RPC, aunque el SDK ya lo hace para el protocolo (P16.2).** Principio: no reinventar. Cambio propuesto: reducir el servidor a las herramientas, delegando el protocolo en el SDK, con las pruebas de caracterización de P16.2 como red.
+4. **`mcp/server.ts` mantiene su propio despacho JSON-RPC, aunque el SDK ya lo hace para el protocolo (P16.2).** Principio: no reinventar. Cambio propuesto: reducir el servidor a las herramientas, delegando el protocolo en el SDK, con las pruebas de caracterización de P16.2 como red. Estado: aplicado salvo `tools/call` y -32002, que se quedan por las restricciones de arriba.
 5. **`config/write.ts` y `config/load.ts` comparten la noción de "validar el archivo".** Principio: DRY. Cambio propuesto: un único validador del archivo completo, que usan la carga y la escritura. Aplicado: la escritura valida el archivo candidato con el cargador, igual que la carga.
 6. **Inversión de dependencias en `api/server.ts`:** el servidor recibe el control como objeto con funciones, lo que ya permite probarlo sin la CLI. Principio: depender de abstracciones. Se conserva; es un buen patrón.
 

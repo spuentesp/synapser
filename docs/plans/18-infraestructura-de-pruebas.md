@@ -238,7 +238,7 @@ Cerradas: E1, E2, E3, E5, E8, E9, E10, E12, E13. En curso: E4, E6, E7, E11 (cada
 - **H6.3** red con `pasta`: bloqueado por P15.9.
 - **H7.5** ejecución `live`: necesita credenciales reales, que esta sesión no lee. `test:live` queda opcional.
 - **H12.4** hecha: umbral de 0 bloques de 12 líneas, en `verify`. Fijado por el asistente con la cifra medida; el usuario no lo ha revisado.
-- **H12.5** parcial. Aplicados los hallazgos 1 y 5 (commit 1ce20eb). Pendientes los hallazgos 2 (`api/server.ts`), 3 (`journal/journal.ts`) y 4 (`mcp/server.ts` con el SDK): cada uno es un refactor grande que requiere su prueba previa.
+- **H12.5** aplicado con la decisión del operador (aplicar 2 a 4). Hallazgos 1, 2, 3 y 5 aplicados (commits 1ce20eb, 8cf489a, 4381443). El 4 se aplicó en lo que el SDK cubre: `tools/call` y -32002 se mantienen por M3 y por la imposibilidad de expresar -32002 en el SDK, y así queda documentado.
 - **E10** cola FIFO del bloqueo del journal: el modelo muestra inanición con equidad débil; decidir si se implementa la cola o se acepta y registra.
 
 ### Decisiones que la regla de `verify` no cubre
