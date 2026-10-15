@@ -1,0 +1,367 @@
+[
+  {
+    "name": "workflow_create",
+    "description": "Create a workflow DRAFT: a task with a description, goals, non-goals and acceptance CONDITIONS. It ends when every required condition is satisfied with evidence. Nothing runs until workflow_start.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "title",
+        "description",
+        "conditions"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short name."
+        },
+        "description": {
+          "type": "string",
+          "description": "What must be achieved, in prose."
+        },
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nonGoals": {
+          "type": "array",
+          "description": "Strings, or {statement, guard} where guard is a diff/file/command checker that detects violation.",
+          "items": {}
+        },
+        "conditions": {
+          "type": "array",
+          "description": "Atomic acceptance conditions: {id, statement, required?, checker:{kind: command|citations|diff|file|approval|review, …}}.",
+          "items": {
+            "type": "object"
+          }
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "usd": {
+              "type": "number"
+            },
+            "minutes": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "workflow_edit",
+    "description": "Replace a workflow's definition with a new revision (conditions included). Allowed until it is terminal; the next DONE is judged against the new set.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "workflow"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "workflow": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  {
+    "name": "workflow_start",
+    "description": "Start a DRAFT workflow. If the operator's policy requires it, it waits in AWAITING_START for a human decision.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "workflow_status",
+    "description": "State, revision, each condition's latest status and evidence, and why it failed if it did.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "workflow_list",
+    "description": "Your workflows (created by this client) with their state.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "workflow_events",
+    "description": "The workflow's ledger events after `since_seq` (hash-chained, deterministic).",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "since_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    }
+  },
+  {
+    "name": "workflow_cancel",
+    "description": "Cancel a workflow. Running steps are allowed to end; nothing new is admitted.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "gate_list",
+    "description": "Pending human decisions on your workflows (start, steps, conditions). The approval CODE is not shown here: the operator reads it in the UI or console and gives it to you.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "gate_approve",
+    "description": "Relay a human's approval. REQUIRES `code`: the one-time code shown to the operator in the UI or console. Without the human's code this fails: an agent cannot approve its own gate.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "gate",
+        "code"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "gate": {
+          "type": "string",
+          "description": "Gate key from gate_list."
+        },
+        "code": {
+          "type": "string",
+          "description": "The operator's one-time code."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional note."
+        }
+      }
+    }
+  },
+  {
+    "name": "gate_reject",
+    "description": "Relay a human's rejection of a gate. Same code requirement as gate_approve.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "gate",
+        "code"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "gate": {
+          "type": "string",
+          "description": "Gate key."
+        },
+        "code": {
+          "type": "string",
+          "description": "The operator's one-time code."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional note."
+        }
+      }
+    }
+  },
+  {
+    "name": "effect_request",
+    "description": "Ask Synapser to perform a side effect you cannot (git.commit, git.push, gh.pr, http.request). Policy decides allow/ask/deny; with `ask` a human must approve what the system computes (not what you describe). Returns PENDING — nothing happens until then.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "kind",
+        "params"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "kind": {
+          "type": "string",
+          "description": "e.g. git.push"
+        },
+        "params": {
+          "type": "object"
+        },
+        "why": {
+          "type": "string",
+          "description": "Why — recorded as your assertion, never as evidence."
+        }
+      }
+    }
+  },
+  {
+    "name": "effect_status",
+    "description": "State, summary and evidence of an effect (PENDING, DONE, DENIED, STALE, EXPIRED, FAILED).",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "effect_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "effect_id": {
+          "type": "string",
+          "description": "ef-…"
+        }
+      }
+    }
+  },
+  {
+    "name": "effect_list",
+    "description": "Effects requested in a workflow, with their state.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "policy_show",
+    "description": "The effect policy in force: which kinds are allowed, asked or denied.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "advise",
+    "description": "Ask Synapser's advisor (Nemotron) about a workflow. It answers and may PROPOSE interventions (inject a note, hold, escalate, replan, rollback). Nothing is applied by asking.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "question"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "question": {
+          "type": "string",
+          "description": "What you want to know or decide."
+        }
+      }
+    }
+  },
+  {
+    "name": "intervention_list",
+    "description": "The advisor's interventions on a workflow and their state.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        }
+      }
+    }
+  },
+  {
+    "name": "intervention_apply",
+    "description": "Apply a PROPOSED intervention. A rollback is destructive: it opens a human gate (code required) instead of running.",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "workflow_id",
+        "intervention_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "description": "The workflow id (wf-…)."
+        },
+        "intervention_id": {
+          "type": "string",
+          "description": "iv-…"
+        }
+      }
+    }
+  },
+  {
+    "name": "catalog_list",
+    "description": "The agents Synapser can use: what each can do, its cost basis and availability.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]
