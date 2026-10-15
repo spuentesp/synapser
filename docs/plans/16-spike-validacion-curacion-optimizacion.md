@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: P16.2, P16.3 y P16.6 incorporados a `main`; P16.4 en curso desde 2026-10-15; P16.5 propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: P16.2, P16.3, P16.4 y P16.6 incorporados a `main`; P16.4 completado el 15 oct 2026 (`7051b40`); P16.5 propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
