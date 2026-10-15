@@ -4,6 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import type { ChildRow, Journal } from "../journal/journal.ts";
+import { env } from "../sim/env.ts";
 
 /** Start time of `pid` in clock ticks since boot, or null if the process does not exist. */
 export function procStartTicks(pid: number): number | null {
@@ -55,8 +56,8 @@ async function reapOne(c: ChildRow, graceMs: number): Promise<ReapOutcome> {
   } catch {
     return { pid: c.pid, kind: c.kind, result: "KILL_FAILED" };
   }
-  const deadline = Date.now() + graceMs;
-  while (Date.now() < deadline) {
+  const deadline = env.now() + graceMs;
+  while (env.now() < deadline) {
     if (procStartTicks(c.pid) !== c.procStartTicks) return { pid: c.pid, kind: c.kind, result: "KILLED" };
     await sleep(20);
   }

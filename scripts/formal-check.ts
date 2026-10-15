@@ -12,7 +12,7 @@ if (!existsSync(jar)) {
   console.error(`✖ no TLA+ tools at ${jar} (set SYNAPSER_TLA_JAR)`);
   process.exit(1);
 }
-const pinned = readFileSync(new URL("../formal/tla2tools.sha256", import.meta.url), "utf8").split(/\s+/)[0];
+const pinned = readFileSync(new URL("../formal/tla2tools.sha256", import.meta.url), "utf8").split(/\s+/)[0] ?? "";
 const actual = createHash("sha256").update(readFileSync(jar)).digest("hex");
 if (actual !== pinned) {
   console.error(`✖ tla2tools digest ${actual.slice(0, 12)}… does not match the pin ${pinned.slice(0, 12)}…`);

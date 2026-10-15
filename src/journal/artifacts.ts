@@ -4,6 +4,7 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Digest, isDigest, sha256Bytes } from "../digest/file.ts";
+import { env } from "../sim/env.ts";
 
 export function fsyncDir(dir: string): void {
   const fd = openSync(dir, "r");
@@ -49,7 +50,7 @@ export class ArtifactStore {
     if (existsSync(path)) return ref;
     mkdirSync(dirname(path), { recursive: true });
     // unique temp so concurrent puts of the same content do not collide
-    writeFileDurable(path, bytes, `.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    writeFileDurable(path, bytes, `.tmp-${process.pid}-${env.now()}-${env.random().toString(36).slice(2)}`);
     return ref;
   }
 

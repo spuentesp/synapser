@@ -2,7 +2,6 @@
 // here, with claims from Zoanthrope, digests from the journal, and a receipt that is decided by
 // re-hashing the disk — never by what an agent says.
 
-import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { type Edit, type RequestBody, requestDigest } from "../digest/canonical.ts";
 import { PatchRejected, resolveEdits } from "../digest/edits.ts";
@@ -19,6 +18,7 @@ import { PathRejected, resolveInWorkspace, resolveSet, type WorkspacePath } from
 import { type ClaimResult, type ClaimView, type RejoinResult, type ReleaseResult, ZooError } from "../zoo/types.ts";
 import { absPath, commitFile, stageFile } from "./fs-applier.ts";
 import { readFileSync } from "node:fs";
+import { env } from "../sim/env.ts";
 
 /** The slice of ZooAdapter the executor needs (lets tests wrap or break it). */
 export interface ZooPort {
@@ -204,7 +204,7 @@ export class Executor {
         rows.push({ path: p, digest, mode: o.mode, blobRef });
         out.push({ path: p, digest, mode: o.mode, content, binary: content === null });
       }
-      const viewId = `view-${randomUUID()}`;
+      const viewId = `view-${env.uuid()}`;
       this.#d.journal.tx((t) => t.insertView(this.#d.runId, viewId, taskId, rows));
       return { kind: "ok", viewId, files: out };
     } finally {
@@ -241,7 +241,7 @@ export class Executor {
       if (e instanceof PathRejected) return { kind: "rejected", code: `PATH_${e.code}`, detail: e.input };
       throw e;
     }
-    const viewId = `view-${randomUUID()}`;
+    const viewId = `view-${env.uuid()}`;
     this.#d.journal.tx((t) => t.insertView(this.#d.runId, viewId, taskId, rows));
     return { kind: "ok", viewId };
   }
