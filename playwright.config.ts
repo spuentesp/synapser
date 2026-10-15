@@ -10,7 +10,8 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure" },
   webServer: {
-    command: "node test/ui/serve-fixture.ts",
+    // The interface is built first, so the tests never run against a stale web/dist.
+    command: "npm --prefix web run -s build && node test/ui/serve-fixture.ts",
     url: `http://127.0.0.1:${PORT}/api/session`,
     env: { UI_PORT: String(PORT) },
     reuseExistingServer: false,

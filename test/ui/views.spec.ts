@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { viewNames } from "./support.ts";
 
 // Plan 18 E9 (H9.3 in part, H9.6 in part). Each main view opens directly, becomes the current page, and logs no error.
 test("every view opens directly, becomes the current page, and logs no error", async ({ page }) => {
@@ -8,7 +9,7 @@ test("every view opens directly, becomes the current page, and logs no error", a
   });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  const views = await page.locator('nav[aria-label="views"] button[data-view]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset["view"] ?? ""));
+  const views = await viewNames(page);
   expect(views.length).toBeGreaterThan(3);
   for (const view of views) {
     // A fresh document for each view, so each one is checked from a cold start.
