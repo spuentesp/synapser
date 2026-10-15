@@ -213,3 +213,32 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 - **E10 (TLA+) y E11 (simulación determinista):** aprobadas el 15 oct. Entran en el plan.
 - **Pantalla de configuración (H9.5):** fuera de este ciclo. P17.9 queda con su parte de CLI y API; la pantalla se decide más adelante.
 - **Umbral de mutación (H4.3):** desde el primer ciclo, para los módulos de seguridad.
+
+## 8. Estado y pendientes (15 oct 2026)
+
+Épicas cerradas: E1, E2, E3, E5, E10, E12, E13. Épicas en curso: E4, E6, E7, E8, E9, E11. Ninguna épica está completa en todas sus historias; cada una lista lo que le falta.
+
+### Pendientes de código y de prueba
+
+- **E4 mutación:** H4.1 faltan el ejecutor, el journal y los validadores de biblioteca. Los suelos suben con cada módulo nuevo (`scripts/mutation-thresholds.json`), y `write.ts` debe subir de 89 % a 95 %.
+- **E6 sandbox:** H6.3 red con `pasta`, bloqueada por P15.9.
+- **E7 MCP:** H7.2 tarea completa en sandbox (workflow, compuerta, cambio en el repositorio); H7.3 rechazo sin cambios parciales; H7.4 conector de configuración de punta a punta; H7.5 ejecución `live` opcional.
+- **E8 oráculo:** H8.2 pruebas compuestas; H8.3 entradas no vistas; H8.4 mutación del cambio del agente antes de aceptarlo.
+- **E9 interfaz:** defecto conocido — salir de `chat` hacia `workflows` desmonta la aplicación (`destroy_ is not a function` en desarrollo); reproducido, causa sin encontrar, marcado con `test.fail`. Pendientes: H9.3 crear y aprobar un workflow desde la interfaz; H9.4 biblioteca con validación igual a la de la API; H9.6 accesibilidad automatizada (hoy solo nombres de botones). H9.5 pantalla de configuración: fuera de este ciclo.
+- **E11 simulación:** H11.2 fallos simulados de disco (escritura parcial, falta de `fsync`); reproducción completa de una corrida desde su semilla.
+- **E12 arquitectura:** H12.4 fijar un umbral de duplicación con las cifras; H12.5 aplicar los hallazgos de `docs/architecture/README.md`, cada uno con su prueba antes del cambio.
+- **E13 gobierno:** cerrar los dos intermitentes listados en `docs/testing/README.md`; comprobar la cobertura de contratos (H13.5) al cierre.
+- **E10 hallazgo:** el bloqueo del journal no tiene cola. El modelo exige equidad fuerte en la entrada; decidir si se implementa una cola FIFO o se acepta la inanición con límite registrado.
+
+### Pendientes de planes anteriores (no de esta infraestructura)
+
+- **P16.4, P16.5, P16.6:** curación, optimización y zod para proveedores; dependen de las decisiones 3 a 7 del plan 16.
+- **P17.9:** escritura desde la UI y la CLI del operador; la pantalla de configuración queda fuera.
+- **P15.9 y Q3.4, Q3.6:** bloqueadas.
+- **C.3:** demo y vídeo; el usuario pidió no hacerla todavía.
+
+### Decisiones que faltan
+
+- Cola FIFO del bloqueo del journal (E10).
+- Si se corrige el defecto de la interfaz ahora o después de E9.
+- Si H12.5 se aplica dentro de este plan o en uno aparte.

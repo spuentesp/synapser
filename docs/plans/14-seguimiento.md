@@ -233,16 +233,16 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). commit: 1aee822 · prueba: `npm run verify` falla ante un binario con otro hash (VERSION_MISMATCH) y pasa con el binario fijado.
 - [x] P18.2 E2 Contratos por herramienta. commit: 36e883a · prueba: `test/contract/` (contratos de configuración contra API real, instantáneas de herramientas MCP de tareas y del ledger, regla de compatibilidad). Inventario en `docs/contracts/README.md`.
 - [x] P18.3 E3 Pruebas basadas en propiedades (fast-check 4.10.2). commit: 12ee2df · prueba: `test/property/` (digests, validadores totales, fuga de clave en todos los adaptadores, escritura de configuración). Una propiedad encontró un fallo en `validateProfile`, ya corregido.
-- [~] P18.4 E4 Mutación (Stryker 10.0.0). Avance (commit 4f34be3): compuerta por módulo en `verify`; `inject.ts` 98,64 % (umbral 95), `write.ts` 89,04 % (umbral 89, a subir). quién: Claude Haiku 5.5; desde: 2026-10-15. Pendiente: ejecutor, journal y validadores de biblioteca.
-- [x] P18.5 E5 Fixtures realistas. commit: 1d52b70 · prueba: `test/fixtures/` (repositorio reproducible, endpoint falso compartido, agente con modos nuevos).
-- [x] P18.6 E6 Sandbox de ejecución con bwrap. commit: 1d52b70 · prueba: `test/sandbox/` (escritura, red, credenciales ocultas, tiempo). Pendiente H6.3 (pasta) hasta P15.9.
-- [ ] P18.7 E7 MCP de punta a punta (cliente stdio, tarea completa, rechazo, conector de configuración). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.8 E8 Oráculo oculto y anti-trampas (pruebas fuera del espacio del agente, combinaciones, registro de intentos). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.9 E9 Interfaz con Playwright (flujos, pantalla de configuración si se aprueba, accesibilidad). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.10 E10 Verificación formal con TLA+ (opcional, pendiente de decisión). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.11 E11 Simulación determinista (opcional, después de E7). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.12 E12 Arquitectura (reglas de capas, ciclos, duplicación con dependency-cruiser, auditoría). *Verificación:* ver el plan 18, épica correspondiente.
-- [ ] P18.13 E13 Gobierno de pruebas (intermitentes, presupuesto de tiempo, evidencias, cobertura de contratos). *Verificación:* ver el plan 18, épica correspondiente.
+- [~] P18.4 E4 Mutación (Stryker 10.0.0). commit: 4f34be3 · prueba: `stryker.config.json` y `scripts/mutation-gate.ts`. `inject.ts` 98,64 % (suelo 95), `write.ts` 89,04 % (suelo 89, a subir). Pendiente: ejecutor, journal y validadores de biblioteca. quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [x] P18.5 E5 Fixtures realistas. commit: 1d52b70 · prueba: `test/fixtures/`.
+- [~] P18.6 E6 Sandbox de ejecución con bwrap. commit: 1d52b70 · prueba: `test/sandbox/`. Pendiente H6.3 (pasta) hasta P15.9. quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [~] P18.7 E7 MCP de punta a punta. commit: 96a3e49 · prueba: `test/e2e/mcp-stdio.test.ts` (cliente stdio, lista y llamada real). Pendiente H7.2 (tarea completa en sandbox), H7.3 (rechazo) y H7.4 (conector de configuración de punta a punta). quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [~] P18.8 E8 Oráculo oculto. commit: 11382dc · prueba: `test/oracle/`. Pendiente H8.2 (combinaciones), H8.3 (entradas no vistas) y H8.4 (mutación del cambio del agente). quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [~] P18.9 E9 Interfaz con Playwright. commit: 7615faa · prueba: `test/ui/`. Defecto conocido registrado: salir de chat hacia workflows desmonta la aplicación. Pendiente: flujo de workflow, biblioteca, accesibilidad automatizada. quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [x] P18.10 E10 Verificación formal (TLA+). commit: 1a1b4a9 · prueba: `formal/` y `npm run test:formal`. Hallazgo: el bloqueo del journal puede dejar sin entrar a un proceso bajo contención (formal/README.md).
+- [~] P18.11 E11 Simulación determinista. commit: 21c7124 · prueba: `test/sim/`. Hecho: H11.1 y H11.3 (entorno sembrado). Pendiente: H11.2 (fallos simulados de disco) y reproducción completa de una corrida. quién: Claude Haiku 5.5; desde: 2026-10-15.
+- [x] P18.12 E12 Arquitectura. commit: 175ba2a · prueba: `npm run arch:check` en verify; informe de duplicación; auditoría en `docs/architecture/`. Hallazgos pendientes de aplicar.
+- [x] P18.13 E13 Gobierno de pruebas. commit: 9f1a546 · documento `docs/testing/README.md` con presupuesto medido (3 min 08 s) e intermitentes listados.
 
 ### Cierre
 
