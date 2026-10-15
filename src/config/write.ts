@@ -36,7 +36,7 @@ export interface LiveConfig {
 }
 
 /** Makes `target` equal to `next` without replacing the object, so every holder of `target` sees the change. */
-function replaceInPlace(target: object, next: object): void {
+export function replaceInPlace(target: object, next: object): void {
   const t = target as Record<string, unknown>;
   for (const key of Object.keys(t)) if (!Object.hasOwn(next, key)) delete t[key];
   for (const [key, value] of Object.entries(next)) t[key] = value;

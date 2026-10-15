@@ -2,14 +2,15 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": {
-    "command": "RUNS=40 node --test test/agents/inject.test.ts test/agents/inject.boundaries.test.ts test/property/injection.property.test.ts"
+    "command": "RUNS=40 node --test test/agents/inject.test.ts test/agents/inject.boundaries.test.ts test/property/injection.property.test.ts test/config/hot-reload.test.ts test/config/change-log.test.ts test/config/agents.test.ts test/property/config-write.property.test.ts test/config/write.boundaries.test.ts"
   },
   "mutate": [
-    "src/agents/inject.ts"
+    "src/agents/inject.ts",
+    "src/config/write.ts"
   ],
   "coverageAnalysis": "off",
   "concurrency": 1,
-  "timeoutMS": 120000,
+  "timeoutMS": 180000,
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,
   "reporters": [
@@ -22,6 +23,6 @@
   "thresholds": {
     "high": 98,
     "low": 95,
-    "break": 95
+    "break": null
   }
 }

@@ -35,4 +35,5 @@ if (existsSync(new URL("test/contract", root))) {
 run("all tests", "node", ["--test", "--test-reporter=spec", "test/**/*.test.ts"]);
 // Plan 18 H4.3: security modules must keep their mutation score above the threshold in stryker.config.json.
 run("mutation (security modules)", "npx", ["stryker", "run"]);
+run("mutation gate (per module)", "node", ["scripts/mutation-gate.ts"]);
 console.log("\n✔ verify passed");
