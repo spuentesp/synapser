@@ -1,6 +1,6 @@
 # Plan 18 — Infraestructura de pruebas
 
-Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. Sin código. Este documento es la lista de tareas: trece épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
+Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. E4 está cerrada; las demás épicas siguen el estado de §8 y del [seguimiento](14-seguimiento.md). Este documento es la lista de tareas: trece épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
 
 ## 1. Problema
 
@@ -223,11 +223,11 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (15 oct 2026)
 
-Cerradas: E1, E2, E3, E5, E8, E9, E10, E12, E13. En curso: E4, E6, E7, E11 (cada una con historias pendientes abajo). E9 cierra sin H9.5, que quedó fuera de este ciclo por decisión.
+Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E12, E13. En curso: E6, E7, E11 (cada una con historias pendientes abajo). E9 cierra sin H9.5, que quedó fuera de este ciclo por decisión.
 
 ### Hecho en esta pasada
 
-- **E4:** suelos de mutación por módulo: `inject.ts` y `write.ts` en 95 %; validadores de biblioteca en 88 % (`npm run test:mutation`, fuera de `verify` por tiempo). El suelo solo sube.
+- **E4:** los gates de mutación de los módulos fijados y la cobertura pendiente del ejecutor y el journal pasaron sus suelos. Los informes detallados se conservan en `evidence/mutation/` (ignorado).
 - **E7:** H7.3 tal como está escrita (tarea que el agente no completa: FALLA, repositorio intacto) y H7.4 (conector de configuración de punta a punta, rechazo sin escritura parcial).
 - **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza).
 - **E9:** H9.4 (biblioteca: el motivo mostrado es el de la API). Defecto de desmontaje al salir de `chat` corregido en el código (no en la prueba). H9.3 (workflow creado en el servidor y visible en la lista), H9.6 (accesibilidad WCAG 2.x A/AA en las doce vistas, en tema claro y oscuro).
@@ -236,7 +236,6 @@ Cerradas: E1, E2, E3, E5, E8, E9, E10, E12, E13. En curso: E4, E6, E7, E11 (cada
 
 ### Pendiente de código o de prueba
 
-- **H4.1** journal: 36,96 % con las pruebas del journal (129 de 349 mutantes), suelo 36 % en `scripts/mutation-thresholds.core.json`. Una corrida anterior dio 99,79 % con la suite de protocolo del ejecutor incluida; esa cifra describe otro comando de pruebas y no se usa como suelo. Ejecutor: 56,97 % con `test/executor/protocol.test.ts` (331 muertos, 287 sobrevivientes, 49 por tiempo límite), suelo 56 en `scripts/mutation-thresholds.executor.json`. Los suelos solo suben.
 - **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado. La prueba stdio existente llega a la compuerta; la planificación necesita un modelo falso conectado al proveedor inyectado, que no está escrito.
 - **H11.2** fallo de `fsync`: requiere una capa de sistema de archivos que pierda datos no sincronizados.
 
