@@ -98,7 +98,11 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 - **H6.1** Arnés de sandbox con `bwrap`: sistema de archivos de solo lectura salvo el espacio de trabajo, sin acceso a la red salvo loopback hacia el endpoint falso. *Criterio:* una prueba intenta leer `~/.ssh`, escribir fuera del espacio y conectarse a una dirección que no sea loopback, y las tres fallan.
 - **H6.2** Pruebas de fuga de credenciales con centinelas, generalizando la puerta K8: un valor centinela en cada archivo de credenciales que el sandbox pueda ver nunca llega a un endpoint. *Criterio:* aplica a todos los CLIs y a todos los protocolos.
 - **H6.3** Prueba de red con `pasta` para escenarios que necesitan red de usuario. *Criterio:* el tráfico sale solo al destino permitido. Esta historia depende de la investigación P15.9, que está bloqueada; hasta entonces se marca como pendiente y no se simula.
-- **H6.4** Límites de recursos: tiempo, memoria y número de procesos. *Criterio:* un agente que entra en bucle se detiene y deja el estado registrado.
+- **H6.4** Límites de recursos: tiempo, memoria y número de procesos. *Criterio:* un agente que entra en bucle se detiene y deja el estado registrado. El tiempo se impone con `timeout`, la memoria con `RLIMIT_AS` y los procesos con `TasksMax` en un scope transitorio de systemd por ejecución; el límite de procesos no usa `RLIMIT_NPROC`, que es compartido por UID.
+
+  **Invariantes:** (1) cada scope es transitorio y limitado a una invocación; (2) el límite es de tareas del kernel y abarca descendientes, no una cuenta aproximada de procesos; (3) no se cambia el límite del scope padre ni se instala configuración persistente; (4) si falta systemd de usuario, la prueba del límite por tareas se omite explícitamente, sin declarar probado ese límite.
+
+  **Verificador:** `test/sandbox/isolation.test.ts` intenta crear más procesos que el límite dentro de `bwrap` y exige el error de fork del kernel, mientras comprueba que no vence el timeout. `processLimitAvailable()` verifica antes que el host acepte un scope transitorio. **Falsación:** si el ataque completa, vence por timeout, o solo pasa porque no arrancó el scope, H6.4 no está verificada.
 
 *Herramientas:* `bwrap` y `pasta` ya están instalados en la máquina. Docker no hace falta, y no se introduce.
 

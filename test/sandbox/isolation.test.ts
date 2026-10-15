@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { bwrapAvailable, runSandboxed } from "./harness.ts";
+import { bwrapAvailable, processLimitAvailable, runSandboxed } from "./harness.ts";
 
 // Plan 18 E6 (H6.1, H6.2, H6.4). Each test is an attack the sandbox must stop. Probes run only in throwaway folders.
 const available = bwrapAvailable();
@@ -71,5 +71,18 @@ describe("H6.4 the memory limit is inherited inside the sandbox", { skip }, () =
     assert.match(r.stdout, /memory-limit-hit/);
   });
 
+  test("cleanup", () => rmSync(ws, { recursive: true, force: true }));
+});
+
+describe("H6.4 a process storm is constrained by a per-run task limit", { skip: skip || !processLimitAvailable() }, () => {
+  const ws = mkdtempSync(join(tmpdir(), "sbx-process-ws-"));
+  test("the kernel refuses forks after the configured task cap", () => {
+    const r = runSandboxed({ workspace: ws, processLimit: 24, timeoutMs: 10_000 }, [
+      "node", "-e", `const { spawn } = require('node:child_process'); const children = []; let rejected = false; for (let i = 0; i < 128; i++) { const child = spawn('/bin/sleep', ['10'], { stdio: 'ignore' }); children.push(child); child.on('error', (error) => { if (error.code === 'EAGAIN' && !rejected) { rejected = true; process.stderr.write('task-limit-hit\\n'); for (const running of children) running.kill('SIGKILL'); process.exitCode = 42; } }); } setTimeout(() => { if (!rejected) process.exitCode = 0; }, 100);`,
+    ]);
+    assert.equal(r.timedOut, false, r.stderr);
+    assert.equal(r.status, 42, r.stderr);
+    assert.match(r.stderr, /task-limit-hit/);
+  });
   test("cleanup", () => rmSync(ws, { recursive: true, force: true }));
 });

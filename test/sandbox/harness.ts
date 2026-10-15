@@ -9,6 +9,8 @@ export interface SandboxOptions {
   timeoutMs?: number;
   /** Per-command virtual address space cap, applied inside the sandbox before exec. */
   memoryLimitBytes?: number;
+  /** Per-run task cap, enforced by a transient systemd user scope. */
+  processLimit?: number;
 }
 
 export function sandboxArgv(opts: SandboxOptions, command: string[]): string[] {
@@ -20,7 +22,12 @@ export function sandboxArgv(opts: SandboxOptions, command: string[]): string[] {
     limits.push(`ulimit -v ${Math.floor(opts.memoryLimitBytes / 1024)} || exit 125`);
   }
   const run = limits.length ? ["/bin/bash", "-c", `${limits.join("; ")}; exec "$@"`, "synapser-sandbox", ...command] : command;
-  return ["bwrap", ...args, "--", ...run];
+  const sandbox = ["bwrap", ...args, "--", ...run];
+  if (opts.processLimit !== undefined) {
+    if (!Number.isSafeInteger(opts.processLimit) || opts.processLimit < 16) throw new Error("processLimit must be an integer of at least 16");
+    return ["systemd-run", "--user", "--scope", "--quiet", `--property=TasksMax=${opts.processLimit}`, "--", ...sandbox];
+  }
+  return sandbox;
 }
 
 export function runSandboxed(opts: SandboxOptions, command: string[]): { status: number | null; stdout: string; stderr: string; timedOut: boolean } {
@@ -31,4 +38,8 @@ export function runSandboxed(opts: SandboxOptions, command: string[]): { status:
 
 export function bwrapAvailable(): boolean {
   return spawnSync("bwrap", ["--version"], { encoding: "utf8" }).status === 0;
+}
+
+export function processLimitAvailable(): boolean {
+  return spawnSync("systemd-run", ["--user", "--scope", "--quiet", "--property=TasksMax=16", "/bin/true"], { encoding: "utf8" }).status === 0;
 }
