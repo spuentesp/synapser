@@ -21,6 +21,7 @@ const record = (baseUrl: string, model: string): ModelCallRecord => ({
   taskId: "t1",
   role: "worker",
   requestedModel: model,
+  attemptedModel: model,
   servedModel: model,
   baseUrl,
   startedAt: 1,
@@ -72,6 +73,56 @@ describe("provider-library pricing", () => {
       aliased.servedModel = "deployment-2026-10-14";
       journalRecorder(journal, priceResolverForProviders(providers))(aliased);
       assert.equal(journal.listModelCalls()[0]?.costUsd, 1.75);
+    } finally {
+      journal.close();
+    }
+  });
+
+  test("an undeclared response alias after fallback uses the attempted fallback tariff", () => {
+    const journal = Journal.open(mkdtempSync(join(tmpdir(), "provider-price-fallback-")), "r1");
+    try {
+      const providers = {
+        local: {
+          protocol: "openai-compatible" as const,
+          baseUrl: "https://models.example/v1",
+          apiKeyEnv: ["TEST_PROVIDER_KEY"],
+          models: [
+            { id: "primary-model", usdPer1MIn: 0.25, usdPer1MOut: 0.75 },
+            { id: "fallback-model", usdPer1MIn: 1.5, usdPer1MOut: 3 },
+          ],
+        },
+      };
+      const fallback = {
+        ...record("https://models.example/v1", "primary-model"),
+        attemptedModel: "fallback-model",
+        servedModel: "deployment-alias",
+        fallbackUsed: true,
+      };
+      journalRecorder(journal, priceResolverForProviders(providers))(fallback);
+      assert.equal(journal.listModelCalls()[0]?.costUsd, 7.5);
+    } finally {
+      journal.close();
+    }
+  });
+
+  test("an unpriced fallback alias never inherits the primary model tariff", () => {
+    const journal = Journal.open(mkdtempSync(join(tmpdir(), "provider-price-unpriced-fallback-")), "r1");
+    try {
+      const providers = {
+        local: {
+          protocol: "openai-compatible" as const,
+          baseUrl: "https://models.example/v1",
+          apiKeyEnv: ["TEST_PROVIDER_KEY"],
+          models: [{ id: "primary-model", usdPer1MIn: 0.25, usdPer1MOut: 0.75 }, { id: "fallback-model" }],
+        },
+      };
+      journalRecorder(journal, priceResolverForProviders(providers))({
+        ...record("https://models.example/v1", "primary-model"),
+        attemptedModel: "fallback-model",
+        servedModel: "deployment-alias",
+        fallbackUsed: true,
+      });
+      assert.equal(journal.listModelCalls()[0]?.costUsd, null);
     } finally {
       journal.close();
     }

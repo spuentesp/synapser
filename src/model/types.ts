@@ -120,6 +120,8 @@ export interface ModelCallRecord {
   taskId: string | null;
   role: Role;
   requestedModel: string;
+  /** Model id actually sent on the successful (or last failed) attempt; requestedModel remains the chain head. */
+  attemptedModel: string;
   servedModel: string | null;
   baseUrl: string;
   startedAt: number;

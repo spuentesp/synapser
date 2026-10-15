@@ -84,7 +84,7 @@ const brainPort: ModelPort = {
     const promptTokens = Math.ceil(JSON.stringify(req.messages).length / 4);
     const completionTokens = Math.ceil(JSON.stringify(res.assistantMessage).length / 4);
     record({
-      callId: `demo-${++n}`, runId: ctx.runId, taskId: ctx.taskId ?? null, role: req.role, requestedModel: "scripted/demo-agent", servedModel: "scripted/demo-agent",
+      callId: `demo-${++n}`, runId: ctx.runId, taskId: ctx.taskId ?? null, role: req.role, requestedModel: "scripted/demo-agent", attemptedModel: "scripted/demo-agent", servedModel: "scripted/demo-agent",
       baseUrl: "demo://offline", startedAt: t0, latencyMs: Date.now() - t0, httpStatus: 200, retries: 0, usage: { promptTokens, completionTokens, reasoningTokens: 0 },
       finishReason: res.finishReason, fallbackUsed: false, error: null, request: { messages: req.messages.length }, response: { calls: res.toolCalls.map((c) => c.name) },
     });

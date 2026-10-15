@@ -21,7 +21,7 @@ const DIGEST = `sha256:${"a".repeat(64)}`;
 
 function modelCall(runId: string, role: string, model: string, promptTokens: number, completionTokens: number): ModelCallRecord {
   return {
-    callId: `c-${role}-${model}-${Math.random()}`, runId, taskId: null, role: role as ModelCallRecord["role"], requestedModel: model, servedModel: model, baseUrl: PROVIDER.baseUrl,
+    callId: `c-${role}-${model}-${Math.random()}`, runId, taskId: null, role: role as ModelCallRecord["role"], requestedModel: model, attemptedModel: model, servedModel: model, baseUrl: PROVIDER.baseUrl,
     startedAt: 1, latencyMs: 2, httpStatus: 200, retries: 0, usage: { promptTokens, completionTokens, reasoningTokens: null },
     finishReason: "stop", fallbackUsed: false, error: null, request: {}, response: {},
   };

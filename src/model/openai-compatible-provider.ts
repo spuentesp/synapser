@@ -90,11 +90,13 @@ export class OpenAICompatibleProvider implements ModelPort {
     let retriesTotal = 0;
     let lastErr: ModelError | null = null;
     let lastRequest: unknown = null;
+    let lastAttemptedModel = role.model;
 
     await this.#sem.acquire();
     try {
       for (let i = 0; i < chain.length; i++) {
         const model = chain[i] as string;
+        lastAttemptedModel = model;
         const payload = this.#payload(req, model, role.temperature, maxTokens);
         lastRequest = payload;
         try {
@@ -114,6 +116,7 @@ export class OpenAICompatibleProvider implements ModelPort {
             taskId: ctx.taskId ?? null,
             role: req.role,
             requestedModel: role.model,
+            attemptedModel: model,
             servedModel: res.servedModel,
             baseUrl: provider.baseUrl,
             startedAt,
@@ -150,6 +153,7 @@ export class OpenAICompatibleProvider implements ModelPort {
       taskId: ctx.taskId ?? null,
       role: req.role,
       requestedModel: role.model,
+      attemptedModel: lastAttemptedModel,
       servedModel: null,
       baseUrl: provider.baseUrl,
       startedAt,

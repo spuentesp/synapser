@@ -31,12 +31,14 @@ export function journalRecorder(journal: Journal, resolvePrice?: PriceResolver):
   return (rec) => {
     const requestBlob = rec.request === null ? null : journal.artifacts.put(Buffer.from(JSON.stringify(rec.request)));
     const responseBlob = rec.response === null ? null : journal.artifacts.put(Buffer.from(JSON.stringify(rec.response)));
-    const model = rec.servedModel ?? rec.requestedModel;
-    // Some OpenAI-compatible gateways report a deployment or dated alias instead of the
-    // requested catalog id. Prefer a declared served model (important for real fallbacks), then
-    // bill the requested declaration when the response alias is not part of the provider catalog.
+    const model = rec.servedModel ?? rec.attemptedModel ?? rec.requestedModel;
+    // Some OpenAI-compatible gateways report a deployment or dated alias instead of a catalog id.
+    // Price a declared served model first, then the model actually sent. Only a primary request may
+    // fall back to its requested declaration; a fallback alias must never inherit the primary tariff.
     const declared = resolvePrice
-      ? resolvePrice(rec.baseUrl, model) ?? (model === rec.requestedModel ? null : resolvePrice(rec.baseUrl, rec.requestedModel))
+      ? resolvePrice(rec.baseUrl, model) ??
+        (rec.attemptedModel !== rec.requestedModel ? resolvePrice(rec.baseUrl, rec.attemptedModel) : null) ??
+        (rec.fallbackUsed ? null : resolvePrice(rec.baseUrl, rec.requestedModel))
       : null;
     const cost = rec.usage
       ? resolvePrice
