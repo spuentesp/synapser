@@ -229,7 +229,7 @@ Cerradas: E1, E2, E3, E5, E8, E9, E10, E12, E13. En curso: E4, E6, E7, E11 (cada
 
 ### Pendiente de código o de prueba
 
-- **H4.1** journal: 36,96 % con las pruebas del journal (129 de 349 mutantes), suelo 36 % en `scripts/mutation-thresholds.core.json`. Una corrida anterior dio 99,79 % con la suite de protocolo del ejecutor incluida; esa cifra describe otro comando de pruebas y no se usa como suelo. Ejecutor: medición en `stryker.executor.json` con `test/executor/protocol.test.ts`.
+- **H4.1** journal: 36,96 % con las pruebas del journal (129 de 349 mutantes), suelo 36 % en `scripts/mutation-thresholds.core.json`. Una corrida anterior dio 99,79 % con la suite de protocolo del ejecutor incluida; esa cifra describe otro comando de pruebas y no se usa como suelo. Ejecutor: 56,97 % con `test/executor/protocol.test.ts` (331 muertos, 287 sobrevivientes, 49 por tiempo límite), suelo 56 en `scripts/mutation-thresholds.executor.json`. Los suelos solo suben.
 - **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado. La prueba stdio existente llega a la compuerta; la planificación necesita un modelo falso conectado al proveedor inyectado, que no está escrito.
 - **H11.2** fallo de `fsync`: requiere una capa de sistema de archivos que pierda datos no sincronizados.
 
