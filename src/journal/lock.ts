@@ -6,6 +6,7 @@
 import { mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { env } from "../sim/env.ts";
 
 export class LockBusy extends Error {
   constructor(path: string) {
@@ -86,10 +87,10 @@ export async function acquireWorkspaceLockInOrder(
   const pollMs = opts.pollMs ?? 10;
   const dir = join(stateDir, QUEUE_DIR);
   mkdirSync(dir, { recursive: true });
-  const name = `${String(Date.now()).padStart(15, "0")}-${String(++ticketSeq).padStart(8, "0")}-${process.pid}`;
+  const name = `${String(env.now()).padStart(15, "0")}-${String(++ticketSeq).padStart(8, "0")}-${process.pid}`;
   const mine = join(dir, name);
   writeFileSync(mine, JSON.stringify({ pid: process.pid }), { flag: "wx" });
-  const deadline = Date.now() + timeoutMs;
+  const deadline = env.now() + timeoutMs;
   try {
     for (;;) {
       const live = readdirSync(dir).sort().filter((f) => {
@@ -107,7 +108,7 @@ export async function acquireWorkspaceLockInOrder(
           if (!(e instanceof LockBusy)) throw e;
         }
       }
-      if (Date.now() >= deadline) throw new LockBusy(join(stateDir, "lock.db"));
+      if (env.now() >= deadline) throw new LockBusy(join(stateDir, "lock.db"));
       await new Promise((r) => setTimeout(r, pollMs));
     }
   } catch (e) {
