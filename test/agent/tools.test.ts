@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { validate } from "../../src/agent/schema.ts";
-import { normalizeArgs, TOOL_SCHEMAS, TOOL_SPECS } from "../../src/agent/tools.ts";
+import { validate } from "../../src/agents/native/schema.ts";
+import { normalizeArgs, TOOL_SCHEMAS, TOOL_SPECS } from "../../src/agents/native/tools.ts";
 
 const errs = (tool: string, args: unknown) => validate(normalizeArgs(tool, args).args, TOOL_SCHEMAS[tool]!);
 

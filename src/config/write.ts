@@ -8,8 +8,8 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentProfile } from "../agents/profile.ts";
-import { metadataEndpointProblems, type ProviderConfig, type RoleConfig, SYSTEM_ROLES, systemModelConfig, validateProviderConfig } from "../model/config.ts";
-import { ModelError, type Role } from "../model/types.ts";
+import { type ProviderConfig, type RoleConfig, SYSTEM_ROLES } from "../model/config.ts";
+import type { Role } from "../model/types.ts";
 import { ConfigError, loadConfig } from "./load.ts";
 
 export class ConfigWriteError extends Error {
@@ -71,48 +71,33 @@ function readRaw(path: string): Record<string, unknown> {
 function applyChange(live: LiveConfig, change: ConfigChange): void {
   const path = live.configPath;
   if (!path) throw new ConfigWriteError(["there is no operator file to write: create synapser.config.json first"]);
-  if (change.kind === "agents") return applyAgent(live, path, change.id, change.value);
-  const providers: Record<string, ProviderConfig> = { ...live.providers };
-  const roles = { ...live.roles } as Record<Role, RoleConfig>;
-  if (change.kind === "providers") {
-    const problems = [...validateProviderConfig(change.id, change.value), ...metadataEndpointProblems(change.id, change.value)];
-    if (problems.length) throw new ConfigWriteError(problems);
-    providers[change.id] = change.value as ProviderConfig;
+  if (change.kind === "agents" && !live.profiles) throw new ConfigWriteError(["agents cannot change: this process holds no live agent list"]);
+  const raw = readRaw(path);
+  if (change.kind === "agents") {
+    if (!change.value || typeof change.value !== "object" || Array.isArray(change.value)) throw new ConfigWriteError(["an agent is an object"]);
+    const agents = Array.isArray(raw["agents"]) ? [...(raw["agents"] as unknown[])] : [];
+    const entry = { ...(change.value as Record<string, unknown>), id: change.id };
+    const at = agents.findIndex((a) => (a as { id?: unknown })?.id === change.id);
+    if (at >= 0) agents[at] = entry;
+    else agents.push(entry);
+    raw["agents"] = agents;
+  } else if (change.kind === "providers") {
+    raw["providers"] = { ...live.providers, [change.id]: change.value };
   } else {
     if (!(SYSTEM_ROLES as readonly string[]).includes(change.id)) throw new ConfigWriteError([`unknown role ${change.id}`]);
-    roles[change.id as Role] = change.value as RoleConfig;
+    raw["roles"] = { ...live.roles, [change.id]: change.value };
   }
-  // The whole table must still hold together: a role must name a provider and a model that provider declares.
-  try {
-    systemModelConfig(providers, roles);
-  } catch (e) {
-    if (e instanceof ModelError) throw new ConfigWriteError(e.message.split("; "));
-    throw e;
-  }
-  const raw = readRaw(path);
-  raw[change.kind] = change.kind === "providers" ? providers : roles;
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
-  replaceInPlace(live.providers, providers);
-  replaceInPlace(live.roles, roles);
+  commit(live, path, raw, change.kind === "agents");
 }
 
 /**
- * An agent is validated by the loader itself: the candidate file, with the agent added or replaced, must load with no
- * problem. Only then does it replace the operator's file, and the live agent list changes in place.
+ * The one validator of the operator's file (plan 18 E4, H12.5): the candidate file, with the change in it, must load with no
+ * problem, as the loader reads the operator's file at start. Only then does it replace the operator's file, and the live
+ * tables change in place. An injected CLI agent must also name a provider the loaded file declares, with the model it declares.
  */
-function applyAgent(live: LiveConfig, path: string, id: string, value: unknown): void {
-  if (!live.profiles) throw new ConfigWriteError(["agents cannot change: this process holds no live agent list"]);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new ConfigWriteError(["an agent is an object"]);
-  const raw = readRaw(path);
-  const agents = Array.isArray(raw["agents"]) ? [...(raw["agents"] as unknown[])] : [];
-  const entry = { ...(value as Record<string, unknown>), id };
-  const at = agents.findIndex((a) => (a as { id?: unknown })?.id === id);
-  if (at >= 0) agents[at] = entry;
-  else agents.push(entry);
+function commit(live: LiveConfig, path: string, raw: Record<string, unknown>, replaceAgents: boolean): void {
   const candidate = `${path}.candidate.${process.pid}`;
-  writeFileSync(candidate, `${JSON.stringify({ ...raw, agents }, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(candidate, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   let loaded: ReturnType<typeof loadConfig>;
   try {
     loaded = loadConfig({ path: candidate });
@@ -121,7 +106,6 @@ function applyAgent(live: LiveConfig, path: string, id: string, value: unknown):
     if (e instanceof ConfigError) throw new ConfigWriteError(e.errors);
     throw e;
   }
-  // A CLI agent that names an injected provider must name one the loaded file declares, with the model it declares.
   const injectionProblems = loaded.profiles.flatMap((p) => {
     if (p.injectProvider === undefined) return [];
     const provider = loaded.providers[p.injectProvider];
@@ -135,5 +119,6 @@ function applyAgent(live: LiveConfig, path: string, id: string, value: unknown):
   renameSync(candidate, path);
   replaceInPlace(live.providers, loaded.providers);
   replaceInPlace(live.roles, loaded.roles);
-  live.profiles.splice(0, live.profiles.length, ...loaded.profiles);
+  // Only an agent change replaces the live agent list; a provider or role change leaves it as it is.
+  if (replaceAgents && live.profiles) live.profiles.splice(0, live.profiles.length, ...loaded.profiles);
 }

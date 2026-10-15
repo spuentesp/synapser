@@ -9,7 +9,7 @@ import { cpSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { runTask, type StepInfo } from "../../src/agent/loop.ts";
+import { runTask, type StepInfo } from "../../src/agents/native/loop.ts";
 import { Executor } from "../../src/executor/executor.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { acquireWorkspaceLock } from "../../src/journal/lock.ts";

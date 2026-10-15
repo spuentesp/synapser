@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { type LoopDeps, runTask, type TaskSpec } from "../../src/agent/loop.ts";
+import { type LoopDeps, runTask, type TaskSpec } from "../../src/agents/native/loop.ts";
 import { BudgetManager } from "../../src/model/budget.ts";
 import { ModelError } from "../../src/model/types.ts";
 import { type Env, makeEnv, RUN } from "../executor/env.ts";

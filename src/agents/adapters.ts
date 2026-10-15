@@ -1,15 +1,15 @@
 // The two implementations of AgentRunner that exist today.
 
 import { randomUUID } from "node:crypto";
-import { runTask } from "../agent/loop.ts";
-import { taskPrompt } from "../agent/prompts.ts";
+import { runTask } from "./native/loop.ts";
+import { taskPrompt } from "./native/prompts.ts";
 import type { AgentProfile } from "./profile.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { treeDigest } from "../validation/snapshot.ts";
 import type { AgentRunOutput, AgentRunRequest, AgentRunner } from "./port.ts";
 import { runAgent } from "./runner.ts";
-import type { LoopLimits } from "../agent/loop.ts";
+import type { LoopLimits } from "./native/loop.ts";
 import { unknownUsage, type UsageRecord } from "./usage.ts";
 import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
 import { prependSkills, validateInjectedSkills } from "./skills.ts";

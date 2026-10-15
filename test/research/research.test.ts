@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { runTask } from "../../src/agent/loop.ts";
+import { runTask } from "../../src/agents/native/loop.ts";
 import { NullResearch, queryKey, ReplayResearch, TavilyResearch } from "../../src/research/adapters.ts";
 import { extractUrls, verifyCitations } from "../../src/research/citations.ts";
 import { QueryGuard } from "../../src/research/guard.ts";

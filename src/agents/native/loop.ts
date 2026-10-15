@@ -3,18 +3,18 @@
 // loop adds bounds (steps, repairs, no-progress, budget) and keeps model output from becoming
 // authority: argument validation, no identity from the model, file content only as `tool` data.
 
-import type { Edit } from "../digest/canonical.ts";
-import type { ActionReceipt } from "../executor/executor.ts";
-import type { WriteGateway } from "../executor/gateway.ts";
-import type { Journal } from "../journal/journal.ts";
-import type { BudgetManager } from "../model/budget.ts";
-import { type ChatMessage, ModelError, type ModelPort, type ParsedToolCall } from "../model/types.ts";
+import type { Edit } from "../../digest/canonical.ts";
+import type { ActionReceipt } from "../../executor/executor.ts";
+import type { WriteGateway } from "../../executor/gateway.ts";
+import type { Journal } from "../../journal/journal.ts";
+import type { BudgetManager } from "../../model/budget.ts";
+import { type ChatMessage, ModelError, type ModelPort, type ParsedToolCall } from "../../model/types.ts";
 import { SYSTEM_PROMPT, taskPrompt } from "./prompts.ts";
 import { validate } from "./schema.ts";
-import { ResearchError } from "../research/types.ts";
-import type { ResearchSession } from "../research/session.ts";
-import type { DelegationPort } from "../orchestration/delegation.ts";
-import type { EffectPort } from "../effects/port.ts";
+import { ResearchError } from "../../research/types.ts";
+import type { ResearchSession } from "../../research/session.ts";
+import type { DelegationPort } from "../../orchestration/delegation.ts";
+import type { EffectPort } from "../../effects/port.ts";
 import { EFFECT_SPECS, normalizeArgs, REQUEST_SUBTASK_SPEC, TOOL_EXAMPLES, TOOL_SCHEMAS, TOOL_SPECS, WEB_SEARCH_SPEC } from "./tools.ts";
 
 export interface TaskSpec {

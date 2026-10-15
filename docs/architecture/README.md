@@ -29,7 +29,7 @@ Fecha de la medición: 15 oct 2026. Las cifras salen de un script de Node sobre 
 | chat | 1 | 209 | chat |
 | bench | 1 | 190 | banco de pruebas de agentes |
 
-Los archivos más grandes: `journal/journal.ts` (867), `executor/executor.ts` (662), `api/server.ts` (654), `agent/loop.ts` (581), `mission/runner.ts` (521).
+Los archivos más grandes: `journal/journal.ts` (867), `executor/executor.ts` (662), `api/server.ts` (654), `agents/native/loop.ts` (581), `mission/runner.ts` (521).
 
 ## 2. Reglas comprobadas (H12.2, H12.3)
 
@@ -49,13 +49,13 @@ El estado actual: cero violaciones.
 
 ## 4. Hallazgos (H12.5)
 
-Cada hallazgo indica el principio y el cambio propuesto. Ninguno se aplica sin su prueba antes.
+Cada hallazgo indica el principio y el cambio propuesto. Ninguno se aplica sin su prueba antes. Estado: aplicados los hallazgos 1 y 5; los hallazgos 2, 3 y 4 quedan pendientes, cada uno como refactor propio con su prueba previa.
 
-1. **Dos carpetas con nombres casi iguales, `agent/` (bucle nativo) y `agents/` (adaptadores y runner).** Principio: nombres que describen una sola responsabilidad. Cambio propuesto: mover el bucle a `agents/native/`.
+1. **Dos carpetas con nombres casi iguales, `agent/` (bucle nativo) y `agents/` (adaptadores y runner).** Principio: nombres que describen una sola responsabilidad. Aplicado: el bucle está en `agents/native/` (`loop`, `prompts`, `schema`, `tools`).
 2. **`api/server.ts` concentra enrutado, validación de cuerpos y autorización en un solo archivo (654 líneas).** Principio: responsabilidad única. Cambio propuesto: una función de rutas por recurso (`config`, `library`, `workflows`), con la autorización en un solo sitio.
 3. **`journal/journal.ts` mezcla esquema, escritura de filas y lecturas (867 líneas).** Principio: separación de lectura y escritura. Cambio propuesto: un módulo de lecturas que use solo la conexión.
 4. **`mcp/server.ts` mantiene su propio despacho JSON-RPC, aunque el SDK ya lo hace para el protocolo (P16.2).** Principio: no reinventar. Cambio propuesto: reducir el servidor a las herramientas, delegando el protocolo en el SDK, con las pruebas de caracterización de P16.2 como red.
-5. **`config/write.ts` y `config/load.ts` comparten la noción de "validar el archivo".** Principio: DRY. Cambio propuesto: un único validador del archivo completo, que usan la carga y la escritura.
+5. **`config/write.ts` y `config/load.ts` comparten la noción de "validar el archivo".** Principio: DRY. Cambio propuesto: un único validador del archivo completo, que usan la carga y la escritura. Aplicado: la escritura valida el archivo candidato con el cargador, igual que la carga.
 6. **Inversión de dependencias en `api/server.ts`:** el servidor recibe el control como objeto con funciones, lo que ya permite probarlo sin la CLI. Principio: depender de abstracciones. Se conserva; es un buen patrón.
 
 ## 5. Límites de esta medición

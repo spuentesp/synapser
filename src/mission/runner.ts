@@ -3,7 +3,7 @@
 // concurrently; the final VALIDATE node is executed by control, never by a model, and only after
 // every write has settled. DONE for the mission = acceptance evidence on a consistent snapshot.
 
-import { runTask, type LoopLimits, type TaskRunResult } from "../agent/loop.ts";
+import { runTask, type LoopLimits, type TaskRunResult } from "../agents/native/loop.ts";
 import type { WriteGateway } from "../executor/gateway.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";

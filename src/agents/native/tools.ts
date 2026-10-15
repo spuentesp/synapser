@@ -6,7 +6,7 @@
 // What is ABSENT: no task_id, no actor, no incarnation, no view id, no request digest, no shell,
 // no network. The backend injects identity; the model only names files, text and intent.
 
-import type { ToolSpec } from "../model/types.ts";
+import type { ToolSpec } from "../../model/types.ts";
 import type { Schema } from "./schema.ts";
 
 export const MAX_PATHS = 20;

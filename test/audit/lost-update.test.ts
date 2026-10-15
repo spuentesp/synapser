@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { runTask, type TaskSpec } from "../../src/agent/loop.ts";
+import { runTask, type TaskSpec } from "../../src/agents/native/loop.ts";
 import { checkAcceptance, checkChain, checkGrantBeforeWrite, checkLineage, digestOnDisk, executorTrace, lostLines, type WriteRecord } from "../../src/audit/invariants.ts";
 import { NaiveGateway } from "../../src/bench/naive-gateway.ts";
 import type { DigestOrAbsent } from "../../src/digest/file.ts";
