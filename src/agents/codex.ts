@@ -16,7 +16,7 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["read-only", "workspace-write"],
   budgetFlag: false,
   resume: true,
-  cliFlags: ["--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", "-C", "-m"],
+  cliFlags: ["--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", "-C", "-c", "-m"],
   profileDefinedFlags: false,
 });
 

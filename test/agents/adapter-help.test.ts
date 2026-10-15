@@ -10,6 +10,7 @@ import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { BUILTIN_PROFILES, type AgentProfile } from "../../src/agents/profile.ts";
+import { planInjection } from "../../src/agents/inject.ts";
 import { sha256Bytes } from "../../src/digest/file.ts";
 
 const content = "Check the result.\n";
@@ -26,7 +27,8 @@ interface Case {
 }
 
 const withFields = (profile: AgentProfile, fields: Partial<AgentProfile>): AgentProfile => ({ ...profile, ...fields });
-const build = (adapter: AgentAdapter, profile: AgentProfile, selected: InjectedSkills = { skills: [] }) => adapter.build(profile, task, selected);
+const build = (adapter: AgentAdapter, profile: AgentProfile, selected: InjectedSkills = { skills: [] }, injection?: ReturnType<typeof planInjection>) =>
+  adapter.build(profile, { ...task, ...(injection ? { injection } : {}) }, selected);
 const cases: readonly Case[] = [
   {
     adapter: CLAUDE_CODE_ADAPTER, profileId: "claude-sonnet-writer", help: ["--help"],
@@ -34,13 +36,18 @@ const cases: readonly Case[] = [
   },
   {
     adapter: CODEX_ADAPTER, profileId: "codex-writer", help: ["exec", "--help"],
-    variants: (p) => [build(CODEX_ADAPTER, withFields(p, { model: "test-model" }))],
+    variants: (p) => [
+      build(CODEX_ADAPTER, withFields(p, { model: "test-model" })),
+      build(CODEX_ADAPTER, p, { skills: [] }, planInjection("codex", { id: "trial", baseUrl: "https://models.example/v1", apiKeyEnv: "TRIAL_KEY", model: "trial-model", protocol: "openai-compatible" }, { TRIAL_KEY: "test-only-key" })),
+    ],
   },
   {
     adapter: KIMI_ADAPTER, profileId: "kimi-writer", help: ["--help"],
     variants: (p) => [
       build(KIMI_ADAPTER, withFields(p, { permissions: { mode: "yolo" } }), injected),
       build(KIMI_ADAPTER, withFields(p, { permissions: { mode: "plan" } })),
+      build(KIMI_ADAPTER, withFields(p, { model: "test-model" })),
+      build(KIMI_ADAPTER, p, { skills: [] }, planInjection("kimi", { id: "trial", baseUrl: "https://models.example/v1", apiKeyEnv: "TRIAL_KEY", model: "trial-model", protocol: "anthropic" }, { TRIAL_KEY: "test-only-key" })),
     ],
   },
   {

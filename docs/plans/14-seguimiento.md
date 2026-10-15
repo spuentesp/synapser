@@ -68,11 +68,12 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2. commit: 41a06a2 · prueba:
   suite completa; falsación de procedencia/digest/rutas y de ampliación de permisos; corrida del runner
   con archivo de skill en HOME efímero y auditoría en fila + evento.
-- [x] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
+- [~] Q1.8 quién: GPT-6 Codex · desde: 2026-10-15. Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
   `--help` del binario real (omitida si el binario no está). commit: 3966715 · prueba: igualdad entre
   flags construidos y `capabilities.cliFlags`; contraste con `--help` real de Claude, Codex, Kimi y MiMo;
   suite completa.
-- [x] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
+- [!] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
+  motivo: completar Codex, Kimi y MiMo requiere autorización para consumir cuota o saldo externo; Claude ya está probado y no haré llamadas pagadas sin aprobación.
   commit: 27e89c4 · prueba: Claude Code instalado creó en la copia aislada el único archivo ordenado por
   una skill cuyo marcador no estaba en el prompt ni en el workspace; id, digest y mecanismo coincidieron
   en el resultado y `agent_runs`; suite completa.
@@ -88,7 +89,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: ebee726 · prueba: validación acumulada de proveedores, modelos y precios; migración
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
   costo conocido por tarifa declarada y costo desconocido ante tarifa ausente o ambigua; suite completa.
-- [x] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
+- [!] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
   hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: 74c8046 · prueba:
   `test/model/system-roles.test.ts` (sin bloque `roles` = predeterminados; un rol movido no hereda fallbacks;
   documento inválido con todos sus problemas; redefinir un proveedor usado por un rol por defecto falla al cargar;
@@ -99,6 +100,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `orchestration` y los perfiles nativos llevan proveedor propio (`modelFor`); solo la ruta sin orquestación
   (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
   gobernar también los perfiles nativos.
+  motivo: falta definir si worker/repair son solo roles internos de Synapser o también sustituyen proveedor/modelo en agentes nativos; no cambiar ese runtime hasta recibir la decisión.
 - [x] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
   commit: 37562e2 · prueba: `test/model/connection.test.ts` (ocho casos: éxito con cabecera y tarifa declarada;
   sin clave no sale ninguna petición; 401 sin eco de la clave; redirección rechazada sin entregar la clave al
@@ -111,7 +113,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
   nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
   en el archivo); el manejador congelado queda como única vía cuando lo haga.
-- [x] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
+- [~] Q2.6 quién: GPT-6 Codex · desde: 2026-10-15. Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
   entera con todos los problemas. commit: ab89118 · prueba: `test/api/library.test.ts` (lecturas abiertas;
   escrituras sin token, con origen ajeno o malformado rechazadas; escritura repetida sin cambio; documento inválido
   con todos sus problemas y sin efecto; borrado con token; skills y agentes por sus reglas; plantillas solo objeto,
@@ -128,7 +130,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q3 — Diseñadores y plantillas (UI)
 
-- [x] Q3.1 Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
+- [~] Q3.1 quién: GPT-6 Codex · desde: 2026-10-15. Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
   vivo contra el validador real, vista previa JSON. commit: 1c55261 · prueba: `test/api/designer.test.ts`
   (borrador válido sin escritura; borrador inválido con todos sus problemas y la redacción del validador; token
   y origen) y navegador real con Chromium headless (capturas en `evidence/`): un borrador válido se guarda; uno

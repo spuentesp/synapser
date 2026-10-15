@@ -87,12 +87,17 @@ export interface ApiServer {
   close(): Promise<void>;
 }
 
-/** A request without an Origin header is not a cross-site browser call; any other origin must be this host. */
+/** A request without Origin is an authenticated non-browser client; browser origins must match scheme and authority. */
 const sameOrigin = (req: IncomingMessage): boolean => {
   const origin = req.headers["origin"];
   if (!origin) return true;
   try {
-    return new URL(origin).host === req.headers["host"];
+    const host = req.headers["host"];
+    if (!host) return false;
+    const protocol = (req.socket as typeof req.socket & { encrypted?: boolean }).encrypted ? "https:" : "http:";
+    const expected = new URL(`${protocol}//${host}`).origin;
+    const supplied = new URL(origin);
+    return supplied.origin === origin && supplied.origin === expected;
   } catch {
     return false;
   }

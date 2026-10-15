@@ -62,6 +62,8 @@ describe("API library (plan 14 Q2.6)", () => {
     const foreign = await call("PUT", "/api/library/providers/local", PROVIDER, { origin: "http://evil.example", "x-synapser-token": token });
     assert.equal(foreign.status, 403);
     assert.equal((await foreign.json() as any).error, "CROSS_ORIGIN");
+    const wrongScheme = await call("PUT", "/api/library/providers/local", PROVIDER, { origin: base.replace(/^http:/, "https:"), "x-synapser-token": token });
+    assert.equal(wrongScheme.status, 403, "a matching host with the wrong scheme is not the same origin");
     const malformed = await call("PUT", "/api/library/providers/local", PROVIDER, { origin: "null", "x-synapser-token": token });
     assert.equal(malformed.status, 403);
     assert.equal(lib.get("providers", "local"), null, "no refused write changed the library");

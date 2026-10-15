@@ -16,7 +16,7 @@ const CAPABILITIES: AgentCapabilities = Object.freeze({
   permissionModes: ["default", "yolo", "plan"],
   budgetFlag: false,
   resume: true,
-  cliFlags: ["-p", "--output-format", "--yolo", "--plan", "--skills-dir"],
+  cliFlags: ["-p", "--output-format", "--yolo", "--plan", "--skills-dir", "-m"],
   profileDefinedFlags: false,
 });
 

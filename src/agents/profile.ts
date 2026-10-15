@@ -197,6 +197,13 @@ export function validateProfile(p: AgentProfile): string[] {
     if (!argv.some((a) => typeof a === "string" && a.includes("{prompt}"))) errs.push("argv must contain {prompt}");
   }
   if (adapterOf(p) === "generic-cli" && p.parser !== "plain") errs.push("generic-cli always uses the plain parser");
+  const adapter = adapterOf(p);
+  if (adapter !== "claude-code" && (p.permissions?.allowedTools !== undefined || p.permissions?.disallowedTools !== undefined)) {
+    errs.push(`${adapter} does not support allowedTools or disallowedTools`);
+  }
+  if (!["claude-code", "codex", "kimi", "mimo"].includes(adapter) && p.permissions?.mode !== undefined) {
+    errs.push(`${adapter} does not support a named permission mode`);
+  }
   if (adapterOf(p) === "claude-code") {
     if (!p.model) errs.push("a claude-code profile needs a model");
     const modes = ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];

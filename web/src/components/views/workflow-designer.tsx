@@ -46,11 +46,13 @@ export interface Draft {
   title: string
   description: string
   goals: string
-  nonGoals: string
+  nonGoals: NonGoalDraft[]
   conditions: CondDraft[]
   budgetUsd: string
   budgetMinutes: string
 }
+
+interface NonGoalDraft { key: number; statement: string; guardJson: string }
 
 /** The stored shape the designer edits: a loose view of model.ts's Workflow. The server validates for real. */
 export interface WorkflowDoc {
@@ -72,7 +74,7 @@ const freshId = (conds: CondDraft[]): string => {
   return `c${n}`
 }
 
-export const emptyDraft = (): Draft => ({ title: '', description: '', goals: '', nonGoals: '', conditions: [blankCond('c1')], budgetUsd: '', budgetMinutes: '' })
+export const emptyDraft = (): Draft => ({ title: '', description: '', goals: '', nonGoals: [], conditions: [blankCond('c1')], budgetUsd: '', budgetMinutes: '' })
 
 /** The form state of a stored workflow, so a draft can be edited with the same designer. */
 export function draftOf(w: WorkflowDoc): Draft {
@@ -80,7 +82,7 @@ export function draftOf(w: WorkflowDoc): Draft {
     title: w.title,
     description: w.description,
     goals: (w.goals ?? []).join('\n'),
-    nonGoals: (w.nonGoals ?? []).map((n) => n.statement).join('\n'),
+    nonGoals: (w.nonGoals ?? []).map((n) => ({ key: keySeq++, statement: n.statement, guardJson: n.guard ? JSON.stringify(n.guard, null, 2) : '' })),
     conditions: w.conditions.map((c) => {
       const k = c.checker
       const kind = (KINDS as readonly string[]).includes(String(k['kind'])) ? (k['kind'] as Kind) : 'diff'
@@ -133,9 +135,10 @@ function checkerOf(c: CondDraft): Record<string, unknown> | null {
   }
 }
 
-/** The document the form stands for, and the conditions whose parameters are not valid JSON yet. */
-export function documentOf(d: Draft, guards: ReadonlyMap<string, Record<string, unknown>>): { doc: Record<string, unknown>; badParams: number[] } {
+/** The document the form stands for, and the parameters which are not valid JSON yet. */
+export function documentOf(d: Draft): { doc: Record<string, unknown>; badParams: number[]; badGuards: number[] } {
   const badParams: number[] = []
+  const badGuards: number[] = []
   const conditions = d.conditions.map((c, i) => {
     const checker = checkerOf(c)
     if (checker === null) badParams.push(i)
@@ -148,15 +151,23 @@ export function documentOf(d: Draft, guards: ReadonlyMap<string, Record<string, 
     title: d.title,
     description: d.description,
     goals: lines(d.goals),
-    // a non-goal guard is not editable here: it is kept for the statement it belongs to
-    nonGoals: lines(d.nonGoals).map((statement) => {
-      const guard = guards.get(statement)
-      return guard ? { statement, guard } : { statement }
+    nonGoals: d.nonGoals.flatMap((n, i) => {
+      const statement = n.statement.trim()
+      if (!statement) return []
+      if (!n.guardJson.trim()) return [{ statement }]
+      try {
+        const guard: unknown = JSON.parse(n.guardJson)
+        if (!guard || typeof guard !== 'object' || Array.isArray(guard)) throw new Error('guard must be an object')
+        return [{ statement, guard: guard as Record<string, unknown> }]
+      } catch {
+        badGuards.push(i)
+        return [{ statement }]
+      }
     }),
     conditions,
     ...(Object.keys(budget).length ? { budget } : {}),
   }
-  return { doc, badParams }
+  return { doc, badParams, badGuards }
 }
 
 interface Check {
@@ -164,14 +175,9 @@ interface Check {
   errors: string[]
 }
 
-/** The non-goal guards a document carries, by statement: the form keeps them although it cannot edit them. */
-const guardsOf = (d: { nonGoals?: { statement: string; guard?: Record<string, unknown> }[] } | null): Map<string, Record<string, unknown>> =>
-  new Map((d?.nonGoals ?? []).flatMap((n) => (n.guard ? [[n.statement, n.guard] as const] : [])))
-
 export function WorkflowDesigner({ session, initial, editingId, onSaved, onCancel }: { session: boolean; initial: WorkflowDoc | null; editingId: string | null; onSaved: (id: string) => void; onCancel: () => void }) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<Draft>(() => (initial ? draftOf(initial) : emptyDraft()))
-  const [guards, setGuards] = useState<Map<string, Record<string, unknown>>>(() => guardsOf(initial))
   // a built-in template fills the form with its parameters (plan 14 Q3.2); the person adjusts it before saving
   const [tpl, setTpl] = useState('')
   const [tplParams, setTplParams] = useState<Record<string, string>>({})
@@ -180,7 +186,6 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
     if (!selectedTpl) return
     const doc = selectedTpl.build(tplParams)
     setDraft(draftOf(doc))
-    setGuards(guardsOf(doc))
   }
   const [commands, setCommands] = useState<string[]>([])
   const [profiles, setProfiles] = useState<string[]>([])
@@ -188,7 +193,7 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
   const [checking, setChecking] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<ApiError | null>(null)
-  const { doc, badParams } = documentOf(draft, guards)
+  const { doc, badParams, badGuards } = documentOf(draft)
   const docJson = JSON.stringify(doc, null, 2)
 
   useEffect(() => {
@@ -198,7 +203,7 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
 
   // live check against the server's validator; a slower earlier answer never overwrites a newer one
   useEffect(() => {
-    if (!session || badParams.length > 0) return
+    if (!session || badParams.length > 0 || badGuards.length > 0) return
     let stale = false
     setChecking(true)
     const timer = setTimeout(() => {
@@ -210,12 +215,15 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
       stale = true
       clearTimeout(timer)
     }
-  }, [docJson, session, badParams.length])
+  }, [docJson, session, badParams.length, badGuards.length])
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const setCond = (key: number, patch: Partial<CondDraft>) => setDraft((d) => ({ ...d, conditions: d.conditions.map((c) => (c.key === key ? { ...c, ...patch } : c)) }))
   const addCond = () => setDraft((d) => ({ ...d, conditions: [...d.conditions, blankCond(freshId(d.conditions))] }))
   const removeCond = (key: number) => setDraft((d) => ({ ...d, conditions: d.conditions.filter((c) => c.key !== key) }))
+  const setNonGoal = (key: number, patch: Partial<NonGoalDraft>) => setDraft((d) => ({ ...d, nonGoals: d.nonGoals.map((n) => n.key === key ? { ...n, ...patch } : n) }))
+  const addNonGoal = () => setDraft((d) => ({ ...d, nonGoals: [...d.nonGoals, { key: Date.now(), statement: '', guardJson: '' }] }))
+  const removeNonGoal = (key: number) => setDraft((d) => ({ ...d, nonGoals: d.nonGoals.filter((n) => n.key !== key) }))
 
   const save = () => {
     if (!session) return
@@ -228,8 +236,8 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
     saved.then(onSaved, (e: ApiError) => setSaveError(e)).finally(() => setSaving(false))
   }
 
-  const problems = badParams.length > 0 ? [t('designerInvalidParams')] : check && !check.ok ? check.errors : []
-  const canSave = session && !saving && !checking && badParams.length === 0 && check?.ok === true
+  const problems = [...(badParams.length > 0 ? [t('designerInvalidParams')] : []), ...(badGuards.length > 0 ? [t('designerInvalidGuards')] : []), ...(check && !check.ok ? check.errors : [])]
+  const canSave = session && !saving && !checking && badParams.length === 0 && badGuards.length === 0 && check?.ok === true
 
   const kindFields = (c: CondDraft) => {
     switch (c.kind) {
@@ -386,10 +394,24 @@ export function WorkflowDesigner({ session, initial, editingId, onSaved, onCance
             <FieldLabel htmlFor="wf-goals">{t('designerGoals')}</FieldLabel>
             <Textarea id="wf-goals" rows={3} value={draft.goals} onChange={(e) => set({ goals: e.target.value })} />
           </Field>
-          <Field>
-            <FieldLabel htmlFor="wf-nongoals">{t('designerNonGoals')}</FieldLabel>
-            <Textarea id="wf-nongoals" rows={2} value={draft.nonGoals} onChange={(e) => set({ nonGoals: e.target.value })} />
-          </Field>
+          <section className="grid gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('designerNonGoals')}</h3>
+            {draft.nonGoals.map((n) => (
+              <div key={n.key} className="grid gap-3 rounded-lg border p-3">
+                <Field>
+                  <FieldLabel htmlFor={`non-goal-${n.key}`}>{t('designerNonGoalStatement')}</FieldLabel>
+                  <Input id={`non-goal-${n.key}`} value={n.statement} onChange={(e) => setNonGoal(n.key, { statement: e.target.value })} />
+                </Field>
+                <Field data-invalid={badGuards.includes(draft.nonGoals.indexOf(n)) || undefined}>
+                  <FieldLabel htmlFor={`non-goal-guard-${n.key}`}>{t('designerNonGoalGuard')}</FieldLabel>
+                  <Textarea id={`non-goal-guard-${n.key}`} aria-invalid={badGuards.includes(draft.nonGoals.indexOf(n)) || undefined} className="font-mono text-xs" rows={4} value={n.guardJson} onChange={(e) => setNonGoal(n.key, { guardJson: e.target.value })} placeholder={'{"kind":"diff","forbid":["README.md"]}'} />
+                  <FieldDescription>{t('designerNonGoalGuardHint')}</FieldDescription>
+                </Field>
+                <div><Button variant="ghost" size="sm" aria-label={t('designerRemoveNonGoal')} onClick={() => removeNonGoal(n.key)}><Trash2 data-icon="inline-start" />{t('designerRemoveNonGoal')}</Button></div>
+              </div>
+            ))}
+            <div><Button variant="outline" size="sm" onClick={addNonGoal}>{t('designerAddNonGoal')}</Button></div>
+          </section>
         </FieldGroup>
 
         <section className="grid gap-3">

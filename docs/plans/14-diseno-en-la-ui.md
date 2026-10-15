@@ -83,6 +83,8 @@ rellenan el formulario y el validador del servidor decide qué se guarda. Las pl
 siguen sin esquema: es decisión abierta.
 - **Comprobación en vivo** (Q3.1): el diseñador consulta el validador del servidor (`POST /api/designer/check`), que
   no escribe nada; «Guardar» solo se habilita con un documento que ese validador acepta.
+- **No-metas editables** (Q3.1): cada enunciado y su compuerta opcional son una misma fila del borrador; cambiar,
+  quitar o reordenar un enunciado no puede asociar su compuerta a otra fila ni descartarla silenciosamente.
 - **Diseñador de agente**: elegir adaptador, nivel, rol, permisos, presupuesto, pool, skills; botón
   «probar» que corre una tarea trivial en una copia desechable y muestra el resultado y el costo.
 - **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger. La prueba de conexión
@@ -121,6 +123,8 @@ intervenciones del asesor y los efectos solicitados se leen en el detalle del wo
 - **T3** Cada prueba deja un evento `agent_trial` en `_server`, ligado al digest del perfil y de la copia, los
   límites, resultado, skills y rutas cambiadas. El texto de salida se guarda como artefacto; el prompt no se copia
   al evento.
+- **W1** En el diseñador, una compuerta de no-meta se guarda con el mismo enunciado que la acompaña; JSON inválido
+  bloquea la comprobación y el guardado, y borrar esa fila borra también su compuerta.
 
 Verificación y falsación de la inyección:
 
@@ -134,6 +138,9 @@ Verificación y falsación de la inyección:
 - L5 se verifica extrayendo los flags de todas las variantes construidas por cada adaptador, exigiendo
   igualdad con `capabilities.cliFlags`, y buscando cada declaración en el `--help` del binario instalado.
   Se falsa al emitir un flag no declarado o al declarar uno que el binario real no reconoce.
+- W1 se verifica editando en Chromium un workflow real con una compuerta, cambiando el enunciado y comprobando
+  la vista previa y el documento persistido. Se falsa cambiando el texto, borrando la fila o introduciendo JSON
+  inválido: la compuerta no debe migrar a otra fila ni guardarse silenciosamente.
 - L4 usa el journal `_server` como autoridad: cada versión de biblioteca se guarda primero como blob por
   digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
   almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes

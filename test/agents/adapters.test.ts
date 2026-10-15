@@ -9,6 +9,18 @@ import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { GENERIC_CLI_ADAPTER } from "../../src/agents/generic-cli.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
 
+describe("profile permission fields match adapter capabilities", () => {
+  test("only adapters that implement exact tool allow/deny lists accept them", () => {
+    for (const id of ["codex-writer", "kimi-writer", "mimo-writer"] as const) {
+      const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === id)!;
+      assert.ok(validateProfile({ ...profile, permissions: { ...profile.permissions, allowedTools: ["Read"] } }).some((problem) => /does not support allowedTools/.test(problem)), id);
+      assert.ok(validateProfile({ ...profile, permissions: { ...profile.permissions, disallowedTools: ["Write"] } }).some((problem) => /does not support allowedTools/.test(problem)), id);
+    }
+    const generic = { ...BUILTIN_PROFILES.find((candidate) => candidate.id === "codex-writer")!, adapter: "generic-cli" as const, argv: ["node", "-e", "{prompt}"], parser: "plain" as const };
+    assert.ok(validateProfile({ ...generic, permissions: { mode: "read-only" } }).some((problem) => /does not support a named permission mode/.test(problem)));
+  });
+});
+
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/cli/${name}`, import.meta.url), "utf8");
 
 describe("ClaudeCodeAdapter", () => {
