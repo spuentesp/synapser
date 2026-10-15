@@ -56,8 +56,14 @@ export function validateLibraryDocument(kind: LibraryKind, id: string, document:
   switch (kind) {
     case "providers":
       // Library providers stay openai-compatible (plan 17): the anthropic protocol serves CLI injection only. Same message as before the protocol existed.
-      if (d["protocol"] === "anthropic") return [`provider ${id}: unsupported protocol anthropic`];
-      return [...idProblems, ...providerIdProblems(at, id, policy), ...validateProviderConfig(id, d), ...keyNameProblems(at, d, policy), ...destinationProblems(at, d)];
+      return [
+        ...idProblems,
+        ...providerIdProblems(at, id, policy),
+        ...validateProviderConfig(id, d),
+        ...(d["protocol"] === "anthropic" ? [`provider ${id}: unsupported protocol anthropic`] : []),
+        ...keyNameProblems(at, d, policy),
+        ...destinationProblems(at, d),
+      ];
     case "agents":
       return [...idProblems, ...resolveAgent(at, id, d, policy).problems];
     case "skills":

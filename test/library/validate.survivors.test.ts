@@ -55,6 +55,17 @@ describe("library providers: each rule gives its own message", () => {
   test("an anthropic provider is refused with the message kept from before the protocol existed", () => {
     assert.deepEqual(validateLibraryDocument("providers", "p1", { ...PROVIDER, protocol: "anthropic" }, POLICY), ["provider p1: unsupported protocol anthropic"]);
   });
+
+  test("an anthropic provider still reports its other independent validation problems", () => {
+    const problems = validateLibraryDocument("providers", "p1", {
+      protocol: "anthropic", baseUrl: "http://169.254.169.254/", apiKeyEnv: ["OTHER_KEY"], models: [],
+    }, POLICY);
+    assert.ok(problems.includes("provider p1: unsupported protocol anthropic"));
+    assert.ok(problems.includes("provider p1: baseUrl must be https (or loopback for tests)"));
+    assert.ok(problems.includes("provider p1: models must be a non-empty array"));
+    assert.ok(problems.includes("providers/p1: apiKeyEnv OTHER_KEY is not in providerKeyEnv (the operator's allowlist in synapser.config.json)"));
+    assert.ok(problems.includes("providers/p1: baseUrl 169.254.169.254 is a private address; a library provider may not reach it (plan 15 D3)"));
+  });
 });
 
 describe("library agents and skills: the rules and their messages", () => {
