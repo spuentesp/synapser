@@ -227,6 +227,23 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P17.8 Conector de configuración: token de operador fijo en variable de entorno; transporte `stdio` que reenvía a la API; leer y escribir proveedores, roles y agentes, solo con nombres de variables (K1). commit: 464a081 · prueba: `test/api/operator-token.test.ts`, `test/config/hot-reload.test.ts`, `test/config/change-log.test.ts`, `test/config/agents.test.ts`, `test/mcp/config-connector.test.ts`, `test/agents/connector-isolation.test.ts`, `test/config/live-agents.test.ts`. Una corrida completa de un workflow con un CLI real con agente nuevo no se ha hecho.
 - [ ] P17.9 Escritura desde la UI y la CLI del operador, con token y mismo origen, por la misma ruta de la API que P17.8. *Verificación:* sin sesión, 401 `BAD_TOKEN` como hoy; con sesión, el cambio se aplica. *Falsación:* quitar la comprobación de sesión, y la prueba falla.
 
+### P18 — Infraestructura de pruebas (plan)
+
+- [x] P18.0 Plan 18: `docs/plans/18-infraestructura-de-pruebas.md`, con su entrada en el índice. Propuesto, sin código. commit: 0fbb66e · prueba: el plan lista épicas e historias con criterio de aceptación y herramientas.
+- [ ] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.2 E2 Contratos por herramienta (inventario, esquemas zod, pruebas y golden de contrato, compatibilidad, banderas de adaptadores). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.3 E3 Pruebas basadas en propiedades (fast-check): digests, ledger, validadores, inyección, escritura de configuración. *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.4 E4 Mutación (Stryker) con umbral por módulo de seguridad. *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.5 E5 Fixtures realistas (repositorios desechables, agentes CLI programados, endpoint falso compartido). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.6 E6 Sandbox de ejecución (bwrap, pruebas de aislamiento, centinelas generalizados, límites de recursos). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.7 E7 MCP de punta a punta (cliente stdio, tarea completa, rechazo, conector de configuración). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.8 E8 Oráculo oculto y anti-trampas (pruebas fuera del espacio del agente, combinaciones, registro de intentos). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.9 E9 Interfaz con Playwright (flujos, pantalla de configuración si se aprueba, accesibilidad). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.10 E10 Verificación formal con TLA+ (opcional, pendiente de decisión). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.11 E11 Simulación determinista (opcional, después de E7). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.12 E12 Arquitectura (reglas de capas, ciclos, duplicación con dependency-cruiser, auditoría). *Verificación:* ver el plan 18, épica correspondiente.
+- [ ] P18.13 E13 Gobierno de pruebas (intermitentes, presupuesto de tiempo, evidencias, cobertura de contratos). *Verificación:* ver el plan 18, épica correspondiente.
+
 ### Cierre
 
 - [x] C.1 Actualizar el docx (v0.5) con las secciones del plan 14 (script en el scratchpad de la sesión
@@ -316,4 +333,5 @@ Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (di
 | 2026-10-15 | Claude Haiku 5.5 | P17.8 hecha (commit 464a081): pruebas de K6 y de agente nuevo sin reinicio. Suite completa: 866 pruebas, 857 aprobadas, 0 fallos, 9 omitidas (dos pruebas sensibles al tiempo bajo carga fallaron en ejecuciones anteriores y pasaron en la última). |
 | 2026-10-15 | Claude Haiku 5.5 | K4 (commit ffc7997): cada ejecución inyectada guarda proveedor, modelo, endpoint y nombre de la variable de clave en el ledger, sin valores. P17.5 hecha. Suite completa: 867 pruebas, 858 aprobadas, 0 fallos, 9 omitidas. |
 | 2026-10-15 | Claude Haiku 5.5 | P17.4 hecha (commit 5c7a4d3): prueba de que una clave no aparece en la respuesta de la API, el archivo ni el registro. Decisiones 2, 3 y 6 del plan 17 aceptadas. |
+| 2026-10-15 | Claude Haiku 5.5 | Plan 18 escrito (commit 0fbb66e): infraestructura de pruebas en trece épicas, pendientes de ejecutar en orden de dependencias. |
 | 2026-10-14 | Claude Haiku 5.5 | Protocolo `anthropic` añadido al esquema de proveedores (commit 72d2597). claude-code y kimi inyectables; roles, agentes nativos y biblioteca siguen en `openai-compatible`. Puerta K8 con centinela pasada para claude-code. Suite completa: 825 pruebas, 816 aprobadas, 0 fallos, 9 omitidas. |
