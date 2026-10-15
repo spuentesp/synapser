@@ -229,7 +229,7 @@ Cerradas: E1, E2, E3, E5, E8, E9, E10, E12, E13. En curso: E4, E6, E7, E11 (cada
 
 ### Pendiente de código o de prueba
 
-- **H4.1** ejecutor y journal: mutación con un comando de pruebas por módulo. El comando se repite por cada mutante, y la suite de protocolo con el binario real es demasiado lenta para eso; hace falta un subconjunto rápido. `validate.ts` tiene 32 sobrevivientes que llevar al suelo.
+- **H4.1** journal medido: 99,79 % (un superviviente de unos 476 mutantes, corrida del 15 oct; el informe JSON se perdió por cuota, así que el gate del journal no está activo). Ejecutor pendiente: su suite es lenta, hace falta un subconjunto rápido. Antes: ejecutor y journal con un comando de pruebas por módulo. El comando se repite por cada mutante, y la suite de protocolo con el binario real es demasiado lenta para eso; hace falta un subconjunto rápido. `validate.ts` tiene 32 sobrevivientes que llevar al suelo.
 - **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado. La prueba stdio existente llega a la compuerta; la planificación necesita un modelo falso conectado al proveedor inyectado, que no está escrito.
 - **H11.2** fallo de `fsync`: requiere una capa de sistema de archivos que pierda datos no sincronizados.
 
