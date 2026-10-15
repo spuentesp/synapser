@@ -2,64 +2,16 @@
 // Scenario: one action over two files (app/billing.py, app/schema.py) — the S05 shape.
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 import { recoverRun } from "../../src/executor/recovery.ts";
 import type { ZooPort } from "../../src/executor/executor.ts";
-import { BASELINE, type Env, propose, reopenEnv, RUN, T1 } from "../executor/env.ts";
+import { type Env, propose, reopenEnv, RUN, T1 } from "../executor/env.ts";
 import { checkInvariants } from "../executor/invariants.ts";
 import { wp } from "../helpers.ts";
+import { BILLING_AFTER, fresh, runChild } from "./support.ts";
 
-const CHILD = new URL("../fixtures/executor-child.ts", import.meta.url).pathname;
-
-interface Died {
-  signal: string | null;
-  code: number | null;
-  actionId: string | null;
-  requestDigest: string | null;
-  receipt: { status: string; state: string } | null;
-}
-
-function runChild(state: string, ws: string, scenario: string, failpoint: string | null, extraEnv: NodeJS.ProcessEnv = {}): Promise<Died> {
-  return new Promise((resolve, reject) => {
-    const env = { ...process.env, ...extraEnv } as NodeJS.ProcessEnv;
-    delete env["SYNAPSER_FAILPOINT"];
-    if (failpoint) {
-      env["SYNAPSER_ENABLE_FAILPOINTS"] = "1";
-      env["SYNAPSER_FAILPOINT"] = failpoint;
-    }
-    const p = spawn(process.execPath, [CHILD, state, ws, scenario], { env, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    let err = "";
-    p.stdout.on("data", (d) => (out += d));
-    p.stderr.on("data", (d) => (err += d));
-    p.on("error", reject);
-    p.on("exit", (code, signal) => {
-      const lines = out.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-      const proposed = lines.find((l) => l.event === "proposed");
-      const receipt = lines.find((l) => l.event === "receipt");
-      if (code && code !== 0 && !signal) return reject(new Error(`child failed: ${err.slice(0, 600)}`));
-      resolve({
-        signal,
-        code,
-        actionId: proposed?.actionId ?? null,
-        requestDigest: proposed?.requestDigest ?? null,
-        receipt: receipt ? { status: receipt.status, state: receipt.state } : null,
-      });
-    });
-  });
-}
-
-const BILLING_AFTER = '"""billing v2"""\n';
-const fresh = () => {
-  const ws = realpathSync(mkdtempSync(join(tmpdir(), "crash-ws-")));
-  cpSync(BASELINE, ws, { recursive: true });
-  const state = realpathSync(mkdtempSync(join(tmpdir(), "crash-state-")));
-  return { ws, state };
-};
 
 describe("S05 and friends: kill the executor at every failpoint, recover with a new process", () => {
   const open: Env[] = [];
