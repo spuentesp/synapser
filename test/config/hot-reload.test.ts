@@ -135,3 +135,33 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
     assert.match(body.errors.join(" "), /metadata/);
   });
 });
+
+// Plan 17 P17.4: a key value sent where a variable name belongs is refused, and the value appears in no answer,
+// in the operator file or in the change log.
+describe("plan 17 P17.4: a key value never reaches the API answer, the file or the change log", () => {
+  test("a provider whose apiKeyEnv is a key value is refused, and the value is absent everywhere", async () => {
+    const secret = "sk-test-P17-4-VALUE-0000000001";
+    const { dir, path, live } = setup(true);
+    const state = mkdtempSync(join(tmpdir(), "p174-state-"));
+    const ws = mkdtempSync(join(tmpdir(), "p174-ws-"));
+    const sj = Journal.open(state, "_server");
+    const mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
+    live.stateDir = state;
+    const OPERATOR = "operator-token-0123456789abcdef0123";
+    const api = createApi({ stateDir: state, ssePollMs: 20, token: OPERATOR, control: { manager: mgr, library: new LibraryStore(state, sj), config: () => ({ ok: true }), libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [], bases: [] }), configWrite: (change) => writeLiveConfig(live, change) } });
+    const base = `http://127.0.0.1:${await api.listen(0)}`;
+    try {
+      const r = await fetch(`${base}/api/config/providers/leak`, { method: "PUT", headers: { "content-type": "application/json", origin: base, "x-synapser-token": OPERATOR }, body: JSON.stringify({ ...HOT, apiKeyEnv: [secret] }) });
+      assert.equal(r.status, 400);
+      const answer = await r.text();
+      assert.equal(answer.includes(secret), false, "the API answer does not echo the value");
+      assert.equal(readFileSync(path, "utf8").includes(secret), false, "the operator file does not hold the value");
+      assert.equal(readFileSync(join(state, "config-changes.jsonl"), "utf8").includes(secret), false, "the change log does not hold the value");
+    } finally {
+      await api.close();
+      await mgr.close();
+      sj.close();
+      for (const d of [dir, state, ws]) rmSync(d, { recursive: true, force: true });
+    }
+  });
+});
