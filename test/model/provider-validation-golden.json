@@ -1,0 +1,636 @@
+[
+ {
+  "name": "valid with prices and no prices",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": []
+ },
+ {
+  "name": "not object null",
+  "id": "good-provider",
+  "value": null,
+  "output": [
+   "provider good-provider: must be an object"
+  ]
+ },
+ {
+  "name": "not object array",
+  "id": "good-provider",
+  "value": [],
+  "output": [
+   "provider good-provider: unsupported protocol undefined",
+   "provider good-provider: baseUrl must be https (or loopback for tests)",
+   "provider good-provider: apiKeyEnv must contain environment variable names",
+   "provider good-provider: models must be a non-empty array"
+  ]
+ },
+ {
+  "name": "not object string",
+  "id": "good-provider",
+  "value": "provider",
+  "output": [
+   "provider good-provider: must be an object"
+  ]
+ },
+ {
+  "name": "missing protocol",
+  "id": "good-provider",
+  "value": {
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: unsupported protocol undefined"
+  ]
+ },
+ {
+  "name": "unsupported protocol",
+  "id": "good-provider",
+  "value": {
+   "protocol": "grpc",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: unsupported protocol grpc"
+  ]
+ },
+ {
+  "name": "base url wrong type",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": 4,
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: baseUrl must be https (or loopback for tests)"
+  ]
+ },
+ {
+  "name": "base url http public",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "http://models.example/v1",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: baseUrl must be https (or loopback for tests)"
+  ]
+ },
+ {
+  "name": "base url malformed",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "not a url",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: baseUrl must be https (or loopback for tests)"
+  ]
+ },
+ {
+  "name": "base url loopback ipv4",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "http://127.0.0.1:9/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": []
+ },
+ {
+  "name": "base url loopback hostname",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "http://localhost:9/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": []
+ },
+ {
+  "name": "base url cloud metadata",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "http://169.254.169.254/latest/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: baseUrl must be https (or loopback for tests)",
+   "provider good-provider: baseUrl points at a cloud metadata address (plan 17 K7)"
+  ]
+ },
+ {
+  "name": "key env not array",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": "MODEL_KEY",
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: apiKeyEnv must contain environment variable names"
+  ]
+ },
+ {
+  "name": "key env empty",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: apiKeyEnv must contain environment variable names"
+  ]
+ },
+ {
+  "name": "key env lowercase",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "model_key"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: apiKeyEnv must contain environment variable names"
+  ]
+ },
+ {
+  "name": "key env mixed",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY",
+    2
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: apiKeyEnv must contain environment variable names"
+  ]
+ },
+ {
+  "name": "key env reserved token",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "SYNAPSER_OPERATOR_TOKEN"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: SYNAPSER_OPERATOR_TOKEN is reserved by Synapser and cannot hold a provider key (plan 17 K6)"
+  ]
+ },
+ {
+  "name": "key env reserved home",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "HOME"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": []
+ },
+ {
+  "name": "models not array",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": {}
+  },
+  "output": [
+   "provider good-provider: models must be a non-empty array"
+  ]
+ },
+ {
+  "name": "models empty",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": []
+  },
+  "output": [
+   "provider good-provider: models must be a non-empty array"
+  ]
+ },
+ {
+  "name": "model not object",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    null
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0].id is required"
+  ]
+ },
+ {
+  "name": "model id missing",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {}
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0].id is required"
+  ]
+ },
+ {
+  "name": "model id blank",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "  "
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0].id is required"
+  ]
+ },
+ {
+  "name": "duplicate model ids",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "same"
+    },
+    {
+     "id": "same"
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: model same is duplicated"
+  ]
+ },
+ {
+  "name": "price negative",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "m",
+     "usdPer1MIn": -1,
+     "usdPer1MOut": 0
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0].usdPer1MIn must be a non-negative finite number"
+  ]
+ },
+ {
+  "name": "price wrong type",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "m",
+     "usdPer1MIn": "NaN",
+     "usdPer1MOut": 0
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0].usdPer1MIn must be a non-negative finite number"
+  ]
+ },
+ {
+  "name": "one-sided price",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "m",
+     "usdPer1MIn": 0
+    }
+   ]
+  },
+  "output": [
+   "provider good-provider: models[0] must declare both input and output prices, or neither"
+  ]
+ },
+ {
+  "name": "unknown keys ignored",
+  "id": "good-provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "m",
+     "extra": "ignored"
+    }
+   ],
+   "futureField": {
+    "enabled": true
+   }
+  },
+  "output": []
+ },
+ {
+  "name": "invalid id slug",
+  "id": "Bad Provider",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider Bad Provider: id must be a lowercase slug"
+  ]
+ },
+ {
+  "name": "id boundary 64",
+  "id": "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": []
+ },
+ {
+  "name": "id too long",
+  "id": "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "value": {
+   "protocol": "openai-compatible",
+   "baseUrl": "https://models.example/v1/",
+   "apiKeyEnv": [
+    "MODEL_KEY"
+   ],
+   "models": [
+    {
+     "id": "task",
+     "usdPer1MIn": 1.25,
+     "usdPer1MOut": 2.5
+    },
+    {
+     "id": "free"
+    }
+   ]
+  },
+  "output": [
+   "provider abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: id must be a lowercase slug"
+  ]
+ }
+]

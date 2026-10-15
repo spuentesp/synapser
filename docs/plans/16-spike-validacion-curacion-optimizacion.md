@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: **P16.2 hecho e incorporado a `main`** (`73991d1`; decisión 1 aprobada el 14 oct 2026). P16.3 hecho para agentes y skills de biblioteca (corte de alcance pendiente de aprobación del usuario; proveedores y workflows pasan a P16.6); el resto, propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: **P16.2 hecho e incorporado a `main`** (`73991d1`; decisión 1 aprobada el 14 oct 2026). P16.3 hecho para agentes y skills de biblioteca; el usuario aprobó el 15 oct migrar proveedores y workflows también, como P16.6. El resto, propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -89,7 +89,7 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 
 ## 4. P16.3 — Validación con zod
 
-**Alcance (cortado de la propuesta; decisión del usuario pendiente).** Esta entrega cubre los agentes y las skills de biblioteca, los dos tipos que solo existen en la biblioteca. Quedan para P16.6:
+**Alcance (cortado de la propuesta; decisión del usuario del 15 oct).** Esta entrega cubrió los agentes y las skills de biblioteca, los dos tipos que solo existen en la biblioteca. Proveedores y borradores de workflow se migran en P16.6, ya aprobado:
 - Los proveedores de biblioteca. Usan `validateProviderConfig`, que también valida el archivo del operador; migrarlo cambiaría la configuración, que este plan excluye.
 - Los borradores de workflow. Su validador mezcla forma con referencias a ids de comandos y de perfiles, y a rutas del workspace. Necesita su propio corpus, y no es una cuestión de dos fuentes de verdad.
 - Las plantillas siguen sin esquema (decisión abierta de Q3.2).
@@ -203,9 +203,9 @@ Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la
 |---|---|---|---|
 | 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | aprobada el 14 oct; incorporada en `73991d1` | es dependencia nueva |
 | 2 | zod en versión exacta, dentro de `^4.2.0` | aprobada con P16.3 (14 oct), en 4.6.7, la que ya trae el SDK | es dependencia directa nueva; el árbol de producción no cambia |
-| 3 | Dónde viven los casos de regresión | un tipo de documento `cases` en la biblioteca, enlazado por el id de la skill | cambia el modelo de la biblioteca |
-| 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | cambia la máquina de estados de la biblioteca |
-| 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | define qué cuenta como fallo |
+| 3 | Dónde viven los casos de regresión | fixtures versionados bajo `test/`, fuera de la biblioteca de runtime | decisión del usuario: fixtures bajo `test/` |
+| 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | decisión del usuario: admisión manual tras holdout; ver alcance candidate→promote en P16.4 |
+| 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | decisión del usuario: deben pasar todas las repeticiones |
 | 6 | Python como dependencia del operador, solo si gana `gepa` | decidir con el prototipo delante | añade un runtime |
 | 7 | Rollback: vuelve a evaluar, o solo registra | solo registra (CU2) | cambia la garantía que se ofrece |
 

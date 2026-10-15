@@ -1,0 +1,1911 @@
+[
+ {
+  "name": "valid defaults and string non-goal",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "tests",
+      "statement": "The tests pass",
+      "checker": {
+       "kind": "command",
+       "commandId": "unit"
+      },
+      "required": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "id: \"\"",
+  "value": {
+   "id": "",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}"
+   ]
+  }
+ },
+ {
+  "name": "id: \"bad id\"",
+  "value": {
+   "id": "bad id",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}"
+   ]
+  }
+ },
+ {
+  "name": "id: \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "value": {
+   "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}"
+   ]
+  }
+ },
+ {
+  "name": "id: null",
+  "value": {
+   "id": null,
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}"
+   ]
+  }
+ },
+ {
+  "name": "title: \"x\"",
+  "value": {
+   "id": "wf-golden",
+   "title": "x",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string"
+   ]
+  }
+ },
+ {
+  "name": "title: \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "value": {
+   "id": "wf-golden",
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string"
+   ]
+  }
+ },
+ {
+  "name": "title: null",
+  "value": {
+   "id": "wf-golden",
+   "title": null,
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string"
+   ]
+  }
+ },
+ {
+  "name": "description: \"short\"",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "short",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "description must be a 10..4000 char string"
+   ]
+  }
+ },
+ {
+  "name": "description: \"ddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "description must be a 10..4000 char string"
+   ]
+  }
+ },
+ {
+  "name": "description: null",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": null,
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "description must be a 10..4000 char string"
+   ]
+  }
+ },
+ {
+  "name": "goals: null",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": null,
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "goals must be an array of non-empty strings"
+   ]
+  }
+ },
+ {
+  "name": "goals: \"goal\"",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": "goal",
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "goals must be an array of non-empty strings"
+   ]
+  }
+ },
+ {
+  "name": "goals: [\"\",1]",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "",
+    1
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "goals must be an array of non-empty strings"
+   ]
+  }
+ },
+ {
+  "name": "nonGoals: null",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": null,
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "nonGoals must be an array (at most 40)"
+   ]
+  }
+ },
+ {
+  "name": "nonGoals: [\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x",
+    "x"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "nonGoals must be an array (at most 40)"
+   ]
+  }
+ },
+ {
+  "name": "nonGoals: [\"\",2]",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "",
+    2
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "nonGoals[0] must be a non-empty string",
+    "nonGoals[1].statement is required"
+   ]
+  }
+ },
+ {
+  "name": "conditions: null",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": null
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions must be a non-empty array: a workflow with nothing to satisfy can never be DONE"
+   ]
+  }
+ },
+ {
+  "name": "conditions: []",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": []
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions must be a non-empty array: a workflow with nothing to satisfy can never be DONE"
+   ]
+  }
+ },
+ {
+  "name": "conditions: [{\"id\":\"tests\",\"statement\":\"The tests pass\",\"check",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions: at most 30"
+   ]
+  }
+ },
+ {
+  "name": "conditions: \"condition\"",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": "condition"
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions must be a non-empty array: a workflow with nothing to satisfy can never be DONE"
+   ]
+  }
+ },
+ {
+  "name": "budget: null",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "budget": null
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "budget.usd and budget.minutes must be positive numbers"
+   ]
+  }
+ },
+ {
+  "name": "budget: {}",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "budget": {}
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "tests",
+      "statement": "The tests pass",
+      "checker": {
+       "kind": "command",
+       "commandId": "unit"
+      },
+      "required": true
+     }
+    ],
+    "budget": {}
+   }
+  }
+ },
+ {
+  "name": "budget: {\"usd\":0}",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "budget": {
+    "usd": 0
+   }
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "budget.usd and budget.minutes must be positive numbers"
+   ]
+  }
+ },
+ {
+  "name": "budget: {\"minutes\":-1}",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "budget": {
+    "minutes": -1
+   }
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "budget.usd and budget.minutes must be positive numbers"
+   ]
+  }
+ },
+ {
+  "name": "budget: {\"usd\":\"1\"}",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "budget": {
+    "usd": "1"
+   }
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "budget.usd and budget.minutes must be positive numbers"
+   ]
+  }
+ },
+ {
+  "name": "missing id",
+  "value": {
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}"
+   ]
+  }
+ },
+ {
+  "name": "missing title",
+  "value": {
+   "id": "wf-golden",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string"
+   ]
+  }
+ },
+ {
+  "name": "missing description",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "description must be a 10..4000 char string"
+   ]
+  }
+ },
+ {
+  "name": "unknown workflow key ignored",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "extra": {
+    "nested": true
+   }
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "tests",
+      "statement": "The tests pass",
+      "checker": {
+       "kind": "command",
+       "commandId": "unit"
+      },
+      "required": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "workflow unknown key with invalid field",
+  "value": {
+   "id": "wf-golden",
+   "title": "x",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ],
+   "extra": true
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string"
+   ]
+  }
+ },
+ {
+  "name": "checker command unknown id",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "missing"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.commandId \"missing\" is not an allowlisted command (unit)"
+   ]
+  }
+ },
+ {
+  "name": "checker command missing id",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.commandId \"undefined\" is not an allowlisted command (unit)"
+   ]
+  }
+ },
+ {
+  "name": "checker citations defaults min",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "cites",
+     "statement": "Citations exist",
+     "checker": {
+      "kind": "citations",
+      "file": "README.md"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "cites",
+      "statement": "Citations exist",
+      "checker": {
+       "kind": "citations",
+       "file": "README.md",
+       "min": 1
+      },
+      "required": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "checker citations rejects traversal",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "cites",
+     "statement": "Citations exist",
+     "checker": {
+      "kind": "citations",
+      "file": "../../outside",
+      "min": 1
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.file \"../../outside\" rejected: OUTSIDE_WORKSPACE"
+   ]
+  }
+ },
+ {
+  "name": "checker diff requires paths",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "diff",
+     "statement": "Change exists",
+     "checker": {
+      "kind": "diff"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.diff needs at least one require or forbid pattern"
+   ]
+  }
+ },
+ {
+  "name": "checker file bad assertion",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "file",
+     "statement": "File exists",
+     "checker": {
+      "kind": "file",
+      "path": "README.md",
+      "assert": "contains"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.assert must be \"exists\", \"absent\" or {contains}"
+   ]
+  }
+ },
+ {
+  "name": "checker approval short prompt",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "approval",
+     "statement": "Approval exists",
+     "checker": {
+      "kind": "approval",
+      "prompt": "ok"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.prompt must be a 3..500 char string"
+   ]
+  }
+ },
+ {
+  "name": "checker review unknown profile",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "review",
+     "statement": "Review",
+     "required": false,
+     "checker": {
+      "kind": "review",
+      "profile": "ghost",
+      "rubric": "review it"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.profile \"ghost\" is not a known profile"
+   ]
+  }
+ },
+ {
+  "name": "required review needs secondary evidence",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "review",
+     "statement": "Review",
+     "checker": {
+      "kind": "review",
+      "profile": "adv",
+      "rubric": "review it"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0]: a \"review\" is an agent's judgement (secondary evidence) and cannot make a REQUIRED condition pass by itself: set required=false, or record secondaryAccepted {actor, reason}"
+   ]
+  }
+ },
+ {
+  "name": "required review secondary evidence accepted",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "review",
+     "statement": "Review",
+     "checker": {
+      "kind": "review",
+      "profile": "adv",
+      "rubric": "review it"
+     },
+     "secondaryAccepted": {
+      "actor": "operator",
+      "reason": "independent evidence exists"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "review",
+      "statement": "Review",
+      "checker": {
+       "kind": "review",
+       "profile": "adv",
+       "rubric": "review it"
+      },
+      "required": true,
+      "secondaryAccepted": {
+       "actor": "operator",
+       "reason": "independent evidence exists"
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "duplicate condition ids",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    },
+    {
+     "id": "tests",
+     "statement": "Also pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[1].id \"tests\" is duplicated"
+   ]
+  }
+ },
+ {
+  "name": "only optional condition",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "info",
+     "statement": "Informational",
+     "required": false,
+     "checker": {
+      "kind": "file",
+      "path": "README.md",
+      "assert": "exists"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "at least one condition must be required and not waived: otherwise DONE would mean nothing"
+   ]
+  }
+ },
+ {
+  "name": "waived required condition",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     },
+     "waivedBy": {
+      "actor": "operator",
+      "reason": "not applicable"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "at least one condition must be required and not waived: otherwise DONE would mean nothing"
+   ]
+  }
+ },
+ {
+  "name": "bad non-goal guard kind",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    {
+     "statement": "No docs",
+     "guard": {
+      "kind": "approval",
+      "prompt": "keep docs"
+     }
+    }
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "nonGoals[0].guard.checker.kind \"approval\" is not allowed here (one of diff, file, command)"
+   ]
+  }
+ },
+ {
+  "name": "non-goal guard invalid path",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    {
+     "statement": "No traversal",
+     "guard": {
+      "kind": "file",
+      "path": "../outside",
+      "assert": "absent"
+     }
+    }
+   ],
+   "conditions": [
+    {
+     "id": "tests",
+     "statement": "The tests pass",
+     "checker": {
+      "kind": "command",
+      "commandId": "unit"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "nonGoals[0].guard.checker.path \"../outside\" rejected: OUTSIDE_WORKSPACE"
+   ]
+  }
+ },
+ {
+  "name": "effect checker valid params",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "effect",
+     "statement": "Effect done",
+     "checker": {
+      "kind": "effect",
+      "effectKind": "git.push",
+      "params": {
+       "remote": "origin"
+      }
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": true,
+   "workflow": {
+    "id": "wf-golden",
+    "title": "A useful workflow",
+    "description": "A long enough workflow description for validation.",
+    "goals": [
+     "deliver the change"
+    ],
+    "nonGoals": [
+     {
+      "statement": "leave unrelated files alone"
+     }
+    ],
+    "conditions": [
+     {
+      "id": "effect",
+      "statement": "Effect done",
+      "checker": {
+       "kind": "effect",
+       "effectKind": "git.push",
+       "params": {
+        "remote": "origin"
+       }
+      },
+      "required": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "effect checker invalid kind",
+  "value": {
+   "id": "wf-golden",
+   "title": "A useful workflow",
+   "description": "A long enough workflow description for validation.",
+   "goals": [
+    "deliver the change"
+   ],
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "effect",
+     "statement": "Effect done",
+     "checker": {
+      "kind": "effect",
+      "effectKind": "Git Push",
+      "params": {}
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "conditions[0].checker.effectKind must be an effect kind such as git.push"
+   ]
+  }
+ },
+ {
+  "name": "multiple shape and semantic failures preserve order",
+  "value": {
+   "id": "wf-golden",
+   "title": "x",
+   "description": "A long enough workflow description for validation.",
+   "goals": "bad",
+   "nonGoals": [
+    "leave unrelated files alone"
+   ],
+   "conditions": [
+    {
+     "id": "bad id",
+     "statement": "x",
+     "checker": {
+      "kind": "command",
+      "commandId": "missing"
+     }
+    }
+   ]
+  },
+  "output": {
+   "ok": false,
+   "errors": [
+    "title must be a 3..160 char string",
+    "goals must be an array of non-empty strings",
+    "conditions[0].id must match /^[a-z0-9][a-z0-9_-]{0,40}$/",
+    "conditions[0].statement must be a 3..500 char string",
+    "conditions[0].checker.commandId \"missing\" is not an allowlisted command (unit)"
+   ]
+  }
+ }
+]
