@@ -11,7 +11,7 @@ test("every view opens directly, becomes the current page, and logs no error", a
   const views = await page.locator('nav[aria-label="views"] button[data-view]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset["view"] ?? ""));
   expect(views.length).toBeGreaterThan(3);
   for (const view of views) {
-    // A fresh document for each view: a hash change inside one document would also trigger the known defect below.
+    // A fresh document for each view, so each one is checked from a cold start.
     await page.goto("about:blank");
     await page.goto(`/#${view}`);
     await expect(page.locator(`nav[aria-label="views"] button[data-view="${view}"]`)).toHaveAttribute("aria-current", "page");
@@ -19,11 +19,9 @@ test("every view opens directly, becomes the current page, and logs no error", a
   expect(errors).toEqual([]);
 });
 
-// Known defect found by this suite: leaving the chat view for the workflows view unmounts the whole application
-// ("destroy_ is not a function" in development, "l is not a function" in the production build). Reproduced on
-// 15 oct 2026; the cause is still open. Remove test.fail when it is fixed.
+// Regression for a defect this suite found: the chat view's scroll effect returned a value React could not clean up,
+// so leaving the chat for another view unmounted the whole application. The effect now returns nothing.
 test("chat then workflows: the application keeps its navigation", async ({ page }) => {
-  test.fail(true, "known defect: leaving chat for workflows unmounts the application (see test/ui/views.spec.ts)");
   await page.goto("/");
   await page.locator('nav[aria-label="views"] button[data-view="chat"]').click();
   await page.locator('nav[aria-label="views"] button[data-view="workflows"]').click();

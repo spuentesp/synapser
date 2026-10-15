@@ -35,7 +35,7 @@ export function WhyView({ runId, tick }: { runId: string; tick: number }) {
   return (
     <div className="grid gap-4">
       <Select value={pick ?? ''} onValueChange={(v) => setPick(v || null)}>
-        <SelectTrigger className="w-full max-w-xl">
+        <SelectTrigger className="w-full max-w-xl" aria-label={t('why')}>
           <SelectValue placeholder={t('pickAction')} />
         </SelectTrigger>
         <SelectContent><SelectGroup>

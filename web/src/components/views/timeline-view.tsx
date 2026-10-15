@@ -29,7 +29,7 @@ export function TimelineView({ runId, tick, upTo }: { runId: string; tick: numbe
       <div className="flex flex-wrap items-center gap-2">
         <Input className="w-64" placeholder={t('filter')} value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={kind} onValueChange={(v) => setKind(v ?? '__all')}>
-          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-44" aria-label={t('kind')}><SelectValue /></SelectTrigger>
           <SelectContent><SelectGroup>
             <SelectItem value="__all">{t('all')}</SelectItem>
             {kinds.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}

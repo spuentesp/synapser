@@ -17,7 +17,9 @@ export function ChatView({ session, onOpen }: { session: boolean; onOpen: (workf
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const end = useRef<HTMLDivElement>(null)
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [msgs, busy])
+  useEffect(() => {
+    if (end.current) end.current.scrollIntoView({ block: 'end' })
+  }, [msgs, busy])
 
   const submit = async () => {
     const q = text.trim()

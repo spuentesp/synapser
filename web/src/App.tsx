@@ -115,7 +115,7 @@ export default function App() {
             <div className="grid gap-1.5 text-xs text-muted-foreground">
               {t('run')}
               <Select value={L.runId ?? ''} onValueChange={(v) => v && L.setRunId(v)}>
-                <SelectTrigger className="w-full"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectTrigger className="w-full" aria-label={t('run')}><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent><SelectGroup>{L.runs.map((r) => <SelectItem key={r.id} value={r.id}>{r.id}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </div>
