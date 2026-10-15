@@ -31,8 +31,8 @@ await checkBinary();
 run("typecheck", "npx", ["tsc", "--noEmit"]);
 // Plan 18 H12.2 and H12.3: layer rules and cycles.
 run("architecture rules", "npx", ["depcruise", "src", "web/src", "test", "--config", ".dependency-cruiser.cjs"]);
-// Plan 18 H12.4: duplicated blocks in src/ stay at the agreed threshold.
-run("duplication threshold", "node", ["scripts/duplication-report.ts"]);
+// Plan 18 H12.4: report duplicated blocks; no blocking threshold has been agreed.
+run("duplication report (informational)", "node", ["scripts/duplication-report.ts"]);
 if (existsSync(new URL("test/contract", root))) {
   run("contract tests", "node", ["--test", "--test-reporter=spec", "test/contract/**/*.test.ts"]);
 }

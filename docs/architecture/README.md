@@ -45,7 +45,7 @@ El estado actual: cero violaciones.
 
 ## 3. Duplicación (H12.4)
 
-`npm run` con `scripts/duplication-report.ts`: bloques de 12 líneas normalizadas repetidos en `src/`: **0**. Con ventana de 4 líneas hay 85 bloques repetidos; son patrones cortos, no duplicación de lógica. Umbral fijado (H12.4): **0 bloques de 12 líneas**; `npm run verify` falla por encima de ese número (paso "duplication threshold"). El umbral es el valor medido, no una cuota: los bloques de 4 líneas no cuentan.
+`scripts/duplication-report.ts` informa bloques repetidos de 12 líneas normalizadas en `src/`; los datos crudos quedan en `evidence/architecture/duplication.txt` (ignorado por git). No hay umbral acordado, por lo que el informe es informativo y no bloquea `verify`.
 
 ## 4. Hallazgos (H12.5)
 
