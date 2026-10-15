@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node --test test/journal/journal.test.ts test/journal/lock-and-artifacts.test.ts test/journal/injection-record.test.ts test/journal/lock-order.test.ts"
+  },
+  "mutate": [
+    "src/journal/journal.ts"
+  ],
+  "coverageAnalysis": "off",
+  "concurrency": 2,
+  "timeoutMS": 20000,
+  "tempDirName": ".stryker-tmp-core",
+  "cleanTempDir": true,
+  "reporters": [
+    "clear-text",
+    "json"
+  ],
+  "jsonReporter": {
+    "fileName": "evidence/mutation/core.json"
+  },
+  "thresholds": {
+    "high": 98,
+    "low": 95,
+    "break": null
+  },
+  "ignorePatterns": [
+    "evidence/**",
+    ".stryker-tmp*/**"
+  ]
+}
