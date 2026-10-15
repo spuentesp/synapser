@@ -161,18 +161,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: f5cc434 · prueba: `test/api/home.test.ts` (instalación nueva sin actividad; un borrador cuenta como activo;
   una ejecución de agente con costo registrado suma en USD y una sin costo se cuenta aparte, nunca como cero; el planificador suma y el chat no) y navegador real: captura
   `home.png` en `evidence/`. Suite completa.
-- [x] Q4.2 Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
-  Costo, Coordinación, Aprobaciones, Integridad). commit: f5cc434 · prueba: navegador real en un directorio de estado
-  vacío: las vistas por corrida dicen qué hacer y ofrecen el diseñador (`empty-swarm.png` en `evidence/`). Al probar
-  se encontró que sin corridas las vistas quedaban en esqueletos para siempre; corregido en el estado de carga del
-  hook. Suite completa.
-- [x] Q4.3 La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
-  commit: f5cc434 · prueba: navegador real: al elegir un borrador en Workflows, el selector de corrida pasa a la corrida
-  de ese workflow (verificado con dos borradores). Suite completa.
-- [x] Q4.4 Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP). commit: e9c8fb9 ·
-  prueba: `test/api/workflow-notes.test.ts` (las intervenciones propuestas se listan con su estado y su razón; un
-  workflow sin efectos lista ninguno; un workflow desconocido se rechaza) y navegador real: el detalle muestra ambas
-  secciones con sus estados vacíos y la nota de solo lectura (`workflow-notes.png` en `evidence/`). Suite completa.
+- [~] Q4.2 quién: GPT-6 Codex · desde: 2026-10-15. Estados vacíos que dicen qué hacer y enlazan al diseñador (Enjambre, Línea de tiempo, Por qué,
+  Costo, Coordinación, Aprobaciones, Integridad). Las siete vistas y el CTA directo se verificarán en Chromium.
+- [~] Q4.3 quién: GPT-6 Codex · desde: 2026-10-15. La corrida del workflow seleccionado es el contexto por defecto de las vistas por corrida.
+- [~] Q4.4 quién: GPT-6 Codex · desde: 2026-10-15. Vista de intervenciones del asesor y de efectos (hoy solo existen en CLI y MCP); verificación con datos en Chromium.
 
 ### P15 — Amenazas de la biblioteca y de las claves (plan)
 

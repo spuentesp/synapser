@@ -20,7 +20,7 @@ interface Home {
 
 const STATE_TONE: Record<string, string> = { RUNNING: 'text-status-running', AWAITING_START: 'text-status-waiting', PLANNING: 'text-status-running', VERIFYING: 'text-status-running' }
 
-export function HomeView({ onNavigate, onOpenRun }: { onNavigate: (view: 'workflows' | 'agents' | 'library') => void; onOpenRun: (runId: string) => void }) {
+export function HomeView({ onNavigate, onCreateWorkflow, onOpenRun }: { onNavigate: (view: 'workflows' | 'agents' | 'library') => void; onCreateWorkflow: () => void; onOpenRun: (runId: string) => void }) {
   const { t } = useI18n()
   const [home, setHome] = useState<Home | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -47,7 +47,7 @@ export function HomeView({ onNavigate, onOpenRun }: { onNavigate: (view: 'workfl
           {home.workflows.active.length === 0 ? (
             <Empty>
               <span className="block">{t('homeNoneActive')}</span>
-              <Button size="sm" variant="outline" className="mt-2" onClick={() => onNavigate('workflows')}>{t('homeCreate')}</Button>
+              <Button size="sm" variant="outline" className="mt-2" onClick={onCreateWorkflow}>{t('homeCreate')}</Button>
             </Empty>
           ) : (
             <ul className="grid gap-2">

@@ -106,6 +106,8 @@ vista Costo, y cuenta aparte las ejecuciones sin costo registrado; cuando no hay
 (antes mostraban esqueletos para siempre); y seleccionar un workflow fija su corrida como contexto. Las
 intervenciones del asesor y los efectos solicitados se leen en el detalle del workflow (`GET …/interventions`,
 `GET …/effects`), solo lectura: las decisiones se toman en Aprobaciones.
+- **CTA vacío** (Q4.2): las siete vistas sin corrida abren directamente el diseñador de workflow; no dejan al operador
+  en una lista intermedia que exige otro clic.
 
 ## 7. Invariantes (con verificador)
 
@@ -130,6 +132,9 @@ intervenciones del asesor y los efectos solicitados se leen en el detalle del wo
   bloquea la comprobación y el guardado, y borrar esa fila borra también su compuerta.
 - **W2** El diseñador de agente solo edita campos admitidos por el esquema de cada modo; el perfil base, controles
   de CLI y asignaciones de skills que decide el archivo se presentan como límites de solo lectura.
+- **W3** Las siete vistas sin corrida explican la ausencia de contexto y su CTA abre el diseñador de workflow.
+- **W4** Las notas del workflow muestran trigger, motivo, task y estado de cada intervención, y kind, estado, regla y
+  resumen de cada efecto; son solo lectura y no presentan decisiones de aprobación.
 
 Verificación y falsación de la inyección:
 
@@ -150,6 +155,12 @@ Verificación y falsación de la inyección:
   en modo solo lectura. `test/api/library.test.ts` verifica que la ruta ofrece los campos efectivos seguros y que
   `test/library/agent-rules.test.ts` rechaza controles reservados en documentos. Se falsa si el diseñador permite
   editar una clave fuera del esquema o no muestra un valor que fija el archivo.
+- W3 se verifica en Chromium con `GET /api/runs` vacío, recorriendo Enjambre, Línea de tiempo, Por qué, Costo,
+  Coordinación, Aprobaciones e Integridad; desde cada una, el CTA debe abrir el formulario nuevo. Se falsa quitando
+  el mensaje, dejando un esqueleto o navegando solo a la lista.
+- W4 se verifica en Chromium contra el API real con una intervención y un efecto `PENDING` sembrados en un fixture
+  determinista; se afirma el contenido y la ausencia de botones de decisión. Se falsa ocultando trigger/motivo o
+  mostrando un control que apruebe/deniegue desde las notas.
 - L4 usa el journal `_server` como autoridad: cada versión de biblioteca se guarda primero como blob por
   digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
   almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes

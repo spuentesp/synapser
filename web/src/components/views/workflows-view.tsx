@@ -18,7 +18,7 @@ interface Detail {
 }
 const STATE_TONE: Record<string, string> = { DONE: 'text-status-done', FAILED: 'text-destructive', CANCELLED: 'text-muted-foreground', RUNNING: 'text-status-running', AWAITING_START: 'text-status-waiting' }
 
-export function WorkflowsView({ session, tick, selected, onSelect }: { session: boolean; tick: number; selected: string | null; onSelect: (id: string | null) => void }) {
+export function WorkflowsView({ session, tick, selected, onSelect, createRequest, onCreateRequestHandled }: { session: boolean; tick: number; selected: string | null; onSelect: (id: string | null) => void; createRequest: number; onCreateRequestHandled: () => void }) {
   const { t } = useI18n()
   const [items, setItems] = useState<Item[]>([])
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -41,6 +41,12 @@ export function WorkflowsView({ session, tick, selected, onSelect }: { session: 
     }
   }, [selected])
   useEffect(() => { void load() }, [load, tick, pollTick])
+  useEffect(() => {
+    if (createRequest > 0) {
+      setDesign({ editing: null })
+      onCreateRequestHandled()
+    }
+  }, [createRequest, onCreateRequestHandled])
 
   const call = async (method: string, path: string, body?: unknown) => {
     if (!session) return

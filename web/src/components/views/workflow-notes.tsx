@@ -59,6 +59,7 @@ export function WorkflowNotes({ id }: { id: string }) {
                 <span className="font-medium">{r.task}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{r.state}</span>
               </div>
+              <p className="text-xs text-muted-foreground">{r.trigger}</p>
               <p className="mt-1 text-xs text-muted-foreground">{r.reason}</p>
             </li>
           ))}

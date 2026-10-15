@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, LayoutDashboard, Layers, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,7 @@ export default function App() {
   })
   const [view, setView] = useState<View>(readHash)
   const [wfId, setWfId] = useState<string | null>(null)
+  const [createRequest, setCreateRequest] = useState(0)
   const L = useLedger()
   const t = useMemo(() => makeT(lang), [lang])
   const i18n = useMemo(() => ({ lang, t, setLang: (l: Lang) => (localStorage.setItem('lang', l), setLang(l)) }), [lang, t])
@@ -67,6 +68,11 @@ export default function App() {
     history.replaceState(null, '', `#${v}`)
     setView(v)
   }
+  const createWorkflow = () => {
+    setCreateRequest((n) => n + 1)
+    go('workflows')
+  }
+  const consumeCreateRequest = useCallback(() => setCreateRequest(0), [])
   // the run of a selected workflow is the default context of the run views (plan 14 Q4.3)
   const openWorkflow = (id: string | null) => {
     setWfId(id)
@@ -83,13 +89,13 @@ export default function App() {
   if (GLOBAL.includes(view)) {
     body = {
       chat: <ChatView session={L.session} onOpen={(id) => { openWorkflow(id); go('workflows') }} />,
-      workflows: <WorkflowsView session={L.session} tick={L.tick} selected={wfId} onSelect={openWorkflow} />,
+      workflows: <WorkflowsView session={L.session} tick={L.tick} selected={wfId} onSelect={openWorkflow} createRequest={createRequest} onCreateRequestHandled={consumeCreateRequest} />,
       agents: <AgentsView session={L.session} />,
       library: <LibraryView session={L.session} />,
-      home: <HomeView onNavigate={(v) => go(v)} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
+      home: <HomeView onNavigate={(v) => go(v)} onCreateWorkflow={createWorkflow} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
     }[view as 'home' | 'chat' | 'workflows' | 'agents' | 'library']
   } else if (L.error && !run) body = <ErrorNote code={L.error} />
-  else if (!run || !L.state || !L.runId) body = !L.loaded ? <Loading /> : <Empty><span className="block">{t('noRunsHint')}</span><Button size="sm" variant="outline" className="mt-2" onClick={() => go('workflows')}>{t('homeCreate')}</Button></Empty>
+  else if (!run || !L.state || !L.runId) body = !L.loaded ? <Loading /> : <Empty><span className="block">{t('noRunsHint')}</span><Button size="sm" variant="outline" className="mt-2" onClick={createWorkflow}>{t('homeCreate')}</Button></Empty>
   else {
     const id = L.runId
     body = {

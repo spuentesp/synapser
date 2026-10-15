@@ -18,10 +18,18 @@ test("a workflow created on the server is listed and its detail opens", async ({
     return { status: r.status, text: await r.text() };
   }, doc);
   expect(created.status, created.text).toBe(200);
+  const id = JSON.parse(created.text).id as string;
+  const second = await page.evaluate(async (body) => {
+    const r = await fetch("/api/workflows", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: r.status, text: await r.text() };
+  }, { ...doc, title: "Second workflow context" });
+  expect(second.status, second.text).toBe(200);
   await page.goto("/#workflows");
   await expect(page.getByText(TITLE).first()).toBeVisible();
+  await expect(page.getByText("Second workflow context").first()).toBeVisible();
   await page.getByText(TITLE).first().click();
   await expect(page.getByText("app/schema.js was changed").first()).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Run" })).toContainText(id);
 
   await page.getByRole("button", { name: "Edit draft" }).click();
   await page.getByLabel("Non-goal statement").fill("do not modify the README either");
@@ -32,7 +40,6 @@ test("a workflow created on the server is listed and its detail opens", async ({
   await guard.fill(validGuard);
   await expect(page.getByLabel("JSON preview")).toContainText('"forbid": [\n        "README.md"');
   await page.getByRole("button", { name: "Save" }).click();
-  const id = JSON.parse(created.text).id as string;
   let updatedNonGoals: unknown;
   await expect.poll(async () => {
     const updated = await page.evaluate(async (workflowId) => {
