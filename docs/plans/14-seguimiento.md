@@ -144,16 +144,17 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   motivo: el usuario respondió «sí, ahora» (14 oct). Las skills se conectan con Q5.4 cuando esté, porque el archivo las asigna (D6).
   commit: 30eddf8 · prueba: `test/api/library.test.ts` (`GET /api/library/bases`: perfiles base con su estado en el archivo y los campos que decide el archivo; falsación: sin la ruta falla la prueba). Verificado en navegador, en el sandbox, con capturas en `evidence/` (no versionadas): crear un agente, etiquetas con comas, un guardado rechazado con su motivo, y el cambio entre «extiende un perfil» y «agente nativo propio» con la lista de perfiles y sus estados. Build de la web con `tsc -b`. Falta el campo de skills, que llega con Q5.4.
 - [~] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas.
-  quién: GPT-6 Codex · desde: 2026-10-15. Las decisiones ya están contestadas y se llegó al final del plan como pidió el usuario; se implementa con esos límites y el estado de red declarado.
+  quién: GPT-6 Codex · desde: 2026-10-15. Implementación y verificación listas; falta registrar el commit final.
+  prueba: `test/agents/trial.test.ts` ejecuta un proceso real en la copia temporal usando el Zoanthrope fijado, verifica que el workspace original no cambie y que el ledger guarde solo el informe y la salida como artefacto; `test/api/agent-trial.test.ts` verifica token, mismo origen, payload y rechazo; `npm run test:ui -- --grep "agent trial sends"` en Chromium comprueba formulario y resultado. El POST de navegador usa respuesta controlada; el proceso/runner y el Zoo se prueban aparte contra los binarios reales. Evidencia: `evidence/agent-trial.png` (gitignored).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
   sin token no sale ninguna petición; destinos desconocidos o que no son proveedores se rechazan; una clave ausente
   se informa sin llamar a nadie) y navegador real con Chromium headless: crear y guardar un proveedor, probarlo
   contra un servidor local falso (la clave solo aparece como nombre de variable) y ver los problemas de un documento
   inválido (capturas `library-test.png` y `library-invalid.png` en `evidence/`). Suite completa.
-- [!] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
-  motivo: lo construido (Q3.1, Q3.2 y Q3.5) ya está verificado en navegador con capturas en `evidence/`; "todo lo
-  anterior" incluye Q3.4, bloqueada por decisiones abiertas, y Q3.3 ya está hecha y verificada en el sandbox, así que solo falta Q3.4.
+- [~] Q3.6 Verificación en navegador real de todo lo anterior (capturas en `evidence/`, no versionadas).
+  quién: GPT-6 Codex · desde: 2026-10-15. Verificación de Q3.4 terminada; falta registrar el commit final.
+  prueba: navegador Chromium real para Q3.4; Q3.1, Q3.2, Q3.3 y Q3.5 ya tienen verificaciones y capturas documentadas arriba. Suite completa y build de web.
 
 ### Q4 — Inicio y pantallas sin datos
 
@@ -266,7 +267,7 @@ Ronda 4 (14 oct): «llévalo a plan. Me gusta el spike, validación, curación y
 
 Ronda 5 (14 oct): «ok» a incorporar el SDK (decisión 1 del plan 16) y a seguir con P16.3, con zod como dependencia directa en su versión exacta (decisión 2 del plan 16; el árbol de producción no cambia). Plan 16 §3 queda con su resultado.
 
-Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (diseño al final). Corte de alcance de P16.3 pendiente de aprobación del usuario: proveedores y workflows pasan a P16.6. C.3 sin hacer, por pedido del usuario. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
+Abiertas: licencia (decidir más tarde). Bloqueada: P15.9 (D5). Corte de alcance de P16.3 pendiente de aprobación del usuario: proveedores y workflows pasan a P16.6. C.3 sin hacer, por pedido del usuario. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
 
 ## Bitácora de traspaso
 
@@ -303,6 +304,7 @@ Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (di
 | 2026-10-14 | Claude Haiku 5.5 | Resultados medidos quitados de `06 §14` y `06 §15`; `05` no tenía. D5 investigada en el plan 15, sección 10 (P15.8). Orden acordado: Q3.3, luego Q5.4, luego seguridad. |
 | 2026-10-14 | Claude Haiku 5.5 | Q3.3: diseñador de agentes en la biblioteca, sobre el mismo documento que el editor JSON; ruta `GET /api/library/bases`; verificado en navegador y con falsación de la ruta. Falta el campo de skills (Q5.4). |
 | 2026-10-14 | Claude Haiku 5.5 | Q5.4: skills de biblioteca en las corridas. El archivo asigna (`agentSkills`), la instantánea aporta el contenido con su digest, el bucle nativo las antepone y la corrida guarda id, digest y mecanismo. Camino CLI conectado, pendiente de prueba extremo a extremo. |
+| 2026-10-15 | GPT-6 Codex | Q3.4/Q3.6 reclamadas; prueba acotada por agente sobre copia temporal, endpoint protegido, informe auditable y UI verificada en Chromium. Zoanthrope 0.1.3 compilado temporalmente desde el commit fijado y verificado por SHA-256. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.4 y P15.7: el token sale de la cookie HttpOnly; modo de confianza configurable, con código de un solo uso en modo adversario. Entorno: el PATH encontraba el wrapper npm de zoanthrope 0.1.6 (el lock pide el binario de cargo, que ya no está); reconstruido el commit fijado 37ecffa en el scratchpad, con sha256 igual al del lock, y las pruebas se corren con `ZOANTHROPE_BIN`. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.5: destinos de proveedores de biblioteca con `undici` 8.11.2 (dependencia aprobada) y búsqueda guardada; loopback sigue permitido para modelos locales. |
 | 2026-10-14 | Claude Haiku 5.5 | P15.9 (prueba de concepto de D5): `pasta` no separa un puerto del loopback del host; `bwrap --unshare-net` con proxy en socket Unix aísla para HTTP. Bloqueada: el mecanismo aprobado no sirve tal cual. |

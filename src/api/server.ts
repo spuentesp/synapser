@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { coordination, costBy, exportLedger, orchestrationCost, timeline, verify, waste, whoChanged, why } from "../audit/queries.ts";
 import { swarmState } from "../audit/state.ts";
 import type { ChatService } from "../chat/chat.ts";
+import type { AgentTrialInput, AgentTrialResult } from "../agents/trial.ts";
 import { Journal } from "../journal/journal.ts";
 import { libraryRoute, reviewingWorkflows, withLibraryProviders } from "./library.ts";
 import { fail, json, OPERATOR, readBody } from "./http.ts";
@@ -48,6 +49,8 @@ export interface ApiControl {
   chat?: ChatService;
   catalog?: () => unknown;
   config?: () => unknown;
+  /** Runs one configured agent on a bounded disposable copy (plan 14 Q3.4). */
+  trialAgent?: (profileId: string, input: AgentTrialInput) => Promise<AgentTrialResult>;
   /** The operator library (plan 14 Q2.6). Absent ⇒ /api/library answers NOT_FOUND. */
   library?: LibraryStore;
   /** What the operator's file allows library documents (plan 15): the configuration this process loaded at start. Absent ⇒ nothing. */
@@ -219,6 +222,18 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (id !== undefined && !RUN_ID.test(id)) return fail(res, 400, "BAD_ID");
     const m = c.manager;
     if (top === "catalog" && method === "GET") return json(res, 200, { agents: c.catalog?.() ?? [] });
+    if (top === "agents" && id && action === "trial" && method === "POST") {
+      if (!c.trialAgent) return fail(res, 404, "TRIAL_UNAVAILABLE");
+      const body = await readBody(req, res);
+      if (body === undefined) return;
+      const input = body as Partial<AgentTrialInput>;
+      if (typeof input.task !== "string" || !Number.isInteger(input.timeLimitSeconds) || (input.maxBudgetUsd !== undefined && typeof input.maxBudgetUsd !== "number")) return fail(res, 400, "INVALID_TRIAL_INPUT");
+      try {
+        return json(res, 200, await c.trialAgent(id, input as AgentTrialInput));
+      } catch (error) {
+        return fail(res, 400, "TRIAL_REFUSED", String((error as Error).message ?? error).slice(0, 400));
+      }
+    }
     if (top === "config" && method === "GET") return json(res, 200, c.config?.() ?? {});
     // the designer's live check: the same validator as create, nothing is written (plan 14 Q3.1)
     if (top === "designer" && id === "check" && method === "POST") {
@@ -332,7 +347,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       return void res.end(readFileSync(file));
     }
 
-    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer|home)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer|home|agents)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");

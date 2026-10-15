@@ -84,7 +84,7 @@ export default function App() {
     body = {
       chat: <ChatView session={L.session} onOpen={(id) => { openWorkflow(id); go('workflows') }} />,
       workflows: <WorkflowsView session={L.session} tick={L.tick} selected={wfId} onSelect={openWorkflow} />,
-      agents: <AgentsView />,
+      agents: <AgentsView session={L.session} />,
       library: <LibraryView session={L.session} />,
       home: <HomeView onNavigate={(v) => go(v)} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
     }[view as 'home' | 'chat' | 'workflows' | 'agents' | 'library']

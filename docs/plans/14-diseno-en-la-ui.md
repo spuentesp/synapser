@@ -113,6 +113,14 @@ intervenciones del asesor y los efectos solicitados se leen en el detalle del wo
   que el archivo nombra reemplaza su asignación por defecto por completo: proveedor y modelo son obligatorios y
   no hereda fallbacks de otro proveedor. Los roles que no nombra conservan su asignación y se validan igual
   contra los proveedores finales. Un documento inválido se rechaza entero.
+- **T1** Una prueba de agente solo puede modificar una copia temporal del workspace. La copia omite estado,
+  VCS y dependencias instaladas; su tamaño y número de archivos tienen límites; siempre se elimina al terminar.
+- **T2** Una prueba tiene límite temporal y no amplía capacidades ni presupuestos del perfil. El tope en dólares
+  solo se admite para adaptadores que lo soportan y no puede superar el del perfil. La respuesta declara
+  `networkIsolated: false` mientras los CLI no tengan aislamiento de red.
+- **T3** Cada prueba deja un evento `agent_trial` en `_server`, ligado al digest del perfil y de la copia, los
+  límites, resultado, skills y rutas cambiadas. El texto de salida se guarda como artefacto; el prompt no se copia
+  al evento.
 
 Verificación y falsación de la inyección:
 
@@ -141,6 +149,15 @@ Verificación y falsación de la inyección:
   través de `createRuntime` llega al proveedor configurado, con su modelo, su clave y su tarifa declarada. Se
   falsa con un runtime que ignora los roles configurados (debe fallar la prueba de extremo a extremo) y con un
   cargador que omite la validación de asignaciones por defecto (debe fallar la prueba de redefinición).
+- T1 se verifica comparando el digest del workspace original antes y después, comprobando que el runner recibe
+  solo el destino temporal y que el directorio se elimina tanto tras éxito como tras error; se falsa inyectando
+  el workspace real al ejecutor o saltándose la limpieza.
+- T2 se verifica para cada adaptador: la duración efectiva no supera el límite de la petición ni el del perfil,
+  los topes en dólares rechazados no inician el proceso y la respuesta advierte que la red de CLI no está aislada.
+  Se falsa quitando la cota, elevando el presupuesto o afirmando aislamiento.
+- T3 se verifica con el ledger `_server`: cada invocación tiene evento con los digests y límites, la salida se
+  resuelve desde artefacto y no contiene prompt ni valores de credenciales. Se falsa quitando el evento, cambiando
+  el digest de perfil/copia o guardando el prompt en el evento.
 - L3 se verifica en `test/library/freeze.test.ts` y `test/workflow/library-freeze.test.ts`: la instantánea se
   copia a los artefactos de la corrida y se lee por digest, así que sobrevive sin los artefactos de `_server`;
   la primera instantánea de una corrida gana; y un motor que edita la biblioteca en mitad de la corrida sigue

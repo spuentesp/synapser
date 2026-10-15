@@ -13,6 +13,8 @@ import { ProductionEngine } from "../workflow/engine.ts";
 import { WorkflowManager } from "../workflow/manager.ts";
 import { LibraryStore } from "../library/store.ts";
 import { liveSource, resolveLibrary } from "../library/resolve.ts";
+import { runAgentTrial, type AgentTrialInput, type AgentTrialResult } from "../agents/trial.ts";
+import { adapterOf } from "../agents/profile.ts";
 
 
 export interface Runtime {
@@ -21,6 +23,7 @@ export interface Runtime {
   serverJournal: Journal;
   library: LibraryStore;
   chat: ChatService;
+  trialAgent(profileId: string, input: AgentTrialInput): Promise<AgentTrialResult>;
   close(): Promise<void>;
 }
 
@@ -78,12 +81,18 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
       return { assessment: out.assessment, proposals: out.records.map((r) => ({ id: r.id, type: r.type, task: r.task, state: r.state, why: (r.body as { why?: string }).why ?? "" })) };
     },
   });
+  const catalog = () => {
+    const profiles = liveProfiles();
+    const adapters = new Map(profiles.map((profile) => [profile.id, adapterOf(profile)]));
+    return buildCatalog(profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }).map((card) => ({ ...card, adapter: adapters.get(card.id) ?? "generic-cli" }));
+  };
   return {
     manager,
     serverJournal,
     library,
     chat,
-    catalog: () => buildCatalog(liveProfiles(), [], { knownUsdPerRun: cfg.knownUsdPerRun }),
+    catalog,
+    trialAgent: (profileId, input) => runAgentTrial({ cfg, library, serverJournal, profileId, input }),
     close: async () => {
       await manager.close();
       serverJournal.close();
