@@ -84,11 +84,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   cada cambio es un evento en el ledger del servidor. *Invariante:* L4. commit: f65802a (reapertura corregida en b5312dd) · prueba: cuatro
   colecciones versionadas por digest, cambios y borrados encadenados con actor en `_server`, idempotencia,
   rechazo de identidades inseguras y reparación de una proyección adulterada; `test/library/validate.survivors.test.ts` acumula también el rechazo de protocolo Anthropic con los errores independientes; suite completa y typecheck.
-- [~] Q2.2 quién: GPT-6 Codex · desde: 2026-10-15. Reabierta por auditoría de costos: una respuesta de fallback con alias no declarado podía cobrar la tarifa del modelo principal. `Provider` (protocolo, baseUrl, apiKeyEnv, modelos con precio) y agentes `native` que lo
+- [x] Q2.2 `Provider` (protocolo, baseUrl, apiKeyEnv, modelos con precio) y agentes `native` que lo
   referencian; migrar `endpoint` de perfiles a proveedor; precio declarado → costo conocido.
-  commit: ebee726 · prueba: validación acumulada de proveedores, modelos y precios; migración
+  commit: ebee726 (reapertura corregida en 27a07bc) · prueba: validación acumulada de proveedores, modelos y precios; migración
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
-  costo conocido por tarifa declarada y costo desconocido ante tarifa ausente o ambigua; suite completa.
+  costo conocido por tarifa declarada y costo desconocido ante tarifa ausente, ambigua o alias sin tarifa del fallback; `test/model/provider-library.test.ts` y `test/model/provider.test.ts`; suite completa y typecheck.
 - [!] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
   hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: 74c8046 · prueba:
   `test/model/system-roles.test.ts` (sin bloque `roles` = predeterminados; un rol movido no hereda fallbacks;
