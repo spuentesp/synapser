@@ -1,10 +1,12 @@
 // Plan 18 E12 (H12.4): duplicated blocks in src/. A block is 12 consecutive non-blank lines, compared after trimming.
-// The report never fails a run; it lists the blocks so that a threshold can be agreed later from real numbers.
+// H12.4 threshold: no block of 12 lines may be duplicated in src/ (the measured count when the threshold was set was 0).
+// The report lists the blocks; the run fails above the threshold.
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 const WINDOW = 12;
+const MAX_DUPLICATED_BLOCKS = 0;
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -33,3 +35,7 @@ const report = [
 mkdirSync(new URL("../evidence/architecture/", import.meta.url), { recursive: true });
 writeFileSync(new URL("../evidence/architecture/duplication.txt", import.meta.url), `${report}\n`);
 console.log(report.split("\n")[0]);
+if (dup.length > MAX_DUPLICATED_BLOCKS) {
+  console.error(`✖ ${dup.length} duplicated blocks; the threshold is ${MAX_DUPLICATED_BLOCKS}. See evidence/architecture/duplication.txt`);
+  process.exit(1);
+}
