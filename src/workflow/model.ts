@@ -3,6 +3,7 @@
 // validation: pure, no I/O except path containment.
 
 import { PathRejected, resolveInWorkspace } from "../workspace/paths.ts";
+import { workflowBooleanShape, workflowCheckerKindShape, workflowObjectShape, workflowStringListShape, workflowStringShape } from "./schema.ts";
 
 export type Checker =
   | { kind: "command"; commandId: string }
@@ -52,8 +53,8 @@ export type WorkflowCheck = { ok: true; workflow: Workflow } | { ok: false; erro
 const ID = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 const WF_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
 
-const isStr = (v: unknown, min = 1, max = 2000): v is string => typeof v === "string" && v.trim().length >= min && v.length <= max;
-const strList = (v: unknown, max = 40): v is string[] => Array.isArray(v) && v.length <= max && v.every((x) => isStr(x, 1, 600));
+const isStr = (v: unknown, min = 1, max = 2000): v is string => workflowStringShape(min, max).safeParse(v).success;
+const strList = (v: unknown, max = 40): v is string[] => workflowStringListShape(max).safeParse(v).success;
 
 export interface ValidateWorkflowOptions {
   workspaceRoot: string;
@@ -64,13 +65,14 @@ export interface ValidateWorkflowOptions {
 }
 
 function checkChecker(c: unknown, at: string, o: ValidateWorkflowOptions, errors: string[], allowed?: readonly CheckerKind[]): Checker | null {
-  const x = c as Record<string, unknown> | null;
-  if (!x || typeof x !== "object") {
+  const shape = workflowObjectShape.safeParse(c);
+  if (!shape.success) {
     errors.push(`${at}.checker must be an object`);
     return null;
   }
+  const x = shape.data;
   const kind = x["kind"];
-  if (typeof kind !== "string") {
+  if (!workflowCheckerKindShape.safeParse(kind).success) {
     errors.push(`${at}.checker.kind is required`);
     return null;
   }
@@ -168,8 +170,9 @@ function checkChecker(c: unknown, at: string, o: ValidateWorkflowOptions, errors
 
 export function validateWorkflow(raw: unknown, o: ValidateWorkflowOptions): WorkflowCheck {
   const errors: string[] = [];
-  const w = raw as Record<string, unknown> | null;
-  if (!w || typeof w !== "object") return { ok: false, errors: ["workflow must be an object"] };
+  const shape = workflowObjectShape.safeParse(raw);
+  if (!shape.success) return { ok: false, errors: ["workflow must be an object"] };
+  const w = shape.data;
 
   const id = w["id"];
   if (!isStr(id, 1, 81) || !WF_ID.test(id as string)) errors.push("id must match [A-Za-z0-9][A-Za-z0-9._-]{0,80}");
@@ -209,33 +212,34 @@ export function validateWorkflow(raw: unknown, o: ValidateWorkflowOptions): Work
     const seen = new Set<string>();
     rawC.forEach((c, i) => {
       const at = `conditions[${i}]`;
-      const x = c as Record<string, unknown> | null;
-      if (!x || typeof x !== "object") return void errors.push(`${at} must be an object`);
+      const shape = workflowObjectShape.safeParse(c);
+      if (!shape.success) return void errors.push(`${at} must be an object`);
+      const x = shape.data;
       const cid = x["id"];
       if (!isStr(cid, 1, 41) || !ID.test(cid as string)) errors.push(`${at}.id must match ${ID}`);
       else if (seen.has(cid as string)) errors.push(`${at}.id "${String(cid)}" is duplicated`);
       else seen.add(cid as string);
       if (!isStr(x["statement"], 3, 500)) errors.push(`${at}.statement must be a 3..500 char string`);
       const required = x["required"] === undefined ? true : x["required"];
-      if (typeof required !== "boolean") errors.push(`${at}.required must be a boolean`);
+      if (!workflowBooleanShape.safeParse(required).success) errors.push(`${at}.required must be a boolean`);
       const checker = checkChecker(x["checker"], at, o, errors);
       const person = (v: unknown, field: string) => {
         if (v === undefined) return undefined;
-        const p = v as { actor?: unknown; reason?: unknown };
-        if (!p || !isStr(p.actor, 1, 80) || !isStr(p.reason, 3, 300)) {
+        const shape = workflowObjectShape.safeParse(v);
+        if (!shape.success || !isStr(shape.data.actor, 1, 80) || !isStr(shape.data.reason, 3, 300)) {
           errors.push(`${at}.${field} needs an actor and a reason`);
           return undefined;
         }
-        return { actor: p.actor as string, reason: p.reason as string };
+        return { actor: shape.data.actor as string, reason: shape.data.reason as string };
       };
       const waivedBy = person(x["waivedBy"], "waivedBy");
       const secondaryAccepted = person(x["secondaryAccepted"], "secondaryAccepted");
       if (checker?.kind === "review" && required === true && !secondaryAccepted && !waivedBy) {
         errors.push(`${at}: a "review" is an agent's judgement (secondary evidence) and cannot make a REQUIRED condition pass by itself: set required=false, or record secondaryAccepted {actor, reason}`);
       }
-      if (checker && isStr(cid) && isStr(x["statement"]) && typeof required === "boolean") {
+      if (checker && isStr(cid) && isStr(x["statement"]) && workflowBooleanShape.safeParse(required).success) {
         conditions.push({
-          id: cid as string, statement: x["statement"] as string, checker, required,
+          id: cid as string, statement: x["statement"] as string, checker, required: required as boolean,
           ...(waivedBy ? { waivedBy } : {}), ...(secondaryAccepted ? { secondaryAccepted } : {}),
         });
       }

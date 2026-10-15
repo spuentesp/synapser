@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { ModelPrice } from "./pricing.ts";
 import { ModelError, type Role } from "./types.ts";
+import { providerBaseUrlShape, providerDocumentShape, providerKeyNamesShape, providerModelShape, providerModelsShape, providerProtocolShape } from "./provider-schema.ts";
 
 export interface ProviderConfig {
   /** openai-compatible serves roles and native agents; anthropic is reserved for CLI injection (plan 17 P17.5). */
@@ -152,26 +153,36 @@ export function metadataEndpointProblems(name: string, provider: unknown): strin
 
 export function validateProviderConfig(name: string, provider: unknown): string[] {
   const at = `provider ${name}`;
-  if (!provider || typeof provider !== "object") return [`${at}: must be an object`];
+  const shape = providerDocumentShape.safeParse(provider);
+  if (!shape.success) return [`${at}: must be an object`];
   const p = provider as Partial<ProviderConfig>;
   const errors: string[] = [];
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) errors.push(`${at}: id must be a lowercase slug`);
-  if (p.protocol !== "openai-compatible" && p.protocol !== "anthropic") errors.push(`${at}: unsupported protocol ${String(p.protocol)}`);
+  const protocol = providerProtocolShape.safeParse(p.protocol);
+  if (!protocol.success || (protocol.data !== "openai-compatible" && protocol.data !== "anthropic")) errors.push(`${at}: unsupported protocol ${String(p.protocol)}`);
   if (Array.isArray(p.apiKeyEnv)) {
     for (const name of p.apiKeyEnv) if (typeof name === "string" && RESERVED_ENV.test(name)) errors.push(`${at}: ${name} is reserved by Synapser and cannot hold a provider key (plan 17 K6)`);
   }
-  if (typeof p.baseUrl !== "string" || (!/^https:\/\//.test(p.baseUrl) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(p.baseUrl))) {
+  const baseUrl = providerBaseUrlShape.safeParse(p.baseUrl);
+  if (!baseUrl.success || (!/^https:\/\//.test(baseUrl.data) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(baseUrl.data))) {
     errors.push(`${at}: baseUrl must be https (or loopback for tests)`);
   }
-  if (!Array.isArray(p.apiKeyEnv) || p.apiKeyEnv.length === 0 || p.apiKeyEnv.some((item) => typeof item !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(item))) {
+  const keyNames = providerKeyNamesShape.safeParse(p.apiKeyEnv);
+  if (!keyNames.success || keyNames.data.length === 0 || keyNames.data.some((item) => typeof item !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(item))) {
     errors.push(`${at}: apiKeyEnv must contain environment variable names`);
   }
-  if (!Array.isArray(p.models) || p.models.length === 0) {
+  const models = providerModelsShape.safeParse(p.models);
+  if (!models.success || models.data.length === 0) {
     errors.push(`${at}: models must be a non-empty array`);
   } else {
     const ids = new Set<string>();
-    p.models.forEach((raw, index) => {
-      const model = raw as Partial<ProviderModelConfig>;
+    models.data.forEach((raw, index) => {
+      const modelShape = providerModelShape.safeParse(raw);
+      if (!modelShape.success) {
+        errors.push(`${at}: models[${index}].id is required`);
+        return;
+      }
+      const model = modelShape.data as Partial<ProviderModelConfig>;
       if (!model || typeof model !== "object" || typeof model.id !== "string" || !model.id.trim()) {
         errors.push(`${at}: models[${index}].id is required`);
         return;
