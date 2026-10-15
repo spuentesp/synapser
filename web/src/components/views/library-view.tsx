@@ -64,6 +64,7 @@ export function LibraryView({ session }: { session: boolean }) {
   const [bases, setBases] = useState<Base[]>([])
   const [fileOnly, setFileOnly] = useState<string[]>([])
   const [providerIds, setProviderIds] = useState<string[]>([])
+  const [skillsByAgent, setSkillsByAgent] = useState<Record<string, string[]>>({})
 
   const headers = (): Record<string, string> => ({ 'content-type': 'application/json' })
   const reset = (): void => {
@@ -91,6 +92,8 @@ export function LibraryView({ session }: { session: boolean }) {
         setBases(designer.bases)
         setFileOnly(designer.fields.fileOnly)
         setProviderIds((await api<{ entries: Entry[] }>('/api/library/providers')).entries.map((e) => e.id))
+        const config = await api<{ agentSkills?: Record<string, string[]> }>('/api/config')
+        setSkillsByAgent(config.agentSkills ?? {})
       } catch (e) {
         setFailure((e as Error).message)
       }
@@ -203,7 +206,7 @@ export function LibraryView({ session }: { session: boolean }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
-                {kind === 'agents' ? <LibraryAgentDesigner text={text} onChange={(doc) => setText(JSON.stringify(doc, null, 2))} bases={bases} providerIds={providerIds} fileOnly={fileOnly} /> : null}
+                {kind === 'agents' ? <LibraryAgentDesigner text={text} onChange={(doc) => setText(JSON.stringify(doc, null, 2))} bases={bases} providerIds={providerIds} fileOnly={fileOnly} skillsByAgent={skillsByAgent} /> : null}
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="library-doc">{t('libraryDocument')}</FieldLabel>

@@ -15,8 +15,11 @@ export interface Base {
   id: string
   adapter: string
   role: string
+  tier: string
+  permissions: { mode?: string; allowedTools?: readonly string[]; disallowedTools?: readonly string[] } | null
+  maxBudgetUsd: number | null
   enabledByFile: boolean
-  pooled: boolean
+  pool: string | null
   provider: string | null
 }
 
@@ -26,6 +29,7 @@ interface Props {
   bases: Base[]
   providerIds: string[]
   fileOnly: string[]
+  skillsByAgent: Record<string, string[]>
 }
 
 const TIERS = ['cheap', 'standard', 'advanced'] as const
@@ -60,7 +64,7 @@ function without(doc: Record<string, unknown>, keys: string[]): Record<string, u
 const tagsOf = (doc: Record<string, unknown>): string => (Array.isArray(doc.tags) ? (doc.tags as string[]).join(', ') : '')
 const parseTags = (raw: string): string[] => raw.split(',').map((s) => s.trim()).filter(Boolean)
 
-export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileOnly }: Props) {
+export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileOnly, skillsByAgent }: Props) {
   const { t } = useI18n()
   const doc = parse(text)
   // a tag list being typed keeps its commas until the document changes under it
@@ -74,6 +78,8 @@ export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileO
   if (!doc) return <Alert variant="destructive"><AlertDescription>{t('libraryJsonBroken')}</AlertDescription></Alert>
 
   const extending = typeof doc.extends === 'string'
+  const selectedBase = extending ? bases.find((base) => base.id === doc.extends) : undefined
+  const assignedSkills = typeof doc.id === 'string' ? skillsByAgent[doc.id] ?? [] : []
   const set = (patch: Record<string, unknown>) => onChange(withPatch(doc, patch))
   // the two cases of plan 15 IC1: each one drops the fields that belong to the other
   const toExtends = () => onChange(withPatch(without(doc, ['adapter', 'role', 'nativeRole']), { extends: bases[0]?.id ?? '' }))
@@ -97,8 +103,8 @@ export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileO
               <SelectContent>
                 <SelectGroup>
                   {bases.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {`${b.id} · ${b.enabledByFile ? t('libraryBaseEnabled') : t('libraryBaseDisabled')}${b.pooled ? ` · ${t('libraryBasePooled')}` : ''}`}
+                    <SelectItem key={b.id} value={b.id} disabled={Boolean(b.pool)}>
+                      {`${b.id} · ${b.enabledByFile ? t('libraryBaseEnabled') : t('libraryBaseDisabled')}${b.pool ? ` · ${t('libraryBasePooled')}` : ''}`}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -119,6 +125,20 @@ export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileO
           </Select>
           {providerIds.length === 0 ? <FieldDescription>{t('libraryNoProviders')}</FieldDescription> : null}
         </Field>
+        {extending && selectedBase ? (
+          <div className="grid gap-2 rounded-xl border p-3" data-agent-inherited-controls>
+            <p className="text-sm font-semibold">{t('libraryInheritedControls')}</p>
+            <p className="text-xs text-muted-foreground">{t('libraryInheritedControlsNote')}</p>
+            <dl className="grid gap-2 text-xs sm:grid-cols-2">
+              <div><dt className="text-muted-foreground">{t('libraryAdapter')}</dt><dd className="font-mono">{selectedBase.adapter}</dd></div>
+              <div><dt className="text-muted-foreground">{t('libraryRole')}</dt><dd>{selectedBase.role}</dd></div>
+              <div><dt className="text-muted-foreground">{t('libraryTier')}</dt><dd>{typeof doc.tier === 'string' ? doc.tier : selectedBase.tier}</dd></div>
+              <div><dt className="text-muted-foreground">{t('libraryPermissions')}</dt><dd>{selectedBase.permissions ? JSON.stringify(selectedBase.permissions) : t('libraryNoCliPermissions')}</dd></div>
+              <div><dt className="text-muted-foreground">{t('libraryBudget')}</dt><dd>{selectedBase.maxBudgetUsd === null ? t('libraryNoCliBudget') : `$${selectedBase.maxBudgetUsd} USD`}</dd></div>
+              <div><dt className="text-muted-foreground">{t('libraryPool')}</dt><dd>{selectedBase.pool ?? t('libraryNoPool')}</dd></div>
+            </dl>
+          </div>
+        ) : null}
         <Field>
           <FieldLabel htmlFor="agent-model">{t('libraryModel')}</FieldLabel>
           <Input id="agent-model" className="font-mono" value={typeof doc.model === 'string' ? doc.model : ''} onChange={(e) => set({ model: e.target.value })} />
@@ -207,14 +227,22 @@ export function LibraryAgentDesigner({ text, onChange, bases, providerIds, fileO
           <Switch checked={doc.enabled !== false} onCheckedChange={(checked) => set({ enabled: checked })} />
         </Field>
       </FieldGroup>
+      {!extending ? <div className="grid gap-2 rounded-xl border p-3">
+        <p className="text-sm font-semibold">{t('libraryNativeLimits')}</p>
+        <p className="text-xs text-muted-foreground">{t('libraryNativeLimitsNote')}</p>
+      </div> : null}
       <div className="grid gap-2 rounded-xl border p-3">
         <p className="text-sm font-semibold">{t('libraryFileControls')}</p>
         <p className="text-xs text-muted-foreground">{t('libraryFileControlsNote')}</p>
         <div className="flex flex-wrap gap-1">
-          {fileOnly.map((field) => <Badge key={field} variant="outline" className="font-mono">{field}</Badge>)}
+          {fileOnly.map((field) => <Badge key={field} variant="outline">{t(`libraryField_${field}` as never)}</Badge>)}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">{t('librarySkillsLater')}</p>
+      <div className="grid gap-2 rounded-xl border p-3" data-agent-skills>
+        <p className="text-sm font-semibold">{t('libraryAssignedSkills')}</p>
+        {assignedSkills.length ? <div className="flex flex-wrap gap-1">{assignedSkills.map((id) => <Badge key={id} variant="outline" className="font-mono">{id}</Badge>)}</div> : <p className="text-xs text-muted-foreground">{t('libraryNoAssignedSkills')}</p>}
+        <p className="text-xs text-muted-foreground">{t('librarySkillsFromOperatorFile')}</p>
+      </div>
     </div>
   )
 }

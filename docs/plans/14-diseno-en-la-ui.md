@@ -85,6 +85,9 @@ siguen sin esquema: es decisión abierta.
   no escribe nada; «Guardar» solo se habilita con un documento que ese validador acepta.
 - **No-metas editables** (Q3.1): cada enunciado y su compuerta opcional son una misma fila del borrador; cambiar,
   quitar o reordenar un enunciado no puede asociar su compuerta a otra fila ni descartarla silenciosamente.
+- **Diseñador de agente** (Q3.3): en modo `extends` se ven los controles efectivos heredados del perfil base; en modo
+  `native` se explican los controles que no aplican. Skills, permisos, presupuesto CLI y pool que fija el operador
+  son visibles/read-only según corresponda y no se escriben desde el documento de biblioteca.
 - **Diseñador de agente**: elegir adaptador, nivel, rol, permisos, presupuesto, pool, skills; botón
   «probar» que corre una tarea trivial en una copia desechable y muestra el resultado y el costo.
 - **Biblioteca**: skills, plantillas y agentes versionados; cambios con evento en el ledger. La prueba de conexión
@@ -125,6 +128,8 @@ intervenciones del asesor y los efectos solicitados se leen en el detalle del wo
   al evento.
 - **W1** En el diseñador, una compuerta de no-meta se guarda con el mismo enunciado que la acompaña; JSON inválido
   bloquea la comprobación y el guardado, y borrar esa fila borra también su compuerta.
+- **W2** El diseñador de agente solo edita campos admitidos por el esquema de cada modo; el perfil base, controles
+  de CLI y asignaciones de skills que decide el archivo se presentan como límites de solo lectura.
 
 Verificación y falsación de la inyección:
 
@@ -141,6 +146,10 @@ Verificación y falsación de la inyección:
 - W1 se verifica editando en Chromium un workflow real con una compuerta, cambiando el enunciado y comprobando
   la vista previa y el documento persistido. Se falsa cambiando el texto, borrando la fila o introduciendo JSON
   inválido: la compuerta no debe migrar a otra fila ni guardarse silenciosamente.
+- W2 se verifica en Chromium alternando `native`/`extends`, leyendo los controles heredados y las skills asignadas
+  en modo solo lectura. `test/api/library.test.ts` verifica que la ruta ofrece los campos efectivos seguros y que
+  `test/library/agent-rules.test.ts` rechaza controles reservados en documentos. Se falsa si el diseñador permite
+  editar una clave fuera del esquema o no muestra un valor que fija el archivo.
 - L4 usa el journal `_server` como autoridad: cada versión de biblioteca se guarda primero como blob por
   digest y luego como evento encadenado con actor; `state/library/` es una proyección reconstruible. El
   almacén se falsa alterando `current.json` fuera del journal y verifica que al reabrir restaura los bytes

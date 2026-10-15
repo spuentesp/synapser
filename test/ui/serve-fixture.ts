@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "ui-fixture-"));
-writeFileSync(join(dir, "synapser.config.json"), JSON.stringify({ workspace: dir, stateDir: join(dir, "state") }));
+writeFileSync(join(dir, "synapser.config.json"), JSON.stringify({ workspace: dir, stateDir: join(dir, "state"), agentSkills: { "q33-inspect-agent": ["fixture-skill"] } }));
 const port = process.env["UI_PORT"] ?? "4199";
 const cli = new URL("../../src/cli/main.ts", import.meta.url).pathname;
 const child = spawn(process.execPath, [cli, "serve", "--port", port], { cwd: dir, stdio: "inherit" });

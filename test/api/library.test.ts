@@ -207,8 +207,8 @@ describe("API library (plan 14 Q2.6)", () => {
   test("the designer reads the bases a library agent may extend, and the fields the operator's file keeps (plan 14 Q3.3)", async () => {
     const r = await call("GET", "/api/library/bases");
     assert.equal(r.status, 200);
-    const body = (await r.json()) as { bases: { id: string; enabledByFile: boolean }[]; fields: { extending: string[]; fileOnly: string[] } };
-    assert.deepEqual(body.bases.find((b) => b.id === "codex-writer"), { id: "codex-writer", adapter: "codex", role: "writer", enabledByFile: true, pooled: false, provider: null });
+    const body = (await r.json()) as { bases: { id: string; enabledByFile: boolean; adapter: string; role: string; tier: string; permissions: unknown; maxBudgetUsd: number | null; pool: string | null }[]; fields: { extending: string[]; fileOnly: string[] } };
+    assert.deepEqual(body.bases.find((b) => b.id === "codex-writer"), { id: "codex-writer", adapter: "codex", role: "writer", tier: "standard", permissions: { mode: "workspace-write" }, maxBudgetUsd: null, pool: null, enabledByFile: true, provider: null });
     assert.equal(body.bases.find((b) => b.id === "kimi-writer")?.enabledByFile, false);
     assert.ok(body.fields.fileOnly.includes("argv"), "argv is the operator's file's");
     assert.ok(!body.fields.extending.includes("argv"), "an extending agent cannot set argv");

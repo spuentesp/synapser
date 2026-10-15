@@ -44,7 +44,17 @@ function agentsBrokenBy(lib: LibraryStore, providerId: string, edited: LibraryDo
 /** What the agent designer may offer: the profiles a library agent can extend, and the fields the operator's file keeps (plan 14 Q3.3). */
 function libraryBases(policy: LibraryPolicy) {
   return {
-    bases: policy.bases.map((b) => ({ id: b.profile.id, adapter: b.profile.adapter ?? "cli-oneshot", role: b.profile.role, enabledByFile: b.enabledByFile, pooled: Boolean(b.profile.pool), provider: b.profile.provider ?? null })),
+    bases: policy.bases.map((b) => ({
+      id: b.profile.id,
+      adapter: b.profile.adapter ?? "cli-oneshot",
+      role: b.profile.role,
+      tier: b.profile.tier ?? "standard",
+      permissions: b.profile.permissions ?? null,
+      maxBudgetUsd: b.profile.maxBudgetUsd ?? null,
+      pool: b.profile.pool ?? null,
+      enabledByFile: b.enabledByFile,
+      provider: b.profile.provider ?? null,
+    })),
     fields: { extending: EXTENDING_FIELDS, native: NATIVE_FIELDS, nativeRequired: NATIVE_REQUIRED, fileOnly: FILE_ONLY_FIELDS },
   };
 }

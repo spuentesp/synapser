@@ -104,7 +104,7 @@ async function main(): Promise<void> {
           ...(operatorToken ? { token: operatorToken } : {}),
           stateDir: cfg.stateDir,
           trustMode: cfg.trustMode,
-          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
+          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);
         console.log(`Synapser → http://127.0.0.1:${port}/  (workspace: ${cfg.workspace})`);

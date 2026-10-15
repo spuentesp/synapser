@@ -142,10 +142,9 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
   validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
   abierta). Suite completa.
-- [x] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
+- [~] Q3.3 quién: GPT-6 Codex · desde: 2026-10-15. Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
-  motivo: el usuario respondió «sí, ahora» (14 oct). Las skills se conectan con Q5.4 cuando esté, porque el archivo las asigna (D6).
-  commit: 30eddf8 · prueba: `test/api/library.test.ts` (`GET /api/library/bases`: perfiles base con su estado en el archivo y los campos que decide el archivo; falsación: sin la ruta falla la prueba). Verificado en navegador, en el sandbox, con capturas en `evidence/` (no versionadas): crear un agente, etiquetas con comas, un guardado rechazado con su motivo, y el cambio entre «extiende un perfil» y «agente nativo propio» con la lista de perfiles y sus estados. Build de la web con `tsc -b`. Falta el campo de skills, que llega con Q5.4.
+  nota: D6 reserva al archivo del operador la asignación de skills; el diseñador las muestra como solo lectura. IC1 reserva permisos, presupuesto CLI y pool al perfil que fija el operador.
 - [x] Q3.4 «Probar agente»: tarea trivial en una copia desechable; muestra resultado, costo y skills recibidas. commit: 716bb7c · prueba: `test/agents/trial.test.ts` ejecuta un proceso real en la copia temporal usando el Zoanthrope fijado, verifica que el workspace original no cambie y que el ledger guarde solo el informe y la salida como artefacto; `test/api/agent-trial.test.ts` verifica token, mismo origen, payload y rechazo; `npm run test:ui -- --grep "agent trial sends"` en Chromium comprueba formulario y resultado. El POST de navegador usa respuesta controlada; el proceso/runner y el Zoo se prueban aparte contra los binarios reales. Evidencia: `evidence/agent-trial.png` (gitignored).
 - [x] Q3.5 Editor de skills y de proveedores con prueba de conexión. commit: 129cadc · prueba:
   `test/api/library.test.ts` (la prueba usa el endpoint y la clave GUARDADOS; la clave no aparece en la respuesta;
