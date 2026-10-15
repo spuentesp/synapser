@@ -68,10 +68,10 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   en `agent_runs` de id + digest + mecanismo. *Invariantes:* L1, L2. commit: 41a06a2 · prueba:
   suite completa; falsación de procedencia/digest/rutas y de ampliación de permisos; corrida del runner
   con archivo de skill en HOME efímero y auditoría en fila + evento.
-- [~] Q1.8 quién: GPT-6 Codex · desde: 2026-10-15. Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
-  `--help` del binario real (omitida si el binario no está). commit: 3966715 · prueba: igualdad entre
-  flags construidos y `capabilities.cliFlags`; contraste con `--help` real de Claude, Codex, Kimi y MiMo;
-  suite completa.
+- [x] Q1.8 Prueba L5: cada flag que emite un adaptador está en su tabla de capacidades y existe en el
+  `--help` del binario real (omitida si el binario no está). commit: 246b858 · prueba: variantes con modelo
+  y proveedor añadido cubren `-c` de Codex y `-m` de Kimi; igualdad entre los flags construidos y
+  `capabilities.cliFlags`; `--help` instalado de Claude, Codex, Kimi y MiMo; suite completa.
 - [!] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
   motivo: completar Codex, Kimi y MiMo requiere autorización para consumir cuota o saldo externo; Claude ya está probado y no haré llamadas pagadas sin aprobación.
   commit: 27e89c4 · prueba: Claude Code instalado creó en la copia aislada el único archivo ordenado por
@@ -113,13 +113,14 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   mitad de la corrida sigue leyendo la versión de arranque). Falsada con lecturas en vivo. Suite completa.
   nota: ningún consumidor lee aún la biblioteca durante una corrida (proveedores nativos, skills y agentes siguen
   en el archivo); el manejador congelado queda como única vía cuando lo haga.
-- [~] Q2.6 quién: GPT-6 Codex · desde: 2026-10-15. Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
-  entera con todos los problemas. commit: ab89118 · prueba: `test/api/library.test.ts` (lecturas abiertas;
-  escrituras sin token, con origen ajeno o malformado rechazadas; escritura repetida sin cambio; documento inválido
-  con todos sus problemas y sin efecto; borrado con token; skills y agentes por sus reglas; plantillas solo objeto,
-  sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando el guardia y la validación. Un solo
-  guardia (`writeAllowed`) sustituye las tres copias. Precios decimales: `test/library/decimals.test.ts`, con la
-  opción `decimals` de la forma canónica solo para la biblioteca (ver decisiones abiertas). Suite completa.
+- [x] Q2.6 Endpoints CRUD (`/api/library/*`) con token y mismo origen; configuración inválida rechazada
+  entera con todos los problemas. commit: 246b858 · prueba: `test/api/library.test.ts` (lecturas abiertas;
+  escrituras sin token, con origen ajeno, mismo host con esquema distinto o malformado rechazadas; escritura
+  repetida sin cambio; documento inválido con todos sus problemas y sin efecto; borrado con token; skills y agentes
+  por sus reglas; plantillas solo objeto, sin esquema hasta Q3.2; id que no encaja con la ruta). Falsada quitando
+  el guardia y la validación. Un solo guardia (`writeAllowed`) sustituye las tres copias. Precios decimales:
+  `test/library/decimals.test.ts`, con la opción `decimals` de la forma canónica solo para la biblioteca (ver
+  decisiones abiertas). Suite completa.
 - [x] Q2.7 `synapser doctor` y `config show` leen la biblioteca además del archivo. commit: 70da347 · prueba:
   `test/library/read.test.ts` (sin biblioteca no se crea journal; leer no materializa la proyección; doctor muestra
   el índice, informa la clave de cada proveedor de biblioteca sin que sea fatal y falla un documento que ya no cumple
@@ -130,11 +131,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 ### Q3 — Diseñadores y plantillas (UI)
 
-- [~] Q3.1 quién: GPT-6 Codex · desde: 2026-10-15. Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
-  vivo contra el validador real, vista previa JSON. commit: 1c55261 · prueba: `test/api/designer.test.ts`
+- [x] Q3.1 Diseñador de workflow: formulario, constructor de condiciones por verificador, validación en
+  vivo contra el validador real, vista previa JSON. commit: 246b858 · prueba: `test/api/designer.test.ts`
   (borrador válido sin escritura; borrador inválido con todos sus problemas y la redacción del validador; token
-  y origen) y navegador real con Chromium headless (capturas en `evidence/`): un borrador válido se guarda; uno
-  inválido lista sus problemas y deja Guardar deshabilitado; un borrador se edita y guarda con PUT. Suite completa.
+  y origen) y Chromium real contra `synapser serve`: edición del enunciado conserva la compuerta al guardar con
+  PUT y JSON de compuerta inválido deshabilita Guardar (`test/ui/workflow.spec.ts`). Suite completa.
   nota: esta tarea se empezó sin commit de reclamo previo (ver bitácora).
 - [x] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
   revisión, migración con no-metas. commit: 1a118df · prueba: navegador real: cada plantilla, con parámetros, rellena
