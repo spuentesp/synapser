@@ -187,11 +187,14 @@ export const BUILTIN_PROFILES: readonly AgentProfile[] = [
 export const adapterOf = (p: AgentProfile): AdapterId => p.adapter ?? "cli-oneshot";
 
 export function validateProfile(p: AgentProfile): string[] {
+  // Total (plan 18 H3.3): any input yields problems, never an exception.
+  if (!p || typeof p !== "object") return ["profile must be an object"];
   const errs: string[] = [];
-  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(p.id)) errs.push(`id ${JSON.stringify(p.id)} is not a slug`);
+  if (typeof p.id !== "string" || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(p.id)) errs.push(`id ${JSON.stringify(p.id)} is not a slug`);
   if (adapterOf(p) === "cli-oneshot" || adapterOf(p) === "generic-cli") {
-    if (p.argv.length === 0 || /\s/.test(p.argv[0] ?? " ")) errs.push("argv[0] must be a program name without spaces (no shell strings)");
-    if (!p.argv.some((a) => a.includes("{prompt}"))) errs.push("argv must contain {prompt}");
+    const argv: unknown[] = Array.isArray(p.argv) ? p.argv : [];
+    if (!Array.isArray(p.argv) || argv.length === 0 || typeof argv[0] !== "string" || /\s/.test(argv[0])) errs.push("argv[0] must be a program name without spaces (no shell strings)");
+    if (!argv.some((a) => typeof a === "string" && a.includes("{prompt}"))) errs.push("argv must contain {prompt}");
   }
   if (adapterOf(p) === "generic-cli" && p.parser !== "plain") errs.push("generic-cli always uses the plain parser");
   if (adapterOf(p) === "claude-code") {
