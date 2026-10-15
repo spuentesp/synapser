@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: P16.2 y P16.3 incorporados a `main`; P16.6 completado el 15 oct 2026 (commits `744dce7`, `610f8ad`, `e7faf4c`). P16.4 y P16.5 siguen propuestos. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: P16.2, P16.3 y P16.6 incorporados a `main`; P16.4 en curso desde 2026-10-15; P16.5 propuesto. Cada tarea se reclama en el [seguimiento](14-seguimiento.md) antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -16,7 +16,7 @@ No se toca: `undici` (aprobado en P15.5); la canonicalización de digests (`src/
 ## 2. Principios
 
 1. **Baja superficie.** Cada dependencia aparece en la sección 7 con versión exacta, licencia, dependencias directas y el plan que la añade. Lo que no aparece ahí no entra.
-2. **La optimización no está en la ruta de ejecución.** Un optimizador escribe texto candidato, y ese texto entra en la biblioteca solo por la puerta de admisión de P16.4.
+2. **La optimización no está en la ruta de ejecución.** Un optimizador escribe texto candidato. P16.4 evalúa localmente; después de un holdout verde, el operador guarda manualmente el texto en la biblioteca. No hay endpoint de admisión ni bloqueo técnico de `PUT`; la puerta es procedimental.
 3. **Forma con librería, reglas con código.** zod valida la forma. Las reglas que protegen la frontera de confianza (IC1, IC2, D3, referencias) siguen en el código, con sus pruebas actuales.
 4. **Resultados medidos fuera del repositorio.** Los resultados de los prototipos van a `evidence/` (ignorado). El seguimiento guarda solo la decisión y su prueba.
 
@@ -123,12 +123,12 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 **Idea.** Una versión de skill entra en uso solo después de pasar sus casos de regresión.
 
 **Definiciones.**
-- **Caso.** Una tarea, una comprobación de la salida o de la traza, y una división: `dev` (visible para el optimizador) o `holdout` (retenido, nunca visible para el optimizador).
-- **Conjunto.** Los casos de una skill. Dónde viven y cómo se admiten son decisiones del usuario (sección 8).
+- **Caso.** Un identificador, una tarea, una comprobación determinista de salida/traza y una división: `dev` o `holdout`. Los fixtures versionados viven bajo `test/`; ningún módulo de runtime los importa. El conjunto `dev` queda disponible para trabajo futuro del optimizador y el evaluador de holdout no lo expone al candidato.
+- **Repeticiones.** Cada caso declara `k`; las `k` evaluaciones deben pasar. No se admite un umbral proporcional.
 
-**Admisión.** Una versión nueva de skill pasa todos sus casos `holdout` antes de que las corridas la usen. Cada caso declara sus repeticiones `k` y los aciertos que exige (por defecto, todos). Un fallo devuelve el id del caso, con el mismo formato de error que el 409 de Q5.2.
+**Evaluación y admisión.** El operador ejecuta localmente el evaluador sobre el candidato y los fixtures `holdout`. Si falla cualquier repetición, el informe identifica caso y repetición y el operador no debe guardar ese candidato. Si todo pasa, el operador puede guardar manualmente la skill mediante el flujo existente de biblioteca. No se añade endpoint ni se afirma que `PUT` rechace una skill no evaluada; el evaluador no puede demostrar que un operador haya seguido el procedimiento.
 
-**Rollback.** Restaura una versión admitida anterior por su digest, y queda como evento con actor y motivo. No vuelve a evaluar. Las corridas siguientes registran el digest restaurado.
+**Rollback.** Restaura una versión anterior por su digest, y queda como evento append-only con actor y motivo. No vuelve a evaluar. Las corridas siguientes registran el digest restaurado.
 
 **Qué se mide por corrida (corrección).** Con D6, el archivo asigna las skills por id (`src/library/resolve.ts:83–107`). El agente no elige nada, así que no hay fallos de selección que medir. La rúbrica separa tres cosas:
 1. **Asignación:** qué skill recibió la corrida, con id, digest y mecanismo (registrado desde Q5.4).
@@ -138,9 +138,11 @@ El detalle está en `evidence/p16-2-clients/` (no versionado).
 Un caso sin comprobación de uso mide solo resultado. Eso se declara en el caso, no se supone.
 
 **Invariantes y verificación.**
-- **CU1 Admisión.** Ninguna versión con un caso `holdout` fallido queda en la biblioteca. *Verificador:* un intento de guardarla devuelve 409 con el id del caso; con todos los casos en verde, guarda. *Falsación:* admitir sin comprobar; la prueba falla.
+- **CU1 Holdout.** Todos los casos `holdout` y todas sus `k` repeticiones deben pasar para que el evaluador declare elegible un candidato; holdout vacío, división desconocida o repetición menor que uno son errores. *Verificador:* fixtures bajo `test/`, con callback controlado para resultados reproducibles; un fallo identifica caso/repetición y ninguna ruta de código guarda automáticamente. *Falsación:* cambiar la regla a “alguna repetición” o incluir un holdout fallido en el resultado elegible hace fallar las pruebas. La elegibilidad es procedimental, no una garantía de la API.
 - **CU2 Rollback por digest.** Tras restaurar, la corrida siguiente registra el digest restaurado, y el evento tiene actor y motivo. *Falsación:* un rollback que solo cambia una etiqueta; la prueba falla.
 - **CU3 Asignación visible.** La fila de cada corrida conserva id, digest y mecanismo de cada skill (prueba existente de Q5.4).
+
+**Alcance de implementación.** Un evaluador local reutilizable ejecuta casos versionados y devuelve un informe tipado; el endpoint de biblioteca permanece sin cambios. El rollback será una operación explícita del almacenamiento que solo permite digests presentes en el historial de esa misma skill y registra el motivo/actor en `_server`. El informe no se presenta como evidencia de calidad real del modelo: las pruebas del evaluador son deterministas y cualquier corrida real es responsabilidad del operador.
 
 **Dependencia.** P16.3, si el tipo nuevo de documento (`cases`) se valida con zod. Si no, se usan las tablas actuales.
 
