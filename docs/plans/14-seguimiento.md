@@ -231,7 +231,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 
 - [x] P18.0 Plan 18: `docs/plans/18-infraestructura-de-pruebas.md`, con su entrada en el índice. Propuesto, sin código. commit: 0fbb66e · prueba: el plan lista épicas e historias con criterio de aceptación y herramientas.
 - [x] P18.1 E1 Base, convenciones y punto de entrada (`npm run verify`, niveles de prueba, cobertura, control del binario). commit: 1aee822 · prueba: `npm run verify` falla ante un binario con otro hash (VERSION_MISMATCH) y pasa con el binario fijado.
-- [ ] P18.2 E2 Contratos por herramienta (inventario, esquemas zod, pruebas y golden de contrato, compatibilidad, banderas de adaptadores). *Verificación:* ver el plan 18, épica correspondiente.
+- [~] P18.2 E2 Contratos por herramienta (inventario, esquemas zod, pruebas y golden de contrato, compatibilidad, banderas de adaptadores). quién: Claude Haiku 5.5; desde: 2026-10-15. Avance (commit 4925a0e): inventario en `docs/contracts/README.md`; contratos de configuración con esquemas, instantánea y pruebas. Pendiente: API real, MCP de tareas, rutas, ledger y compatibilidad.
 - [ ] P18.3 E3 Pruebas basadas en propiedades (fast-check): digests, ledger, validadores, inyección, escritura de configuración. *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.4 E4 Mutación (Stryker) con umbral por módulo de seguridad. *Verificación:* ver el plan 18, épica correspondiente.
 - [ ] P18.5 E5 Fixtures realistas (repositorios desechables, agentes CLI programados, endpoint falso compartido). *Verificación:* ver el plan 18, épica correspondiente.
@@ -334,4 +334,5 @@ Abiertas: licencia (decidir más tarde). Bloqueadas: P15.9 (D5), Q3.4 y Q3.6 (di
 | 2026-10-15 | Claude Haiku 5.5 | K4 (commit ffc7997): cada ejecución inyectada guarda proveedor, modelo, endpoint y nombre de la variable de clave en el ledger, sin valores. P17.5 hecha. Suite completa: 867 pruebas, 858 aprobadas, 0 fallos, 9 omitidas. |
 | 2026-10-15 | Claude Haiku 5.5 | P17.4 hecha (commit 5c7a4d3): prueba de que una clave no aparece en la respuesta de la API, el archivo ni el registro. Decisiones 2, 3 y 6 del plan 17 aceptadas. |
 | 2026-10-15 | Claude Haiku 5.5 | Plan 18 escrito (commit 0fbb66e): infraestructura de pruebas en trece épicas, pendientes de ejecutar en orden de dependencias. |
+| 2026-10-15 | Claude Haiku 5.5 | P18.1 hecha (commit 1aee822): `npm run verify` con control del binario, tipado, contratos y pruebas. P18.2 en curso (commit 4925a0e). `verify` en verde: 873 pruebas, 864 aprobadas, 0 fallos, 9 omitidas. |
 | 2026-10-14 | Claude Haiku 5.5 | Protocolo `anthropic` añadido al esquema de proveedores (commit 72d2597). claude-code y kimi inyectables; roles, agentes nativos y biblioteca siguen en `openai-compatible`. Puerta K8 con centinela pasada para claude-code. Suite completa: 825 pruebas, 816 aprobadas, 0 fallos, 9 omitidas. |
