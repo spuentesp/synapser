@@ -32,8 +32,8 @@ interface Pending {
 }
 
 export class ZooTransport {
-  readonly #opts: Required<Omit<TransportOptions, "onWire" | "cwd" | "env">> &
-    Pick<TransportOptions, "onWire" | "cwd" | "env">;
+  readonly #opts: Required<Omit<TransportOptions, "onWire" | "cwd" | "env" | "handshakeTimeoutMs">> &
+    Pick<TransportOptions, "onWire" | "cwd" | "env" | "handshakeTimeoutMs">;
   #child: ChildProcessWithoutNullStreams | null = null;
   #exited: Promise<void> = Promise.resolve();
   #state: TransportState = "new";
