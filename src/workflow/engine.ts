@@ -12,7 +12,7 @@ import { GENERIC_CLI_ADAPTER } from "../agents/generic-cli.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
 import { Executor } from "../executor/executor.ts";
-import { acquireWorkspaceLock } from "../journal/lock.ts";
+import { acquireWorkspaceLockInOrder } from "../journal/lock.ts";
 import type { Journal } from "../journal/journal.ts";
 import { runMission } from "../mission/runner.ts";
 import type { Plan } from "../mission/plan.ts";
@@ -90,7 +90,8 @@ export class ProductionEngine implements WorkflowEngine {
     const missing = reviewProfilesOf(r.workflow()).filter((id) => !library.profiles.some((p) => p.id === id));
     if (missing.length) return { status: "FAILED", reason: `this run's library does not hold the agents its reviews name: ${missing.join(", ")}` };
     const { journal, runId } = r;
-    const lock = acquireWorkspaceLock(c.stateDir, c.workspaceRoot);
+    // A second run in the same workspace waits its turn (first come, first served, plan 18 E10) instead of failing at once.
+    const lock = await acquireWorkspaceLockInOrder(c.stateDir, c.workspaceRoot);
     const zoo = await ZooAdapter.open(loadPin(), c.workspaceRoot);
     try {
       const executor = new Executor({ workspace: c.workspaceRoot, runId, journal, zoo, generation: lock.generation });

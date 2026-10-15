@@ -3,7 +3,7 @@
 // there is no stale pidfile and no pid-reuse race. It lives at the ROOT of the state dir,
 // above the per-run directories, so two different run_ids cannot each take "their own" lock.
 
-import { mkdirSync, realpathSync } from "node:fs";
+import { mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -57,6 +57,61 @@ export function acquireWorkspaceLock(stateDir: string, workspace: string): Works
     }
     const msg = String((e as Error)?.message ?? e);
     if (/locked|busy/i.test(msg)) throw new LockBusy(path);
+    throw e;
+  }
+}
+
+// First come, first served (plan 18 E10). A waiter leaves a ticket in <stateDir>/lock-queue; only the oldest live ticket
+// may try the lock, so a process cannot be overtaken forever by later arrivals. A ticket whose process is gone is
+// pruned, so a crash cannot block the queue. A process ID that the kernel has reused is not detected: the ticket of a
+// dead process is removed only when no process holds that ID, which is the limit of this check.
+const QUEUE_DIR = "lock-queue";
+let ticketSeq = 0;
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+export async function acquireWorkspaceLockInOrder(
+  stateDir: string,
+  workspace: string,
+  opts: { timeoutMs?: number; pollMs?: number } = {},
+): Promise<WorkspaceLock> {
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const pollMs = opts.pollMs ?? 10;
+  const dir = join(stateDir, QUEUE_DIR);
+  mkdirSync(dir, { recursive: true });
+  const name = `${String(Date.now()).padStart(15, "0")}-${String(++ticketSeq).padStart(8, "0")}-${process.pid}`;
+  const mine = join(dir, name);
+  writeFileSync(mine, JSON.stringify({ pid: process.pid }), { flag: "wx" });
+  const deadline = Date.now() + timeoutMs;
+  try {
+    for (;;) {
+      const live = readdirSync(dir).sort().filter((f) => {
+        const pid = Number(f.split("-").at(-1));
+        if (processAlive(pid)) return true;
+        rmSync(join(dir, f), { force: true });
+        return false;
+      });
+      if (live[0] === name) {
+        try {
+          const lock = acquireWorkspaceLock(stateDir, workspace);
+          rmSync(mine, { force: true });
+          return lock;
+        } catch (e) {
+          if (!(e instanceof LockBusy)) throw e;
+        }
+      }
+      if (Date.now() >= deadline) throw new LockBusy(join(stateDir, "lock.db"));
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+  } catch (e) {
+    rmSync(mine, { force: true });
     throw e;
   }
 }
