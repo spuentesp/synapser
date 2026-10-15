@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": {
-    "command": "node --test test/library/agent-rules.test.ts test/library/references.test.ts test/library/validation-golden.test.ts test/library/decimals.test.ts"
+    "command": "node --test test/library/agent-rules.test.ts test/library/references.test.ts test/library/validation-golden.test.ts test/library/decimals.test.ts test/library/validate.survivors.test.ts"
   },
   "mutate": [
     "src/library/validate.ts"
