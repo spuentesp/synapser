@@ -38,6 +38,14 @@ export interface FrozenLibrary {
   get(kind: LibraryKind, id: string): LibraryDocument | null;
 }
 
+export interface LibraryHistoryEntry {
+  seq: number;
+  operation: "PUT" | "DELETE" | "ROLLBACK";
+  digest: Digest;
+  actor: string;
+  reason?: string;
+}
+
 // library documents carry decimal prices; the request and journal digests stay integers-only (canonical.ts)
 const DOC_JSON: CanonicalOptions = { decimals: true };
 const SNAPSHOT_EVENT = "library_snapshot";
@@ -99,6 +107,31 @@ export class LibraryStore {
     return true;
   }
 
+  /** Restore an immutable skill version by digest and record the operator's reason in the ledger. */
+  rollbackSkill(id: string, digest: Digest, actor: string, reason: string): LibraryEntry {
+    this.#assertWritable();
+    checkIdentity("skills", id, actor);
+    if (!isDigest(digest)) throw new Error("invalid skill digest");
+    if (typeof reason !== "string" || reason.trim().length === 0) throw new Error("rollback reason is required");
+    const prior = this.#events().find((event) => {
+      if (event.entityId !== `skills:${id}` || event.toState !== "PUT") return false;
+      return (event.data as Record<string, unknown>)["digest"] === digest;
+    });
+    if (!prior) throw new Error(`skill digest ${digest} is not in ${id}'s history`);
+    const entry = this.#entry(prior);
+    const current = this.get("skills", id);
+    const blob = (prior.data as Record<string, unknown>)["blob"] as Digest;
+    let seq = 0;
+    this.#journal.tx((tx) => {
+      seq = tx.event("_server", "library_change", `skills:${id}`, current?.digest ?? null, "PUT", {
+        kind: "skills", id, digest, blob, actor, operation: "ROLLBACK", reason: reason.trim(),
+      });
+    });
+    const restored = { ...entry, seq, actor };
+    this.#materialize(restored);
+    return restored;
+  }
+
   get(kind: LibraryKind, id: string): LibraryEntry | null {
     checkKindAndId(kind, id);
     const event = this.#latest().get(`${kind}:${id}`);
@@ -114,11 +147,18 @@ export class LibraryStore {
       .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
   }
 
-  history(kind: LibraryKind, id: string): { seq: number; operation: "PUT" | "DELETE"; digest: Digest; actor: string }[] {
+  history(kind: LibraryKind, id: string): LibraryHistoryEntry[] {
     checkKindAndId(kind, id);
     return this.#events().filter((event) => event.entityId === `${kind}:${id}`).map((event) => {
       const data = event.data as Record<string, unknown>;
-      return { seq: event.seq, operation: event.toState as "PUT" | "DELETE", digest: data["digest"] as Digest, actor: data["actor"] as string };
+      const operation = data["operation"];
+      return {
+        seq: event.seq,
+        operation: operation === "ROLLBACK" ? "ROLLBACK" : event.toState as "PUT" | "DELETE",
+        digest: data["digest"] as Digest,
+        actor: data["actor"] as string,
+        ...(typeof data["reason"] === "string" ? { reason: data["reason"] } : {}),
+      };
     });
   }
 

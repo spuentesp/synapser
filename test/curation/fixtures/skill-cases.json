@@ -1,0 +1,23 @@
+[
+  {
+    "id": "dev-summary",
+    "split": "dev",
+    "task": "Summarize the supplied change.",
+    "k": 1,
+    "expectedIncludes": "Summary:"
+  },
+  {
+    "id": "holdout-risk",
+    "split": "holdout",
+    "task": "Review the change and name a concrete risk.",
+    "k": 2,
+    "expectedIncludes": "Risk:"
+  },
+  {
+    "id": "holdout-evidence",
+    "split": "holdout",
+    "task": "Explain which evidence supports the conclusion.",
+    "k": 1,
+    "expectedIncludes": "Evidence:"
+  }
+]

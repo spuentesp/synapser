@@ -55,6 +55,22 @@ describe("versioned state library", () => {
     assert.deepEqual(library.history("agents", "worker").map((item) => item.operation), ["PUT", "PUT", "DELETE"]);
   });
 
+  test("a skill rollback selects a digest from its own history and records operator context", () => {
+    const original = library.put("skills", "review", { name: "Review", description: "v1", content: "Check risk." }, "ui:operator").entry;
+    const newer = library.put("skills", "review", { name: "Review", description: "v2", content: "Check evidence." }, "ui:operator").entry;
+    const restored = library.rollbackSkill("review", original.digest, "cli:operator", "v2 missed required risk checks");
+    assert.equal(restored.digest, original.digest);
+    assert.notEqual(newer.digest, restored.digest);
+    assert.equal(library.get("skills", "review")?.digest, original.digest);
+    assert.deepEqual(library.history("skills", "review").map(({ operation }) => operation), ["PUT", "PUT", "ROLLBACK"]);
+    assert.deepEqual(library.history("skills", "review")[2], {
+      seq: 3, operation: "ROLLBACK", digest: original.digest, actor: "cli:operator", reason: "v2 missed required risk checks",
+    });
+    assert.throws(() => library.rollbackSkill("review", newer.digest, "cli:operator", " "), /reason is required/);
+    const other = library.put("skills", "other", { name: "Other", description: "Other", content: "No." }, "ui:operator").entry;
+    assert.throws(() => library.rollbackSkill("review", other.digest, "cli:operator", "wrong skill"), /not in review's history/);
+  });
+
   test("the ledger repairs an unlogged disk edit and rejects invalid identities", () => {
     const stored = library.put("templates", "review", { title: "Review" }, "ui:operator").entry;
     const current = join(state, "library", "templates", "review", "current.json");

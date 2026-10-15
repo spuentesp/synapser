@@ -60,6 +60,15 @@ describe("library snapshot per run (L3)", () => {
     assert.equal((snapshots[0]!.data as { entries: unknown[] }).entries.length, 2);
   });
 
+  test("a run started after skill rollback snapshots the restored digest", () => {
+    const first = lib.get("skills", "style")!;
+    lib.put("skills", "style", { name: "style", description: "more detail", content: "Use tabs and cite evidence." }, ACTOR);
+    lib.rollbackSkill("style", first.digest, ACTOR, "restore verified instructions");
+    const frozen = lib.freeze(run);
+    assert.equal(frozen.entries.find((entry) => entry.id === "style")?.digest, first.digest);
+    assert.equal(frozen.get("skills", "style")?.content, "Use tabs.");
+  });
+
   test("a snapshot never comes from the _server journal, which is the library itself", () => {
     assert.throws(() => lib.freeze(sj), /_server journal/);
   });

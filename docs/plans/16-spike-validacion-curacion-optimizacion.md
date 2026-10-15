@@ -148,7 +148,7 @@ Un caso sin comprobación de uso mide solo resultado. Eso se declara en el caso,
 
 ## 6. P16.5 — Optimización offline
 
-**Prerrequisito.** P16.4: casos `dev` y `holdout`, y la puerta de admisión. Ningún optimizador se conecta antes.
+**Prerrequisito.** P16.4: casos `dev` y `holdout`, y evaluación holdout local. Ningún optimizador se conecta antes; todo candidato elegible sigue requiriendo guardado manual.
 
 **Qué se optimiza.** Textos (instrucciones de agente y skills), no programas. Por eso DSPy queda fuera: su unidad son los módulos y las firmas, y tiene 16 dependencias directas.
 
@@ -174,7 +174,7 @@ Criterios:
 5. **Evidencia.** Los resultados del prototipo van a `evidence/`. El seguimiento guarda la decisión.
 
 **Invariantes y verificación.**
-- **O1 Única puerta.** Un candidato solo llega a la biblioteca por CU1. *Verificador:* un candidato no admitido no aparece en la instantánea de ninguna corrida. *Falsación:* escribir el candidato directamente; la prueba falla.
+- **O1 Única puerta (procedimental).** Un candidato solo debe guardarse manualmente después de que CU1 lo declare elegible; la biblioteca no impone técnicamente ese flujo. *Verificador:* el evaluador no tiene dependencia ni efecto de escritura sobre `LibraryStore`; un holdout fallido nunca declara elegibilidad. *Falsación:* escribir automáticamente el candidato desde el evaluador o ignorar un fallo hace fallar pruebas.
 - **O2 Tope.** Sin tope, no arranca. Con tope, se detiene al alcanzarlo, y el recuento de llamadas coincide con el tope. *Falsación:* ignorar el tope; la prueba falla.
 - **O3 Retención.** Un candidato que mejora `dev` y empeora `holdout` se rechaza. *Verificador:* un modelo de prueba construido para sobreajustar. *Falsación:* decidir con `dev`; la prueba falla.
 
@@ -215,9 +215,9 @@ Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la
 |---|---|---|---|
 | 1 | Añadir `@modelcontextprotocol/server` en versión exacta, si P16.2 cumple | aprobada el 14 oct; incorporada en `73991d1` | es dependencia nueva |
 | 2 | zod en versión exacta, dentro de `^4.2.0` | aprobada con P16.3 (14 oct), en 4.6.7, la que ya trae el SDK | es dependencia directa nueva; el árbol de producción no cambia |
-| 3 | Dónde viven los casos de regresión | fixtures versionados bajo `test/`, fuera de la biblioteca de runtime | decisión del usuario: fixtures bajo `test/` |
-| 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | (b): cada caso llama a un modelo; una escritura HTTP no debería esperar eso ni depender de un proveedor | decisión del usuario: admisión manual tras holdout; ver alcance candidate→promote en P16.4 |
-| 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | decisión del usuario: deben pasar todas las repeticiones |
+| 3 | Dónde viven los casos de regresión | fixtures versionados bajo `test/`, fuera de la biblioteca de runtime | confirmado: fixtures versionados bajo `test/` |
+| 4 | Cómo se admite una versión: (a) el propio guardado exige los casos, o (b) un paso de admisión aparte que crea un candidato y lo promueve | evaluación local por separado y guardado manual; sin endpoint de admisión | confirmado: evaluación local y guardado manual tras holdout; el operador sigue siendo responsable de cumplir el paso |
+| 5 | Umbral de admisión: todas las repeticiones, o una proporción declarada | todas, por defecto | confirmado: deben pasar todas las repeticiones |
 | 6 | Python como dependencia del operador, solo si gana `gepa` | decidir con el prototipo delante | añade un runtime |
 | 7 | Rollback: vuelve a evaluar, o solo registra | solo registra (CU2) | cambia la garantía que se ofrece |
 
