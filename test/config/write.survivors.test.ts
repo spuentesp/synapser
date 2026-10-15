@@ -33,7 +33,8 @@ describe("the configuration writer's branches that mutation testing found unpinn
 
   test("a provider that fails validation, or names a metadata address, is refused with its own reason and the file does not change", () => {
     const before = text();
-    const cases: [ProviderConfig, string][] = [[{ ...HOT, protocol: "nonsense" }, "unsupported protocol nonsense"], [{ ...HOT, models: [] }, "models must be a non-empty array"], [{ ...HOT, baseUrl: "http://169.254.169.254/" }, "points at a cloud metadata address"]];
+    // An unknown protocol is not a ProviderConfig, which is the point: the writer must refuse it.
+    const cases: [ProviderConfig, string][] = [[{ ...HOT, protocol: "nonsense" } as unknown as ProviderConfig, "unsupported protocol nonsense"], [{ ...HOT, models: [] }, "models must be a non-empty array"], [{ ...HOT, baseUrl: "http://169.254.169.254/" }, "points at a cloud metadata address"]];
     for (const [bad, reason] of cases) {
       assert.throws(() => writeLiveConfig(live, { kind: "providers", id: "bad", value: bad }), (e: unknown) => e instanceof ConfigWriteError && e.errors.some((m) => m.includes(reason)));
       assert.equal(text(), before, "not one byte changed");

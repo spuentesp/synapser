@@ -1,9 +1,11 @@
 // Plan 18 E4 (H4.3): a per-module mutation gate. Each security module has its own floor in
 // scripts/mutation-thresholds.json. A floor is raised as survivors are killed; it is never lowered to make a run pass.
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const reportPath = new URL("../evidence/mutation/report.json", import.meta.url);
-const floors = JSON.parse(readFileSync(new URL("./mutation-thresholds.json", import.meta.url), "utf8")) as Record<string, number>;
+// Arguments (optional): the report and the floors. Defaults: the security modules (verify); the library validator uses its own pair.
+const reportPath = resolve(process.argv[2] ?? "evidence/mutation/report.json");
+const floors = JSON.parse(readFileSync(resolve(process.argv[3] ?? "scripts/mutation-thresholds.json"), "utf8")) as Record<string, number>;
 
 if (!existsSync(reportPath)) {
   console.error("✖ no mutation report: run npx stryker run first");

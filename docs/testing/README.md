@@ -34,7 +34,7 @@ Lista abierta al cierre de este documento. Cada entrada tiene fecha y se corrige
 
 ### Presupuesto de tiempo (H13.2, H13.3)
 
-Medición del 15 oct 2026 con `time npm run verify`: 3 min 08 s de tiempo real, 932 pruebas, 0 fallos. Presupuesto: 4 min (el tiempo medido más un 25 % de margen, redondeado). Un aumento que lo supere exige una decisión registrada.
+Presupuesto de `npm run verify`: 4 minutos de tiempo real. Es un criterio, no una medición: un aumento que lo supere exige una decisión registrada.
 
 ### Cobertura de contratos (H13.5)
 

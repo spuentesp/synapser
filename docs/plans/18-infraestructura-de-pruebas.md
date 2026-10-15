@@ -216,29 +216,31 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (15 oct 2026)
 
-Épicas cerradas: E1, E2, E3, E5, E10, E12, E13. Épicas en curso: E4, E6, E7, E8, E9, E11. Ninguna épica está completa en todas sus historias; cada una lista lo que le falta.
+Cerradas: E1, E2, E3, E5, E10, E12, E13. En curso: E4, E6, E7, E9, E11 (cada una con historias pendientes abajo). E8 tiene todas sus historias hechas.
 
-### Pendientes de código y de prueba
+### Hecho en esta pasada
 
-- **E4 mutación:** H4.1 faltan el ejecutor, el journal y los validadores de biblioteca. Los suelos suben con cada módulo nuevo (`scripts/mutation-thresholds.json`), y `write.ts` debe subir de 89 % a 95 %.
-- **E6 sandbox:** H6.3 red con `pasta`, bloqueada por P15.9.
-- **E7 MCP:** H7.2 tarea completa en sandbox (workflow, compuerta, cambio en el repositorio); H7.3 rechazo sin cambios parciales; H7.4 conector de configuración de punta a punta; H7.5 ejecución `live` opcional.
-- **E8 oráculo:** H8.2 pruebas compuestas; H8.3 entradas no vistas; H8.4 mutación del cambio del agente antes de aceptarlo.
-- **E9 interfaz:** defecto conocido — salir de `chat` hacia `workflows` desmonta la aplicación (`destroy_ is not a function` en desarrollo); reproducido, causa sin encontrar, marcado con `test.fail`. Pendientes: H9.3 crear y aprobar un workflow desde la interfaz; H9.4 biblioteca con validación igual a la de la API; H9.6 accesibilidad automatizada (hoy solo nombres de botones). H9.5 pantalla de configuración: fuera de este ciclo.
-- **E11 simulación:** H11.2 fallos simulados de disco (escritura parcial, falta de `fsync`); reproducción completa de una corrida desde su semilla.
-- **E12 arquitectura:** H12.4 fijar un umbral de duplicación con las cifras; H12.5 aplicar los hallazgos de `docs/architecture/README.md`, cada uno con su prueba antes del cambio.
-- **E13 gobierno:** cerrar los dos intermitentes listados en `docs/testing/README.md`; comprobar la cobertura de contratos (H13.5) al cierre.
-- **E10 hallazgo:** el bloqueo del journal no tiene cola. El modelo exige equidad fuerte en la entrada; decidir si se implementa una cola FIFO o se acepta la inanición con límite registrado.
+- **E4:** suelos de mutación por módulo: `inject.ts` y `write.ts` en 95 %; validadores de biblioteca en 88 % (`npm run test:mutation`, fuera de `verify` por tiempo). El suelo solo sube.
+- **E7:** H7.4 (conector de configuración de punta a punta) y el rechazo de configuración sin escritura parcial.
+- **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza).
+- **E9:** defecto de desmontaje al salir de `chat` corregido en el código (no en la prueba). H9.3 (workflow creado en el servidor y visible en la lista), H9.6 (accesibilidad WCAG 2.x A/AA en las doce vistas, en tema claro y oscuro).
+- **E11:** H11.2 en la parte de escrituras parciales, con doce semillas fijas.
 
-### Pendientes de planes anteriores (no de esta infraestructura)
+### Pendiente de código o de prueba
 
-- **P16.4, P16.5, P16.6:** curación, optimización y zod para proveedores; dependen de las decisiones 3 a 7 del plan 16.
-- **P17.9:** escritura desde la UI y la CLI del operador; la pantalla de configuración queda fuera.
-- **P15.9 y Q3.4, Q3.6:** bloqueadas.
-- **C.3:** demo y vídeo; el usuario pidió no hacerla todavía.
+- **H4.1** ejecutor y journal: mutación con un comando de pruebas por módulo, porque el comando se repite por cada mutante. `validate.ts` tiene 32 sobrevivientes que llevar al suelo.
+- **H7.2** tarea completa en sandbox: workflow, compuerta aprobada y cambio aplicado solo en el alcance declarado.
+- **H7.3** tal como está escrita: una tarea que el agente no puede completar termina en el estado declarado, sin cambios parciales. Lo hecho hasta ahora cubre el rechazo de configuración, no esta historia.
+- **H9.4** biblioteca: el error de validación que se muestra en la interfaz es el mismo que devuelve la API.
+- **H11.2** fallo de `fsync`: requiere una capa de sistema de archivos que pierda datos no sincronizados. Y la reproducción completa de una corrida desde su semilla.
 
-### Decisiones que faltan
+### Bloqueado por una decisión del operador o del usuario
 
-- Cola FIFO del bloqueo del journal (E10).
-- Si se corrige el defecto de la interfaz ahora o después de E9.
-- Si H12.5 se aplica dentro de este plan o en uno aparte.
+- **H6.3** red con `pasta`: bloqueado por P15.9.
+- **H7.5** ejecución `live`: necesita credenciales reales, que esta sesión no lee. `test:live` queda opcional.
+- **H12.4** umbral de duplicación y **H12.5** aplicación de los hallazgos de arquitectura: alcance y umbral por acordar.
+- **E10** cola FIFO del bloqueo del journal: el modelo muestra inanición con equidad débil; decidir si se implementa la cola o se acepta y registra.
+
+### Decisiones que la regla de `verify` no cubre
+
+- `npm run verify` no ejecuta `test:ui` ni `test:mutation` (tiempo). Ambos se ejecutan a mano antes de cerrar una épica que los toca.
