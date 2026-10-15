@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { defaultModelConfig } from "../../src/model/config.ts";
+import { defaultModelConfig, type ProviderConfig } from "../../src/model/config.ts";
 import { libraryPolicyOf, NO_LIBRARY_POLICY, providerOfAgent, validateLibraryDocument } from "../../src/library/validate.ts";
 
 // Plan 18 E4 (H4.1, library validator): the branches and messages the mutation run left alive. Each assertion is the whole
@@ -136,7 +136,7 @@ describe("the provider of a library agent: its own, or the one it extends", () =
 });
 
 describe("a document's own provider wins over the one it extends", () => {
-  const OTHER = { protocol: "openai-compatible", baseUrl: "https://other.example/v1/", apiKeyEnv: [], models: [{ id: "other-model" }] };
+  const OTHER: ProviderConfig = { protocol: "openai-compatible", baseUrl: "https://other.example/v1/", apiKeyEnv: [], models: [{ id: "other-model" }] };
   const withOther = () => libraryPolicyOf({ providers: defaultModelConfig().providers, providerKeyEnv: [], profiles: [] }, { other: OTHER });
 
   test("a model declared by the document's own provider is accepted, even when the base's provider lacks it", () => {
@@ -151,7 +151,7 @@ describe("a document's own provider wins over the one it extends", () => {
 });
 
 describe("which provider a library agent runs on (the server lists its dependencies by this)", () => {
-  const OTHER = { protocol: "openai-compatible", baseUrl: "https://other.example/v1/", apiKeyEnv: [], models: [{ id: "other-model" }] };
+  const OTHER: ProviderConfig = { protocol: "openai-compatible", baseUrl: "https://other.example/v1/", apiKeyEnv: [], models: [{ id: "other-model" }] };
   const policy = libraryPolicyOf({ providers: defaultModelConfig().providers, providerKeyEnv: [], profiles: [] }, { other: OTHER });
 
   test("its own provider, when it names one", () => {
