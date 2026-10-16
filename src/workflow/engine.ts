@@ -3,7 +3,7 @@
 //   → baseline snapshot → mission (conditions are the acceptance decision) → DONE / FAILED / CANCELLED
 // Everything it decides is a ledger event; it never reports DONE itself — the conditions do.
 
-import { CliOneShotRunner, NativeLoopRunner } from "../agents/adapters.ts";
+import { CliOneShotRunner, NativeLoopRunner, nativeRoleUsesSystemModel } from "../agents/adapters.ts";
 import { CLAUDE_CODE_ADAPTER } from "../agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../agents/codex.ts";
 import { KIMI_ADAPTER } from "../agents/kimi.ts";
@@ -18,7 +18,7 @@ import { runMission } from "../mission/runner.ts";
 import type { Plan } from "../mission/plan.ts";
 import { conditionCoverage, planMission } from "../mission/supervisor.ts";
 import { BudgetManager } from "../model/budget.ts";
-import type { ModelPort } from "../model/types.ts";
+import type { ModelPort, Role as ModelRole } from "../model/types.ts";
 import { buildCatalog, samplesFromJournal, type ProfileCard } from "../orchestration/catalog.ts";
 import { LibraryRunError, type LibraryView, runLibrary } from "../library/resolve.ts";
 import { reviewProfilesOf } from "./model.ts";
@@ -117,7 +117,10 @@ export class ProductionEngine implements WorkflowEngine {
       // A native agent can bring its own brain. Provider data is shared and credentials remain env names.
       const providers = library.providers;
       const own = new Map<string, ModelPort>();
-      const modelFor = (p: AgentProfile): ModelPort | null => {
+      const modelFor = (p: AgentProfile, role: ModelRole): ModelPort | null => {
+        // L6/Q2.3: worker and repair assignments govern native agents too. Keep their profile provider
+        // metadata validated, but route inference through the shared role-aware ModelPort.
+        if (nativeRoleUsesSystemModel(role) && p.role !== "advisor") return null;
         if (!p.provider) return null;
         let m = own.get(p.id);
         if (!m) {

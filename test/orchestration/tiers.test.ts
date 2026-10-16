@@ -6,16 +6,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { CliOneShotRunner, NativeLoopRunner } from "../../src/agents/adapters.ts";
+import { CliOneShotRunner, NativeLoopRunner, nativeRoleUsesSystemModel } from "../../src/agents/adapters.ts";
 import { AgentRunnerRegistry } from "../../src/agents/port.ts";
 import { type AgentProfile, type Tier, tierRank } from "../../src/agents/profile.ts";
 import { ConfigError, loadConfig } from "../../src/config/load.ts";
 import { doctor, type Probe } from "../../src/cli/doctor.ts";
 import { validatePlan } from "../../src/mission/plan.ts";
 import { runMission } from "../../src/mission/runner.ts";
-import { modelConfigForProvider, type ProviderConfig } from "../../src/model/config.ts";
+import { defaultModelConfig, modelConfigForProvider, systemModelConfig, type ProviderConfig } from "../../src/model/config.ts";
 import { OpenAICompatibleProvider } from "../../src/model/openai-compatible-provider.ts";
-import { journalRecorder } from "../../src/model/recorder.ts";
+import { journalRecorder, priceResolverForProviders } from "../../src/model/recorder.ts";
 import { buildCatalog, type ProfileCard } from "../../src/orchestration/catalog.ts";
 import { PoolLimiter } from "../../src/orchestration/pools.ts";
 import { route } from "../../src/orchestration/router.ts";
@@ -284,6 +284,63 @@ describe("an agent backed by another OpenAI-compatible endpoint", () => {
     } finally {
       delete process.env["TEST_ENDPOINT_KEY"];
       server.close();
+    }
+  });
+
+  test("native worker and repair roles use their configured system providers over the profile provider", async () => {
+    const seen: { auth: string | undefined; model: string }[] = [];
+    const servers = ["worker", "repair"].map((role) => createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        const model = (JSON.parse(body) as { model: string }).model;
+        seen.push({ auth: req.headers["authorization"], model });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: role, model, choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [{ id: "finish", type: "function", function: { name: "finish", arguments: JSON.stringify({ summary: role }) } }] } }], usage: { prompt_tokens: 11, completion_tokens: 3 } }));
+      });
+    }));
+    await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))));
+    const secrets = { SYSTEM_WORKER_KEY: "worker-key-test", SYSTEM_REPAIR_KEY: "repair-key-test" };
+    Object.assign(process.env, secrets);
+    try {
+      const ports = servers.map((server) => (server.address() as { port: number }).port);
+      const roleProvider = (baseUrl: string, key: string, model: string): ProviderConfig => ({
+        protocol: "openai-compatible", baseUrl, apiKeyEnv: [key], models: [{ id: model, usdPer1MIn: 1, usdPer1MOut: 2 }],
+      });
+      const defaults = defaultModelConfig();
+      const providers = {
+        ...defaults.providers,
+        "worker-system": roleProvider(`http://127.0.0.1:${ports[0]}/v1/`, "SYSTEM_WORKER_KEY", "worker-system-model"),
+        "repair-system": roleProvider(`http://127.0.0.1:${ports[1]}/v1/`, "SYSTEM_REPAIR_KEY", "repair-system-model"),
+        "profile-owned": roleProvider("http://127.0.0.1:1/v1/", "SYSTEM_WORKER_KEY", "profile-owned-model"),
+      };
+      const system = systemModelConfig(providers, {
+        ...defaults.roles,
+        worker: { provider: "worker-system", model: "worker-system-model", temperature: 0 },
+        repair: { provider: "repair-system", model: "repair-system-model", temperature: 0 },
+      });
+      const shared = new OpenAICompatibleProvider({ config: system, onCall: journalRecorder(env.journal, priceResolverForProviders(providers)) });
+      const own = new OpenAICompatibleProvider({ config: modelConfigForProvider("profile-owned", providers["profile-owned"], "profile-owned-model") });
+      const runner = new NativeLoopRunner(shared, undefined, undefined, (_profile, role) => nativeRoleUsesSystemModel(role) ? null : own);
+      for (const role of ["worker", "repair"] as const) {
+        const profile: AgentProfile = { id: `native-${role}`, description: "role route", role: "writer", adapter: "native", argv: [], parser: "plain", timeoutMs: 60_000, tags: [], enabled: true, tier: "cheap", provider: "profile-owned", model: "profile-owned-model", nativeRole: role };
+        const out = await runner.run({ profile, task: { taskId: `task-${role}`, objective: "finish", scope: ["app/schema.py"], criteria: ["done"], planRevision: 1 }, workspaceRoot: env.ws, runId: RUN, journal: env.journal, executor: env.exec, generation: env.lock.generation });
+        assert.equal(out.outcome, "SUCCEEDED");
+      }
+      assert.deepEqual(seen, [
+        { auth: "Bearer worker-key-test", model: "worker-system-model" },
+        { auth: "Bearer repair-key-test", model: "repair-system-model" },
+      ]);
+      const calls = env.journal.listModelCalls();
+      assert.deepEqual(calls.map((call) => [call.role, call.requestedModel, call.costUsd]), [
+        ["worker", "worker-system-model", 0.000017],
+        ["repair", "repair-system-model", 0.000017],
+      ]);
+      assert.equal(seen.some((call) => call.model === "profile-owned-model"), false, "native profile provider cannot override a system role");
+    } finally {
+      delete process.env["SYSTEM_WORKER_KEY"];
+      delete process.env["SYSTEM_REPAIR_KEY"];
+      await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
     }
   });
 });

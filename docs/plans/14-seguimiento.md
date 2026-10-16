@@ -89,18 +89,14 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: ebee726 (reapertura corregida en 27a07bc) · prueba: validación acumulada de proveedores, modelos y precios; migración
   determinista de `endpoint`; corrida del bucle `native` contra un servidor OpenAI-compatible local;
   costo conocido por tarifa declarada y costo desconocido ante tarifa ausente, ambigua o alias sin tarifa del fallback; `test/model/provider-library.test.ts` y `test/model/provider.test.ts`; suite completa y typecheck.
-- [!] Q2.3 Roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo;
+- [~] Q2.3 (quién: GPT-6 Codex; desde: 2026-10-15) roles del sistema (supervisor, worker, repair, advisor, chat) asignables a proveedor+modelo, incluidos `worker`/`repair` de agentes nativos;
   hoy fijos en `defaultModelConfig()`. *Invariante:* L6. commit: 74c8046 · prueba:
   `test/model/system-roles.test.ts` (sin bloque `roles` = predeterminados; un rol movido no hereda fallbacks;
   documento inválido con todos sus problemas; redefinir un proveedor usado por un rol por defecto falla al cargar;
   extremo a extremo por `createRuntime` y `chat.send` contra servidor local: petición, modelo, clave y tarifa;
   `doctor` revisa la clave de cada proveedor de roles). Falsada con un runtime que ignora los roles y con un
   cargador sin validación de asignaciones por defecto. Suite completa.
-  nota: en producción `worker` y `repair` no llegan a ninguna llamada. `runMission` siempre recibe
-  `orchestration` y los perfiles nativos llevan proveedor propio (`modelFor`); solo la ruta sin orquestación
-  (scripts y pruebas) usa el modelo del sistema para ellos. Decisión abierta: si el repair del plan 14 §2.1 debe
-  gobernar también los perfiles nativos.
-  motivo: falta definir si worker/repair son solo roles internos de Synapser o también sustituyen proveedor/modelo en agentes nativos; no cambiar ese runtime hasta recibir la decisión.
+  *Invariante adicional:* el rol `nativeRole` selecciona el proveedor/modelo configurado para `worker` o `repair`; ningún proveedor propio de un agente escritor puede prevalecer en esas llamadas. Los revisores nativos mantienen su proveedor de perfil para preservar el contrato de revisión de Q5.3. *Falsación:* asignar proveedores y modelos distintos por rol y falsificar el sistema compartido o usar el provider del perfil debe hacer fallar la prueba.
 - [x] Q2.4 Prueba de conexión de proveedor (lista modelos + llamada mínima; la clave nunca sale).
   commit: 37562e2 · prueba: `test/model/connection.test.ts` (ocho casos: éxito con cabecera y tarifa declarada;
   sin clave no sale ninguna petición; 401 sin eco de la clave; redirección rechazada sin entregar la clave al
@@ -185,8 +181,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
 - [x] P15.7 D7 implementación: modo de confianza configurable en `synapser.config.json`, por defecto operador confiable. Verificación: cada modo tiene su prueba; falsación: ignorar el modo.
   commit: 6e43ad1 · prueba: `test/config/trust-mode.test.ts` (operator por defecto; adversarial aceptado; cualquier otro valor refuta el archivo entero) y `test/api/session.test.ts` (cada modo tiene sus pruebas). Falsación hecha: ignorar el modo (la prueba de modo adversario falla).
 - [x] P15.8 D5 investigación de la red de los CLI: documentación de los Sandboxes, host y opciones A, B y C en el plan 15, sección 10. commit: 043b0ad · prueba: investigación sin código; la prueba de concepto de salida por proxy (B) queda pendiente de decisión.
-- [!] P15.9 Prueba de concepto de D5 con `pasta`: un agente dentro de un espacio de red sin salida, salvo a un proxy del host que solo reenvía al host del modelo. Verificación: el host permitido responde, y cualquier otro destino falla (también el DNS y la IP directa).
-  motivo: `pasta` no separa un puerto del loopback del host (verificado; ver plan 15, sección 10). `bwrap --unshare-net` con un proxy en socket Unix sí aísla para HTTP. Falta verificar `CONNECT` para HTTPS y un CLI real. Cambiar el mecanismo aprobado es decisión del usuario.
+- [~] P15.9 Prueba local de alternativa B: `bwrap --unshare-net` y proxy de host con destino exacto. Verificación: fixture HTTPS permitido por `CONNECT`; otros destinos, DNS directo e IP directa fallan; un CLI instalado solo llama al fixture. quién: GPT-6 Codex; desde: 2026-10-15.
 
 ### Q5 — La biblioteca en las corridas
 

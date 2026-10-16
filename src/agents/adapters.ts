@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { runTask } from "./native/loop.ts";
 import { taskPrompt } from "./native/prompts.ts";
 import type { AgentProfile } from "./profile.ts";
-import type { ModelPort } from "../model/types.ts";
+import type { ModelPort, Role as ModelRole } from "../model/types.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { treeDigest } from "../validation/snapshot.ts";
 import type { AgentRunOutput, AgentRunRequest, AgentRunner } from "./port.ts";
@@ -15,6 +15,11 @@ import { PROFILE_CLI_ADAPTER, type AgentAdapter } from "./adapter.ts";
 import { prependSkills, validateInjectedSkills } from "./skills.ts";
 import { type InjectedProvider, providerForRun } from "./inject.ts";
 import type { ProviderConfig } from "../model/config.ts";
+
+/** Worker and repair are system roles, so their configured assignments take precedence over native profile providers. */
+export function nativeRoleUsesSystemModel(role: ModelRole): boolean {
+  return role === "worker" || role === "repair";
+}
 
 // ---- cli-oneshot -----------------------------------------------------------------------------
 
@@ -86,12 +91,13 @@ export class NativeLoopRunner implements AgentRunner {
   readonly #model: ModelPort;
   readonly #limits: Partial<LoopLimits> | undefined;
   readonly #research: ResearchSession | undefined;
-  readonly #modelFor: ((p: AgentProfile) => ModelPort | null) | undefined;
+  readonly #modelFor: ((p: AgentProfile, role: ModelRole) => ModelPort | null) | undefined;
   /**
    * `modelFor` lets a profile carry its OWN endpoint (any OpenAI-compatible server): the same loop, the
-   * same executor, a different brain. Returning null falls back to the shared model.
+   * same executor, a different brain. It receives the effective role so callers can defer system-routed
+   * calls to the role-aware shared model. Returning null falls back to the shared model.
    */
-  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession, modelFor?: (p: AgentProfile) => ModelPort | null) {
+  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession, modelFor?: (p: AgentProfile, role: ModelRole) => ModelPort | null) {
     this.#model = model;
     this.#limits = limits;
     this.#research = research;
@@ -111,7 +117,7 @@ export class NativeLoopRunner implements AgentRunner {
     const skills = validateInjectedSkills(injected, "prompt-prepend");
     const r = await runTask(
       {
-        model: this.#modelFor?.(req.profile) ?? this.#model,
+        model: this.#modelFor?.(req.profile, role) ?? this.#model,
         executor: req.executor,
         journal,
         runId: req.runId,

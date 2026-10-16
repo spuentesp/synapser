@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentProfile, adapterOf, validateProfile } from "./profile.ts";
 import { AgentRunnerRegistry, runAndIntegrate } from "./port.ts";
-import { CliOneShotRunner, NativeLoopRunner } from "./adapters.ts";
+import { CliOneShotRunner, NativeLoopRunner, nativeRoleUsesSystemModel } from "./adapters.ts";
 import { CLAUDE_CODE_ADAPTER } from "./claude-code.ts";
 import { CODEX_ADAPTER } from "./codex.ts";
 import { KIMI_ADAPTER } from "./kimi.ts";
@@ -20,6 +20,7 @@ import { modelConfigForProvider, type ProviderConfig, systemModelConfig } from "
 import { BudgetManager } from "../model/budget.ts";
 import { journalRecorder, priceResolverForProviders } from "../model/recorder.ts";
 import { OpenAICompatibleProvider } from "../model/openai-compatible-provider.ts";
+import type { Role as ModelRole } from "../model/types.ts";
 import { libraryFetch } from "../model/destinations.ts";
 import { runLibrary, type OperatorFile } from "../library/resolve.ts";
 import type { LibraryStore } from "../library/store.ts";
@@ -116,7 +117,8 @@ export async function runAgentTrial(o: {
     const system = systemModelConfig(view.providers, cfg.roles);
     const timeLimitMs = input.timeLimitSeconds * 1000;
     const shared = new OpenAICompatibleProvider({ config: { ...system, timeoutMs: Math.min(system.timeoutMs, timeLimitMs) }, onCall: journalRecorder(journal, priceResolverForProviders(cfg.providers)) });
-    const modelFor = (candidate: AgentProfile) => {
+    const modelFor = (candidate: AgentProfile, role: ModelRole) => {
+      if (nativeRoleUsesSystemModel(role) && candidate.role !== "advisor") return null;
       if (!candidate.provider || !candidate.model) throw new Error(`native agent ${candidate.id} is missing its provider or model`);
       const provider = view.providers[candidate.provider];
       if (!provider) throw new Error(`agent ${candidate.id} references unknown provider ${candidate.provider}`);
