@@ -11,8 +11,13 @@ const names = ["claim_files","list_claims","register_agent","rejoin_agent","post
 createInterface({ input: process.stdin }).on("line", (line) => {
   const m = JSON.parse(line);
   if (m.id === undefined) return;
-  if (m.method === "initialize")
-    return reply(m.id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "zoanthrope", version: "0.1.3" } });
+  if (m.method === "initialize") {
+    const result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "zoanthrope", version: "0.1.3" } };
+    const delay = Number(process.env.FAKE_ZOO_HANDSHAKE_DELAY_MS ?? 0);
+    if (delay > 0) setTimeout(() => reply(m.id, result), delay);
+    else reply(m.id, result);
+    return;
+  }
   if (m.method === "tools/list") return reply(m.id, { tools: names.map((name) => ({ name })) });
   if (m.method === "tools/call") {
     const { name, arguments: a } = m.params;

@@ -126,7 +126,7 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 - **H8.2** Pruebas compuestas: cada tarea de aceptación combina al menos dos capacidades del sistema, para que no basten módulos aislados. *Criterio:* una implementación que pasa cada capacidad por separado y falla la combinación es detectada.
 - **H8.3** Detección de codificación de resultados: una tarea de aceptación con entradas no vistas por el agente. *Criterio:* una respuesta que solo memoriza las entradas visibles falla.
 - **H8.4** Mutación guiada sobre el código que el agente escribe: se ejecutan las pruebas de aceptación contra mutantes del cambio. *Criterio:* un cambio que sobrevive a mutantes triviales se rechaza.
-- **H8.5** Registro de intentos: el número de ejecuciones contra el oráculo queda registrado, para detectar búsquedas por fuerza bruta. *Criterio:* el registro existe y se consulta en el informe.
+- **H8.5** Registro de intentos: el número de ejecuciones contra el oráculo queda registrado, para detectar búsquedas por fuerza bruta. *Criterio:* el registro existe y se consulta en el informe. *Invariante:* el informe no altera la evidencia JSONL append-only; el total cuenta todas las filas del mismo log aunque varíe `runId`. *Verificador:* `scripts/oracle-report.ts` resume total, aprobadas/fallidas y repeticiones por corrida, y rechaza filas corruptas; `test/oracle/hidden-oracle.test.ts` lo ejecuta como proceso real sobre un log sintético. *Falsación:* omitir una fila del total o aceptar JSON inválido hace fallar la prueba. El conteo es auditoría, no rate limit: conservar un único log append-only es responsabilidad del harness que ejecuta el oráculo.
 
 *Herramientas:* las del resto de épicas (sandbox, fast-check para generar entradas no vistas, Stryker para H8.4).
 
@@ -223,18 +223,18 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (15 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11, E12, E13. En curso: E6 y E7 (con historias pendientes abajo). E9 cierra sin H9.5, que quedó fuera de este ciclo por decisión.
+Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11 y E12. En curso: E6, E7 y E13 (con historias pendientes abajo). E9 cierra sin H9.5, que quedó fuera de este ciclo por decisión.
 
 ### Hecho en esta pasada
 
 - **E4:** los gates de mutación de los módulos fijados y la cobertura pendiente del ejecutor y el journal pasaron sus suelos. Los informes detallados se conservan en `evidence/mutation/` (ignorado).
 - **E7:** H7.2 (tarea completa en sandbox con compuerta y cambio dentro del alcance declarado), H7.3 tal como está escrita (tarea que el agente no completa: FALLA, repositorio intacto) y H7.4 (conector de configuración de punta a punta, rechazo sin escritura parcial).
-- **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza) y H8.5 (cada ejecución queda en `oracle-attempts.jsonl`, cuya lectura y resultados se comprueban en `test/oracle/hidden-oracle.test.ts`).
+- **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza) y H8.5 (`oracle-attempts.jsonl` se consulta con `node scripts/oracle-report.ts <archivo>`; el test valida conteo global con IDs repetidos y distintos, agrupación por corrida y rechazo del log corrupto).
 - **E9:** H9.3 crea un workflow desde el diseñador, muestra la compuerta, la aprueba en la vista y comprueba DONE/SATISFIED en Chromium (`test/ui/workflow-approval.spec.ts`, servidor real con modelo y CLI fixtures). La prueba API cubre también claves de aprobación de condición URL-encoded (`test/api/api.test.ts`). H9.4 comprueba que el motivo mostrado es el de la API. El defecto de desmontaje al salir de `chat` quedó corregido en el código. H9.6 comprueba accesibilidad WCAG 2.x A/AA en doce vistas, en tema claro y oscuro.
 - **E11:** H11.2 (pérdida simulada de fsync de archivo/directorio y recuperación desde snapshot durable) y H11.3 en corrida completa (el journal leía el reloj real; ahora pasa por el entorno).
 - **E10:** H10.1–H10.4 modelan los claims y la cola FIFO, trazan propiedades a pruebas de implementación y ejecutan TLC con jar fijado. El hallazgo inicial de inanición condujo a implementar FIFO; la decisión está tomada y registrada en `formal/README.md`.
 - **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
-- **E13:** dos intermitentes con límite revisado y causa probable escrita (no reproducidas).
+- **E13 en curso:** H13.1 tiene ahora lista vacía y regresiones para `kimi --help` y S13. H13.2 tiene un presupuesto definido. Mantener la épica abierta hasta comprobar un `npm run verify` completo y guardar la evidencia requerida por H13.3–H13.4 en `evidence/` (ignorado).
 
 ### E6 en curso
 

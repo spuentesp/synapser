@@ -27,10 +27,10 @@
 
 ### Intermitentes (H13.1)
 
-Lista abierta al cierre de este documento. Cada entrada tiene fecha y se corrige o se aísla antes del cierre del plan.
+Lista abierta: ninguna. Los dos casos registrados durante el plan tienen resolución y regresión verificable.
 
-- **`kimi --help` en `test/agents/adapter-help.test.ts`:** el límite pasó de 10 s a 60 s. Es un límite contra cuelgues, no una medida de velocidad; con la suite completa en marcha el comando puede tardar más de 10 s. Queda abierto solo si vuelve a superar 60 s.
-- **S13 en `test/zoo/s13-timeout.test.ts`:** el mismo límite de llamada cubría el handshake de un proceso recién lanzado. El handshake tiene ahora su propio presupuesto (10 s) y el límite de llamada es 1 s. Causa probable, no reproducida; si vuelve a fallar, se revisa con el reloj inyectado.
+- **Resuelta 2026-10-16 — `kimi --help` en `test/agents/adapter-help.test.ts`:** el límite del test es 60 s y conserva la comprobación contra el CLI instalado. Se volvió a ejecutar el test aislado y dentro de `npm test`.
+- **Resuelta 2026-10-16 — S13 en `test/zoo/s13-timeout.test.ts`:** una regresión retrasa deliberadamente el handshake más que el presupuesto de llamada y comprueba que el handshake concluye, el claim aún vence y la reconciliación recupera el transporte.
 
 ### Presupuesto de tiempo (H13.2, H13.3)
 

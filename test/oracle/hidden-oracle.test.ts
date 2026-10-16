@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, test } from "node:test";
 import { bwrapAvailable, runSandboxed } from "../sandbox/harness.ts";
 import { runOracle } from "./oracle.ts";
@@ -63,6 +64,51 @@ describe("H8.5 every oracle run is counted", () => {
       assert.equal(runOracle({ oracleFile: probe, workspace, attemptsDir: join(dir, "log"), runId: "r2" }).passed, true);
     } finally {
       for (const d of [dir, workspace]) rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  test("the operational report exposes repeated attempts per run and rejects a corrupt log", () => {
+    const dir = mkdtempSync(join(tmpdir(), "oracle-report-"));
+    const log = join(dir, "oracle-attempts.jsonl");
+    const script = new URL("../../scripts/oracle-report.ts", import.meta.url).pathname;
+    try {
+      writeFileSync(log, [
+        JSON.stringify({ at: "2026-10-15T12:00:00.000Z", runId: "r1", passed: false, exitCode: 1 }),
+        JSON.stringify({ at: "2026-10-15T12:01:00.000Z", runId: "r1", passed: true, exitCode: 0 }),
+        JSON.stringify({ at: "2026-10-15T12:02:00.000Z", runId: "r2", passed: true, exitCode: 0 }),
+      ].join("\n") + "\n");
+      const report = spawnSync(process.execPath, [script, log], { encoding: "utf8" });
+      assert.equal(report.status, 0, report.stderr);
+      assert.deepEqual(JSON.parse(report.stdout), {
+        totalAttempts: 3,
+        runs: [
+          { runId: "r1", attempts: 2, passed: 1, failed: 1 },
+          { runId: "r2", attempts: 1, passed: 1, failed: 0 },
+        ],
+        repeatedAttempts: 1,
+      });
+
+      writeFileSync(log, ["a", "b", "c"].map((runId) => JSON.stringify({
+        at: "2026-10-15T12:03:00.000Z", runId, passed: false, exitCode: 1,
+      })).join("\n") + "\n");
+      const distinct = spawnSync(process.execPath, [script, log], { encoding: "utf8" });
+      assert.equal(distinct.status, 0, distinct.stderr);
+      assert.deepEqual(JSON.parse(distinct.stdout), {
+        totalAttempts: 3,
+        runs: [
+          { runId: "a", attempts: 1, passed: 0, failed: 1 },
+          { runId: "b", attempts: 1, passed: 0, failed: 1 },
+          { runId: "c", attempts: 1, passed: 0, failed: 1 },
+        ],
+        repeatedAttempts: 0,
+      }, "changing run ids must not hide the total count in the shared log");
+
+      writeFileSync(log, "{broken json}\n");
+      const corrupt = spawnSync(process.execPath, [script, log], { encoding: "utf8" });
+      assert.notEqual(corrupt.status, 0);
+      assert.match(corrupt.stderr, /invalid JSON on line 1/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

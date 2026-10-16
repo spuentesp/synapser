@@ -18,9 +18,9 @@ test("S13: timeout → child killed and confirmed → quarantined → reconcile 
   const t = new ZooTransport({
     command: process.execPath,
     args: [FAKE],
-    env: { ...process.env, FAKE_ZOO_MARKER: marker },
-    // A hang is detected at this budget. The fresh child's handshake has its own budget (handshakeTimeoutMs), so a cold start
-    // under load is not taken for a hang. The intermittent failure is not reproduced; this is the limit that was shared before.
+    env: { ...process.env, FAKE_ZOO_MARKER: marker, FAKE_ZOO_HANDSHAKE_DELAY_MS: "1200" },
+    // The fake's 1.2s handshake deliberately exceeds the 1s call budget. A startup delay must not
+    // be misclassified as a hung call; the subsequent swallowed claim must still time out.
     callTimeoutMs: 1_000,
     killGraceMs: 2000,
   });
