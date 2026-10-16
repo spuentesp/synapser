@@ -37,8 +37,10 @@ propio bucle en una copia aislada y no recibe un canal de vuelta durante esa inv
   verdad para los verificadores.
 - **Perfil de agente**: ejecución y capacidades declaradas/validadas. Diferencia `native` de cada
   CLI y registra limitaciones de control, MCP, skills, salida estructurada, permisos y presupuesto.
-- **Servidor MCP**: integración externa administrada por el operador, con transporte, proceso o
-  endpoint, nombres de variables secretas, herramientas permitidas y clasificación de riesgo.
+- **Servidor MCP**: integración externa administrada por el operador, con origen y versión fijados,
+  transporte, proceso o endpoint, nombres de variables secretas, herramientas permitidas y
+  clasificación de riesgo. Instalarlo, probarlo, habilitarlo para perfiles y retirarlo son acciones
+  distintas y auditadas.
 - **Workflow instanciado**: ejecución concreta que conserva la receta, perfiles, skills y digests
   que vio al iniciarse.
 
@@ -52,9 +54,12 @@ archivo/configuración del operador, nunca a una receta o documento de agente de
 1. **Revisión**: otro perfil inspecciona un diff o alcance explícito, sin escribir; entrega hallazgos
    referidos a rutas/evidencia. Su juicio es evidencia secundaria.
 2. **Revisión adversarial**: un perfil verificador separado busca fallos y bypasses bajo una rúbrica
-   curada y un snapshot fijado. Los casos holdout y el oráculo no se exponen al agente constructor.
-   Se acotan los intentos y la divulgación para evitar que la revisión se convierta en un oráculo de
-   reward hacking. El log de intentos no se considera por sí mismo un límite de tasa.
+   curada y un snapshot fijado. Antes de ejecutar, la receta declara qué recibe el operador, el agente
+   que pidió la revisión y el ejecutor que corregirá el trabajo; puede haber otros destinatarios
+   aprobados por el operador. Synapser prepara una vista separada para cada audiencia antes de enviar
+   el reporte. El ejecutor recibe por defecto lo mínimo necesario para corregir, sin casos holdout,
+   prompts privados ni respuestas del oráculo. El operador diseña esa divulgación por tipo de hallazgo
+   y audiencia. El registro de intentos no sustituye una cuota técnica.
 3. **Alternativas**: produce opciones, trade-offs y evidencia sin modificar el workspace.
 4. **Investigación**: busca y sintetiza información con procedencia verificable cuando la receta lo
    exige.
@@ -65,9 +70,12 @@ archivo/configuración del operador, nunca a una receta o documento de agente de
    aprobadas según P16.4.
 7. **Curar un perfil**: crear o ajustar un perfil CLI/nativo, ver sus capacidades efectivas y probarlo
    antes de habilitarlo; las recomendaciones de `doctor` no habilitan perfiles automáticamente.
-8. **Curar MCPs**: registrar un servidor MCP confiable, descubrir sus herramientas/esquemas, escoger
-   qué perfiles pueden usarlas y qué tools quedan habilitadas. Separar el MCP de tareas de Synapser
-   del conector MCP de configuración y de los MCP externos conectados a agentes.
+8. **Curar MCPs**: instalar o registrar un servidor desde un origen y versión fijados, verificarlo,
+   descubrir herramientas/esquemas, probar llamadas, y escoger perfiles y herramientas permitidas.
+   Synapser inyecta la configuración aprobada en el entorno aislado del agente, sin copiar secretos
+   al workspace ni al HOME del usuario; también permite revocar y retirar la instalación. El catálogo
+   MCP de tareas declara qué integraciones requiere cada receta. El MCP de tareas de Synapser, el
+   conector de configuración y los MCP externos siguen siendo superficies separadas.
 
 ## 5. Flujo de orquestación y curación
 
@@ -93,11 +101,30 @@ validar con el servidor; previsualizar el workflow que produciría MCP; evaluar 
 `holdout`; y publicar manualmente una versión. La publicación y el rollback por digest quedan en el
 journal. Los casos holdout no se sirven a los agentes que construyen o solicitan el trabajo.
 
-La curación de MCP externos debe descubrir el protocolo y las herramientas desde el servidor real,
-pero no confiar en sus descripciones como autorización. El operador fija una allowlist de herramientas
-y perfiles. Un tool de escritura o efecto no puede eludir el broker de efectos: se rechaza hasta que
-exista un puente verificable a la política y aprobación de Synapser. Ningún secreto se guarda como
-valor en biblioteca, respuesta MCP, ledger o UI; solo se nombran variables permitidas.
+La curación de MCP externos debe permitir instalar o registrar el servidor, descubrir el protocolo y
+las herramientas desde el proceso real, fijar origen/versión/digest y probar llamadas antes de
+habilitarlo. La instalación va a un espacio administrado por Synapser y requiere confirmación del
+operador; una receta o agente no puede instalar paquetes. La configuración administrada por el
+operador fija el comando o endpoint, argumentos, entorno, variables secretas y permisos; cada perfil
+recibe solo la configuración aprobada para ese servidor y su allowlist de herramientas. Para CLIs,
+el adaptador escribe la configuración dentro del HOME efímero de la corrida; para `native`, el
+orquestador expone únicamente las herramientas MCP aprobadas en su registro de herramientas. No se
+copian configuraciones al repositorio ni al HOME del usuario. Retirar o revocar un servidor impide
+nuevas ejecuciones y no altera los snapshots ya registrados.
+
+El catálogo MCP de tareas vincula recetas publicadas con las integraciones necesarias. `task_request`
+explica qué servidor/herramientas asignará y por qué; el inicio falla cerrado si falta una integración,
+una versión o un perfil compatible. Los MCPs se llaman desde el agente mediante esa inyección, con
+resultados auditados por servidor, herramienta y corrida. Una herramienta de escritura o efecto no
+puede eludir el broker: se rechaza hasta que un puente verificable aplique la política y aprobación de
+Synapser. Ningún secreto se guarda como valor en biblioteca, respuesta MCP, ledger o UI; solo se
+nombran variables permitidas.
+
+Las cuotas anti-oráculo son configuración del operador, ajustable por identidad autenticada y receta,
+con un valor predeterminado y un techo duro. Synapser resuelve la identidad desde la sesión autenticada,
+reserva cuota antes de iniciar y registra consumo, periodo y agotamiento; no acepta que el modelo
+invente o cambie la identidad. La UI debe mostrar límites efectivos y permitir su ajuste sin editar
+fixtures ni respuestas del verificador.
 
 ## 6. Invariantes y criterios de falsación
 
@@ -114,11 +141,14 @@ valor en biblioteca, respuesta MCP, ledger o UI; solo se nombran variables permi
   compatibles, tier suficiente, skills permitidas y cupo/presupuesto. Si ninguno cumple, no hay
   despacho. Falsación: perfil incompatible, deshabilitado o fuera del presupuesto recibe una tarea.
 - **RCP5 — Anti-oráculo**: revisión sellada no revela fixtures, prompts privados ni casos holdout al
-  solicitante constructor; cuotas/incidencias se hacen cumplir por identidad y periodo, no solo se
-  registran. Falsación: repetir requests excede el límite o recuperar un caso sellado.
+  solicitante constructor; antes de ejecutarla, una política versionada define campos y nivel de
+  detalle por audiencia. Cuotas configurables se hacen cumplir por identidad, receta y periodo, no
+  solo se registran. Falsación: cambiar la política durante una corrida altera la entrega, se filtra
+  un holdout o repetir requests excede la cuota efectiva.
 - **RCP6 — MCP cerrado**: solo servidores y tools habilitados por el operador se exponen al perfil;
+  configuración inyectada solo en el entorno aislado del perfil; origen y versión quedan fijados, y
   tools con efectos no mediados por Synapser son inaccesibles. Falsación: servidor/tool desconocido,
-  respuesta malformada o tool de efecto alcanza datos/escritura fuera de política.
+  versión no aprobada, secreto filtrado o tool de efecto alcanza datos/escritura fuera de política.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.
@@ -128,12 +158,15 @@ valor en biblioteca, respuesta MCP, ledger o UI; solo se nombran variables permi
 
 ## 7. Verificación
 
-- Contratos versionados para receta, selección de skills, configuración MCP, herramientas expuestas,
-  eventos de curación y las respuestas de `task_catalog`/`task_request`.
-- Pruebas deterministas para validación, enrutamiento, listas permitidas, presupuestos, divulgación, límites de
-  cuota, snapshot, ledger y migración compatible de configuraciones anteriores.
-- Pruebas de proceso con el MCP real de Synapser y servidor MCP local real: descubrir, allowlistear,
-  invocar una herramienta inocua, rechazar una herramienta de escritura no mediada y comprobar trazabilidad.
+- Contratos versionados para receta, selección de skills, configuración MCP, instalación y revocación,
+  herramientas expuestas, política de divulgación por audiencia, cuotas y respuestas de
+  `task_catalog`/`task_request`.
+- Pruebas deterministas para validación, enrutamiento, listas permitidas, presupuestos, divulgación
+  por audiencia, cuotas configurables y límite duro, identidad autenticada, snapshot, ledger y
+  migración compatible de configuraciones anteriores.
+- Pruebas de proceso con el MCP real de Synapser y servidor MCP local real: instalar/registrar,
+  descubrir, allowlistear, inyectar la configuración, invocar una herramienta inocua desde un agente,
+  revocar, rechazar una herramienta de escritura no mediada y comprobar trazabilidad.
 - Prueba de composición desde solicitud MCP hasta receta publicada, enrutamiento, skills inyectadas por el
   adaptador, workflow ejecutado y verificador sobre el mismo workspace/snapshot. Usar CLI real cuando está
   disponible; pruebas live externas solo opt-in y con presupuesto explícito.
@@ -151,31 +184,36 @@ valor en biblioteca, respuesta MCP, ledger o UI; solo se nombran variables permi
    que puedan ampliar el perfil base.
 3. **Skills por tarea**: separar autorización del operador y selección contextual; guardar motivo,
    digests y mecanismo en workflow/ledger; resolver ausencia sin fallback silencioso.
-4. **Recetas curadas**: esquema/versionado, grafo de tareas, política, divulgación, vista previa, casos dev y
-   holdout, admisión manual, rollback.
-5. **MCPs curados**: gestión visual de conexiones, descubrimiento de herramientas/esquemas, lista permitida por
-   perfil/receta, protección de secretos y bloqueo de efectos no mediados.
+4. **Recetas curadas**: esquema/versionado, grafo de tareas, política, divulgación por audiencia,
+  vista previa, casos dev y holdout, admisión manual, rollback y cuotas por identidad configurables.
+5. **MCPs curados**: gestión visual de instalación/conexión, origen y versión fijados, descubrimiento
+  de herramientas/esquemas, llamada de prueba, inyección por perfil/receta, revocación, protección de
+  secretos y bloqueo de efectos no mediados.
 6. **MCP de tareas**: catálogo y request tipado con receta/params; el MCP de tareas solo puede usar
-   recetas publicadas y no obtiene herramientas del conector operador.
+  recetas publicadas y solicita al router inyectar en cada agente únicamente los MCPs requeridos y
+  autorizados. No obtiene herramientas del conector operador.
 7. **UI de operación/curación**: editores visuales, explicación de ruta/skill/costo/límite, diferencias
    de versión y confirmación de publicación/configuración.
 8. **Pruebas de composición y equipo rojo**: pruebas independientes de acceso al holdout, reward hacking,
    repetición del oráculo, evasión por MCP y recorrido MCP→worker→verificador.
 
-## 9. Decisiones que siguen abiertas
+## 9. Decisiones acordadas y política pendiente de detalle
 
-1. **Alcance de “curación de MCP”**: este diseño incluye los MCPs externos que Synapser conecta a
-   workers y la curación del catálogo MCP de tareas. La configuración del operador queda separada de
-   los documentos publicables de biblioteca.
-2. **Inicio por receta**: recomendación: cada receta declara `draft`, `auto_start_bounded` o
+1. **Alcance de curación MCP**: incluye registrar/instalar, probar, invocar, asignar por inyección de
+   configuración y revocar MCPs externos para agentes, además de curar el catálogo MCP de tareas. La
+   configuración ejecutable pertenece al operador, separada de los documentos publicables.
+2. **Cuotas**: son configurables por identidad y receta, con valor predeterminado y techo duro. Falta
+   fijar en el diseño de implementación los campos concretos, periodos y valores iniciales; el límite
+   debe aplicarse antes de cada ejecución y no depender del registro histórico de intentos.
+3. **Divulgación adversarial**: cada receta define antes de ejecutarse quién recibe cada parte del
+   resultado. El operador puede ver el reporte completo; el ejecutor recibe solo lo habilitado por esa
+   política. El diseño de implementación fijará categorías, nivel de detalle y opción de revisión
+   humana previa a la devolución; el default no incluye secretos del verificador, prompts privados ni
+   datos holdout.
+4. **Inicio por receta**: recomendación: cada receta declara `draft`, `auto_start_bounded` o
    `human_approval`; ningún efecto externo se ejecuta sin la política de efectos existente.
-3. **Divulgación de revisión adversarial**: separar hallazgos de desarrollo de verificación sellada;
-   el operador puede ver el reporte completo, mientras que un solicitante automatizado recibe una
-   salida acotada según política.
-4. **Cuotas**: definir límites por cliente MCP, identidad humana y receta, retención/periodo y respuesta
-   al agotamiento. P18.8 es un contador append-only, no una barrera técnica.
-5. **Fuente de capacidades MCP**: decidir qué propiedades se descubren del handshake y cuáles requieren
-   declaración/confirmación del operador (especialmente side effects e idempotencia).
+5. **Capacidades MCP**: Synapser descubre las herramientas y sus esquemas, pero el operador confirma
+   permisos y clasificación de efectos; las descripciones del servidor no son autorización.
 
 No se propone una dependencia de ejecución nueva ni una base SQLite adicional. Cada decisión que
 amplíe el acceso de un worker a red, MCPs o efectos necesita diseño y falsación propios antes de
