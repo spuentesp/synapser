@@ -1,10 +1,12 @@
 // Plan 18 E1: the single entry point. It runs each level in order and stops at the first failure.
 // The binary check reuses the pin verification the runtime itself uses (src/zoo), so the two cannot drift apart.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import { resolveEvidenceRoot, resolveExternalDirectory } from "./evidence-path.ts";
 import { verifyBinary } from "../src/zoo/adapter.ts";
 import { loadPin } from "../src/zoo/pin.ts";
 
@@ -43,10 +45,13 @@ if (existsSync(new URL("test/contract", root))) {
 run("all tests", "node", ["--test", "--test-reporter=spec", "test/**/*.test.ts"]);
 // Plan 18 H4.3: security modules must keep their mutation score above the threshold in stryker.config.json.
 // Each verify gets its own report and scratch path; don't overwrite evidence or clean an old Stryker directory.
-const runId = `${Date.now()}-${process.pid}`;
-const mutationReport = resolve(rootPath, "evidence/mutation", `verify-${runId}.json`);
-const mutationTempDir = join(tmpdir(), `synapser-stryker-${runId}`);
-mkdirSync(resolve(rootPath, "evidence/mutation"), { recursive: true });
+const evidenceRoot = resolveEvidenceRoot(rootPath, process.env["SYNAPSER_EVIDENCE_DIR"]);
+const mutationEvidenceDir = join(evidenceRoot, "mutation");
+mkdirSync(mutationEvidenceDir, { recursive: true });
+const mutationRunDir = mkdtempSync(join(mutationEvidenceDir, `verify-${randomUUID()}-`));
+const mutationReport = resolve(mutationRunDir, "report.json");
+const tempRoot = resolveExternalDirectory(rootPath, tmpdir(), "TMPDIR");
+const mutationTempDir = mkdtempSync(join(tempRoot, "synapser-stryker-"));
 const mutationEnv = {
   ...process.env,
   SYNAPSER_MUTATION_REPORT: mutationReport,
