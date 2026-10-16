@@ -1,8 +1,9 @@
 # Plan 14 — Diseño desde la UI: biblioteca, adaptadores por agente y skills
 
-Estado: **propuesta** (14 oct). Motivo: todo lo configurable hoy vive en archivos JSON y las vistas
-quedan vacías sin corridas. El operador debe poder diseñar workflows y agentes, inyectar skills y elegir
-cómo se usa cada agente, desde la consola.
+Estado: **implementado y verificado para Q1–Q5** (15 oct 2026; detalle y pendientes en
+[`14-seguimiento.md`](14-seguimiento.md)). La propuesta nació porque todo lo configurable vivía en archivos
+JSON y las vistas quedaban vacías sin corridas. El operador puede diseñar workflows y agentes, inyectar skills
+y elegir cómo se usa cada agente, desde la consola.
 
 ## 1. Modos headless verificados (CLI instalados en esta máquina)
 

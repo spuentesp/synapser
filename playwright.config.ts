@@ -6,6 +6,8 @@ const PORT = Number(process.env["UI_PORT"] ?? 4199);
 export default defineConfig({
   testDir: "test/ui",
   testMatch: /.*\.spec\.ts/,
+  // This flow owns a separate real server fixture with a local planning endpoint.
+  testIgnore: /workflow-approval\.spec\.ts/,
   outputDir: "evidence/ui/results",
   reporter: [["list"]],
   use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure" },

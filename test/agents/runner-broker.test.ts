@@ -110,6 +110,10 @@ describe("runner (isolation + observation)", () => {
     assert.equal(r.timedOut, true);
     assert.equal(r.outcome, "FAILED");
     assert.match(r.reason ?? "", /timed out/);
+    const [row] = journal.listAgentRuns();
+    assert.equal(row?.timedOut, true, "the persisted run must record the timeout");
+    assert.equal(row?.outcome, "FAILED");
+    assert.match(row?.reason ?? "", /timed out/);
     assert.deepEqual(journal.listChildren(), []);
   });
 

@@ -32,7 +32,7 @@ import type { WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
-const TASK_ID = /^[A-Za-z0-9._-]{1,80}$/;
+const APPROVAL_KEY = /^(?:[A-Za-z0-9._-]{1,80}|(?:cond|effect|iv):[A-Za-z0-9._-]{1,80})$/;
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../../web/dist/", import.meta.url));
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -391,7 +391,13 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (what !== "approvals" || !sub) return fail(res, 404, "NOT_FOUND");
       // same-origin only: a cross-site page can neither read the token nor pass this check
       if (!writeAllowed(req, res)) return;
-      if (!TASK_ID.test(sub)) return fail(res, 400, "BAD_TASK_ID");
+      let approvalKey: string;
+      try {
+        approvalKey = decodeURIComponent(sub);
+      } catch {
+        return fail(res, 400, "BAD_TASK_ID");
+      }
+      if (!APPROVAL_KEY.test(approvalKey)) return fail(res, 400, "BAD_TASK_ID");
       let body = "";
       for await (const chunk of req) {
         body += chunk;
@@ -406,10 +412,10 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (b.decision !== "APPROVED" && b.decision !== "REJECTED") return fail(res, 400, "BAD_DECISION");
       const actor = String(b.actor ?? "").trim().slice(0, 80) || "ui:anonymous";
       const r = decideApproval(j, runId, {
-        taskId: sub,
+        taskId: approvalKey,
         planDigest: String(b.planDigest ?? ""),
         // plan steps are bound to the plan digest; start/conditions/effects to their own
-        currentDigest: isSelfBound(sub) ? (pendingGates(j).find((g) => g.key === sub)?.digest ?? "") : currentPlanDigest(j),
+        currentDigest: isSelfBound(approvalKey) ? (pendingGates(j).find((g) => g.key === approvalKey)?.digest ?? "") : currentPlanDigest(j),
         decision: b.decision,
         actor,
         ...(b.reason ? { reason: String(b.reason).slice(0, 300) } : {}),

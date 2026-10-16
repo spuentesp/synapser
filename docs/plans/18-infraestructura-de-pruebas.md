@@ -201,7 +201,7 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 | dependency-cruiser | E12 | Recomendada |
 | bwrap, pasta | E6, E7 | Ya instaladas |
 | zod | E2 | Ya es dependencia |
-| TLA+ (tla2tools con TLC) | E10 | Opcional, con decisión |
+| TLA+ (tla2tools con TLC) | E10 | Aprobada e implementada; `test:formal` |
 | Quint | E10 | No ahora |
 | Dafny, Lean | — | No recomendadas: el coste de demostrar código asíncrono y con E/S supera el riesgo |
 | Docker | E6 | No necesario |
@@ -230,8 +230,10 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11, E12, E13. En curso: E6 y E7 (con
 - **E4:** los gates de mutación de los módulos fijados y la cobertura pendiente del ejecutor y el journal pasaron sus suelos. Los informes detallados se conservan en `evidence/mutation/` (ignorado).
 - **E7:** H7.2 (tarea completa en sandbox con compuerta y cambio dentro del alcance declarado), H7.3 tal como está escrita (tarea que el agente no completa: FALLA, repositorio intacto) y H7.4 (conector de configuración de punta a punta, rechazo sin escritura parcial).
 - **E8:** H8.2 (oráculos compuestos), H8.3 (entradas generadas que el agente no ve), H8.4 (mutantes del cambio; un oráculo débil se rechaza) y H8.5 (cada ejecución queda en `oracle-attempts.jsonl`, cuya lectura y resultados se comprueban en `test/oracle/hidden-oracle.test.ts`).
-- **E9:** H9.4 (biblioteca: el motivo mostrado es el de la API). Defecto de desmontaje al salir de `chat` corregido en el código (no en la prueba). H9.3 (workflow creado en el servidor y visible en la lista), H9.6 (accesibilidad WCAG 2.x A/AA en las doce vistas, en tema claro y oscuro).
+- **E9:** H9.3 crea un workflow desde el diseñador, muestra la compuerta, la aprueba en la vista y comprueba DONE/SATISFIED en Chromium (`test/ui/workflow-approval.spec.ts`, servidor real con modelo y CLI fixtures). La prueba API cubre también claves de aprobación de condición URL-encoded (`test/api/api.test.ts`). H9.4 comprueba que el motivo mostrado es el de la API. El defecto de desmontaje al salir de `chat` quedó corregido en el código. H9.6 comprueba accesibilidad WCAG 2.x A/AA en doce vistas, en tema claro y oscuro.
 - **E11:** H11.2 (pérdida simulada de fsync de archivo/directorio y recuperación desde snapshot durable) y H11.3 en corrida completa (el journal leía el reloj real; ahora pasa por el entorno).
+- **E10:** H10.1–H10.4 modelan los claims y la cola FIFO, trazan propiedades a pruebas de implementación y ejecutan TLC con jar fijado. El hallazgo inicial de inanición condujo a implementar FIFO; la decisión está tomada y registrada en `formal/README.md`.
+- **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
 - **E13:** dos intermitentes con límite revisado y causa probable escrita (no reproducidas).
 
 ### E6 en curso
@@ -239,14 +241,12 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11, E12, E13. En curso: E6 y E7 (con
 - **H6.1**: cubierto por `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts`.
 - **H6.2**: falta acordar el corpus exacto de archivos de credenciales antes de afirmar cobertura exhaustiva; luego ejecutar matriz de CLI/protocolo y capturar requests al endpoint local.
 - **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
-- **H6.4**: `test/sandbox/isolation.test.ts` verifica aisladamente el timeout, `RLIMIT_AS` y `TasksMax` en scope transitorio; la comprobación de `TasksMax` se omite si el host no admite scopes de usuario. Falta integrar límites definidos en la corrida real de agentes y comprobar que un timeout deja estado registrado, por lo que E6 no se cierra aún.
+- **H6.4**: `test/sandbox/isolation.test.ts` verifica aisladamente timeout, `RLIMIT_AS` y `TasksMax` en scope transitorio; la comprobación de `TasksMax` se omite si el host no admite scopes de usuario. `test/agents/runner-broker.test.ts` además comprueba que un timeout de `runAgent` termina el grupo y persiste `timedOut`, `FAILED` y el motivo en el journal. Falta integrar límites de memoria y procesos en la corrida real de agentes, por lo que E6 no se cierra aún.
 
 ### Bloqueado por una decisión del operador o del usuario
 
 - **H7.5** ejecución `live`: necesita credenciales reales, que esta sesión no lee. `test:live` queda opcional.
-- **H12.4**: informe informativo de duplicación de 12 líneas, sin umbral bloqueante acordado. El script y `verify` no fijan una cuota; los duplicados se guardan en evidencia local.
 - **H12.5** aplicado con la decisión del operador (aplicar 2 a 4). Hallazgos 1, 2, 3 y 5 aplicados (commits 1ce20eb, 8cf489a, 4381443). El 4 se aplicó en lo que el SDK cubre: `tools/call` y -32002 se mantienen por M3 y por la imposibilidad de expresar -32002 en el SDK, y así queda documentado.
-- **E10** cola FIFO del bloqueo del journal: el modelo muestra inanición con equidad débil; decidir si se implementa la cola o se acepta y registra.
 
 ### Decisiones que la regla de `verify` no cubre
 

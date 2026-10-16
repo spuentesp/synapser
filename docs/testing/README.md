@@ -10,8 +10,8 @@
 | Pruebas (unitarias, integración, propiedades, sandbox, MCP, fixtures) | `test/**` | `npm test` | sí |
 | Mutación por módulo | `stryker.config.json`, `scripts/mutation-thresholds.json` | `npx stryker run` y `node scripts/mutation-gate.ts` | sí |
 | Cobertura | — | `npm run test:coverage` (lcov en `evidence/coverage/`) | no |
-| Interfaz (Playwright) | `test/ui/` (pendiente, E9) | — | no |
-| Verificación formal (TLA+) | `formal/` (pendiente, E10) | — | no |
+| Interfaz (Playwright) | `test/ui/` (E9; H9.3 crea, aprueba y observa el resultado con su servidor fixture dedicado; H9.5 excluida por decisión) | `npm run test:ui` (suite general y flujo H9.3) | no |
+| Verificación formal (TLA+) | `formal/` (E10, implementada) | `npm run test:formal` | no |
 
 `npm run verify` ejecuta, en orden: comprobación del binario fijado, tipado, reglas de arquitectura, contratos, pruebas y mutación con su compuerta. Se detiene en el primer fallo.
 

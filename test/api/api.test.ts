@@ -95,6 +95,19 @@ describe("API", () => {
     assert.equal((await J(`/api/runs/${RUN}/verify`)).ok, true, "the chain still verifies");
   });
 
+  test("U4: URL-encoded self-bound condition approval keys can be decided", async () => {
+    const digest = "sha256:condition-snapshot";
+    requestApproval(env.journal, RUN, "cond:release-check", digest, "release condition");
+    const response = await fetch(`${base}/api/runs/${RUN}/approvals/cond%3Arelease-check`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-synapser-token": api.token },
+      body: JSON.stringify({ decision: "APPROVED", planDigest: digest, actor: "ana" }),
+    });
+    assert.equal(response.status, 200, await response.text());
+    const decision = env.journal.listEvents().find((e) => e.entity === "approval" && e.entityId === "cond:release-check" && e.toState === "APPROVED");
+    assert.equal((decision?.data as { actor?: string } | undefined)?.actor, "ana");
+  });
+
   test("U1: the server cannot write to the workspace — it does not import the executor, and POST only appends approvals", async () => {
     const src = readFileSync(new URL("../../src/api/server.ts", import.meta.url), "utf8");
     const imports = src.split("\n").filter((l) => /^import /.test(l)).join("\n");
