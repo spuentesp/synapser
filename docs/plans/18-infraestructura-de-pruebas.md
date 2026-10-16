@@ -95,9 +95,9 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 
 **Objetivo:** que las tareas de agente corran aislados, con red limitada, y que el aislamiento se pruebe.
 
-- **H6.1** Arnés de sandbox con `bwrap`: sistema de archivos de solo lectura salvo el espacio de trabajo, sin acceso a la red salvo loopback hacia el endpoint falso. *Criterio:* una prueba intenta leer `~/.ssh`, escribir fuera del espacio y conectarse a una dirección que no sea loopback, y las tres fallan.
-- **H6.2** Pruebas de fuga de credenciales con centinelas, generalizando la puerta K8: un valor centinela en cada archivo de credenciales que el sandbox pueda ver nunca llega a un endpoint. *Criterio:* aplica a todos los CLIs y a todos los protocolos.
-- **H6.3** Prueba de red con `pasta` para escenarios que necesitan red de usuario. *Criterio:* el tráfico sale solo al destino permitido. Esta historia depende de la investigación P15.9, que está bloqueada; hasta entonces se marca como pendiente y no se simula.
+- **H6.1** Arnés de sandbox con `bwrap`: sistema de archivos de solo lectura salvo el espacio de trabajo, sin acceso a la red salvo loopback hacia el endpoint falso. *Criterio:* una prueba intenta leer `~/.ssh`, escribir fuera del espacio y conectarse a un endpoint falso de loopback; las tres acciones deben fallar desde el sandbox.
+- **H6.2** Pruebas de fuga de credenciales con centinelas, generalizando la puerta K8: un valor centinela en cada archivo de credenciales que el sandbox pueda ver nunca llega a un endpoint. *Criterio:* aplica a todos los CLIs y protocolos admitidos; el endpoint local captura los requests y rechaza el test si aparece cualquier centinela.
+- **H6.3** Prueba de red con destino permitido para escenarios que necesitan red del modelo. Se descarta `pasta` como barrera porque el mapeo de loopback no separa servicios del host. La alternativa B es `bwrap --unshare-net` y un proxy host expuesto por socket Unix, con puente local al proxy. *Invariante:* sin proxy no existe salida; el proxy solo establece `CONNECT` a la autoridad exacta configurada. *Criterio:* DNS, IP directa y loopback directo no alcanzan destinos; el fixture HTTPS autorizado sí, y otra autoridad recibe rechazo. *Verificador:* `test/live/p159-network-proxy.test.ts`. *Falsación:* quitar el namespace, permitir otra autoridad o evitar el proxy debe hacer fallar el test. Esta alternativa fue autorizada por el usuario el 15 oct.
 - **H6.4** Límites de recursos: tiempo, memoria y número de procesos. *Criterio:* un agente que entra en bucle se detiene y deja el estado registrado. El tiempo se impone con `timeout`, la memoria con `RLIMIT_AS` y los procesos con `TasksMax` en un scope transitorio de systemd por ejecución; el límite de procesos no usa `RLIMIT_NPROC`, que es compartido por UID.
 
   **Invariantes:** (1) cada scope es transitorio y limitado a una invocación; (2) el límite es de tareas del kernel y abarca descendientes, no una cuenta aproximada de procesos; (3) no se cambia el límite del scope padre ni se instala configuración persistente; (4) si falta systemd de usuario, la prueba del límite por tareas se omite explícitamente, sin declarar probado ese límite.
@@ -234,9 +234,13 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E12, E13. En curso: E6, E7, E11 (cada
 - **E11:** H11.2 (pérdida simulada de fsync de archivo/directorio y recuperación desde snapshot durable) y H11.3 en corrida completa (el journal leía el reloj real; ahora pasa por el entorno).
 - **E13:** dos intermitentes con límite revisado y causa probable escrita (no reproducidas).
 
+### E6 en curso
+
+- **H6.1–H6.2**: falta cubrir los ataques y la matriz explícita de centinelas indicados en los criterios.
+- **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
+
 ### Bloqueado por una decisión del operador o del usuario
 
-- **H6.3** red con `pasta`: bloqueado por P15.9.
 - **H7.5** ejecución `live`: necesita credenciales reales, que esta sesión no lee. `test:live` queda opcional.
 - **H12.4**: informe informativo de duplicación de 12 líneas, sin umbral bloqueante acordado. El script y `verify` no fijan una cuota; los duplicados se guardan en evidencia local.
 - **H12.5** aplicado con la decisión del operador (aplicar 2 a 4). Hallazgos 1, 2, 3 y 5 aplicados (commits 1ce20eb, 8cf489a, 4381443). El 4 se aplicó en lo que el SDK cubre: `tools/call` y -32002 se mantienen por M3 y por la imposibilidad de expresar -32002 en el SDK, y así queda documentado.
