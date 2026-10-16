@@ -162,6 +162,14 @@ export class LibraryStore {
     });
   }
 
+  /** Read an immutable historical version without changing the live projection. */
+  version(kind: LibraryKind, id: string, digest: Digest): LibraryEntry | null {
+    checkKindAndId(kind, id);
+    if (!isDigest(digest)) return null;
+    const event = this.#events().find((candidate) => candidate.entityId === `${kind}:${id}` && candidate.toState === "PUT" && (candidate.data as Record<string, unknown>)["digest"] === digest);
+    return event ? this.#entry(event) : null;
+  }
+
   /**
    * Snapshot the library into a run's journal (L3): the bytes are copied into the run's own artifacts and the
    * entries are recorded as one event. The FIRST snapshot of a run wins, so a resumed run keeps what it saw

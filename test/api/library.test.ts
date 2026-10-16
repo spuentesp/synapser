@@ -83,6 +83,36 @@ describe("API library (plan 14 Q2.6)", () => {
     assert.equal((await (await call("GET", "/api/library/providers")).json() as any).entries.length, 1);
   });
 
+  test("skill curation checks without writing, evaluates exact dev/holdout repetitions, and rolls back by digest", async () => {
+    const first = { name: "Review", description: "first", content: "# Review\nReport evidence." };
+    const second = { name: "Review", description: "second", content: "# Review\nReport evidence and risks." };
+    const check = await call("POST", "/api/library/skills/curation-skill/check", first, ok());
+    assert.equal(check.status, 200);
+    assert.equal(lib.get("skills", "curation-skill"), null, "validation has no write side effect");
+    await call("PUT", "/api/library/skills/curation-skill", first, ok());
+    const firstDigest = lib.get("skills", "curation-skill")!.digest;
+    await call("PUT", "/api/library/skills/curation-skill", second, ok());
+    const cases = [
+      { id: "dev-summary", split: "dev", task: "Summarize", k: 1, expectedIncludes: "Summary:" },
+      { id: "holdout-risk", split: "holdout", task: "Find a risk", k: 2, expectedIncludes: "Risk:" },
+    ];
+    const evaluate = (split: "dev" | "holdout", outputs: { caseId: string; repetition: number; output: string }[]) => call("POST", "/api/library/skills/curation-skill/evaluate", { split, candidate: { id: "curation-skill", content: second.content }, cases, outputs }, ok());
+    const failed = await evaluate("holdout", [{ caseId: "holdout-risk", repetition: 1, output: "Risk:" }, { caseId: "holdout-risk", repetition: 2, output: "No finding" }]);
+    assert.equal(failed.status, 200);
+    assert.equal((await failed.json() as any).eligible, false, "one missed repetition makes holdout ineligible");
+    const passed = await evaluate("holdout", [{ caseId: "holdout-risk", repetition: 1, output: "Risk:" }, { caseId: "holdout-risk", repetition: 2, output: "Risk:" }]);
+    assert.equal((await passed.json() as any).eligible, true);
+    const dev = await evaluate("dev", [{ caseId: "dev-summary", repetition: 1, output: "Summary: inspected changes" }, { caseId: "holdout-risk", repetition: 1, output: "Risk:" }, { caseId: "holdout-risk", repetition: 2, output: "Risk:" }]);
+    assert.equal((await dev.json() as any).checks.length, 1, "a split evaluates only its own cases even when the operator imports outputs for both splits");
+    const incomplete = await evaluate("holdout", [{ caseId: "holdout-risk", repetition: 1, output: "Risk:" }]);
+    assert.equal(incomplete.status, 400, "all repetitions require an observed output");
+    const rollback = await call("POST", "/api/library/skills/curation-skill/rollback", { digest: firstDigest, reason: "restore known-good" }, ok());
+    assert.equal(rollback.status, 200);
+    assert.equal((lib.get("skills", "curation-skill")!.document as any).description, "first");
+    const history = await call("GET", "/api/library/skills/curation-skill/history");
+    assert.deepEqual((await history.json() as any).history.at(-1), { seq: 3, operation: "ROLLBACK", digest: firstDigest, actor: "ui:operator", reason: "restore known-good" });
+  });
+
   test("an invalid document is refused whole, listing every problem, and nothing is stored", async () => {
     const bad = { ...PROVIDER, baseUrl: "http://remote.example/v1/", apiKeyEnv: ["literal-secret!"], models: [] };
     const r = await call("PUT", "/api/library/providers/local", bad, ok());

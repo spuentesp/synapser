@@ -8,6 +8,8 @@ import { EXTENDING_FIELDS, FILE_ONLY_FIELDS, type LibraryPolicy, NATIVE_FIELDS, 
 import { reviewProfilesOf } from "../workflow/model.ts";
 import type { WorkflowManager } from "../workflow/manager.ts";
 import { fail, json, OPERATOR, readBody } from "./http.ts";
+import { evaluateSkillCases, type SkillCase, type SkillCandidate } from "../library/curation.ts";
+import { isDigest } from "../digest/file.ts";
 
 export const entryJson = (e: LibraryEntry) => ({ kind: e.kind, id: e.id, digest: e.digest, document: e.document, seq: e.seq, actor: e.actor });
 
@@ -70,6 +72,62 @@ export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res:
   if (kind === undefined) return method === "GET" ? json(res, 200, { entries: lib.list().map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
   if (!(LIBRARY_KINDS as readonly string[]).includes(kind)) return fail(res, 404, "UNKNOWN_KIND");
   const k = kind as LibraryKind;
+  if (key !== undefined && sub === "check" && method === "POST") {
+    const body = await readBody(req, res);
+    if (body === undefined) return;
+    const errors = validateLibraryDocument(k, key, body, policy);
+    return errors.length ? json(res, 400, { error: "INVALID_LIBRARY_DOCUMENT", errors }) : json(res, 200, { ok: true });
+  }
+  if (key !== undefined && sub === "history" && method === "GET") {
+    try {
+      return json(res, 200, { history: lib.history(k, key) });
+    } catch {
+      return fail(res, 400, "BAD_ID");
+    }
+  }
+  if (key !== undefined && sub === "rollback" && k === "skills" && method === "POST") {
+    const body = await readBody(req, res) as { digest?: unknown; reason?: unknown } | undefined;
+    if (body === undefined) return;
+    if (typeof body.digest !== "string" || !isDigest(body.digest) || typeof body.reason !== "string" || !body.reason.trim()) return fail(res, 400, "ROLLBACK_INPUT_REQUIRED");
+    const target = lib.version("skills", key, body.digest);
+    if (!target) return fail(res, 404, "UNKNOWN_VERSION");
+    const errors = validateLibraryDocument("skills", key, target.document, policy);
+    if (errors.length) return json(res, 409, { error: "HISTORICAL_VERSION_INVALID", errors });
+    try {
+      return json(res, 200, entryJson(lib.rollbackSkill(key, body.digest, OPERATOR.id, body.reason)));
+    } catch (e) {
+      return fail(res, 400, "ROLLBACK_REFUSED", String((e as Error).message ?? e).slice(0, 200));
+    }
+  }
+  if (key !== undefined && sub === "evaluate" && k === "skills" && method === "POST") {
+    const body = await readBody(req, res) as { split?: unknown; candidate?: SkillCandidate; cases?: SkillCase[]; outputs?: { caseId: string; repetition: number; output: string }[] } | undefined;
+    if (body === undefined) return;
+    if ((body.split !== "dev" && body.split !== "holdout") || !body.candidate || body.candidate.id !== key || !Array.isArray(body.cases) || !Array.isArray(body.outputs)) return fail(res, 400, "INVALID_EVALUATION_INPUT");
+    try {
+      const outputs = new Map<string, string>();
+      const caseSplits = new Map(body.cases.map((item) => [item.id, item.split]));
+      for (const output of body.outputs) {
+        if (!output || typeof output.caseId !== "string" || !Number.isInteger(output.repetition) || output.repetition < 1 || typeof output.output !== "string") throw new Error("each output needs caseId, positive repetition, and string output");
+        const outputSplit = caseSplits.get(output.caseId);
+        if (outputSplit === undefined) throw new Error(`unexpected output case: ${output.caseId}`);
+        if (outputSplit !== body.split) continue;
+        const id = `${output.caseId}\u0000${output.repetition}`;
+        if (outputs.has(id)) throw new Error(`duplicate output: ${output.caseId} repetition ${output.repetition}`);
+        outputs.set(id, output.output);
+      }
+      const report = await evaluateSkillCases(body.cases, body.candidate, body.split, ({ caseId, repetition }) => {
+        const id = `${caseId}\u0000${repetition}`;
+        const output = outputs.get(id);
+        if (output === undefined) throw new Error(`missing output: ${caseId} repetition ${repetition}`);
+        outputs.delete(id);
+        return output;
+      });
+      if (outputs.size) throw new Error(`unexpected output: ${outputs.keys().next().value?.replace("\u0000", " repetition ")}`);
+      return json(res, 200, report);
+    } catch (e) {
+      return json(res, 400, { error: "EVALUATION_REFUSED", errors: [String((e as Error).message ?? e).slice(0, 300)] });
+    }
+  }
   if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
   if (sub !== undefined) {
     // POST /api/library/providers/:id/test tests the STORED endpoint and key, never ones sent in the body. A cross-site

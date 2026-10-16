@@ -164,6 +164,28 @@ que no estén autorizadas se omiten, nunca se buscan en la biblioteca viva. El r
 contra el contenido congelado y registra id, digest, mecanismo y motivo de cada skill inyectada; el
 motivo no altera permisos ni políticas del adaptador.
 
+### Curación visual y evaluación local (P19.4)
+
+La biblioteca conserva recetas y skills como versiones inmutables por digest. La UI ofrece un editor
+visual inicial para los campos de intención/política de receta, vista previa no ejecutable y una
+acción `check` que llama al mismo validador del servidor sin escribir. Guardar/publicar sigue siendo
+un acto explícito separado; no se afirma que la API exija evaluación previa ni se inicia un workflow
+desde la vista previa.
+
+La evaluación `dev`/`holdout` recibe casos versionados bajo `test/` y salidas ya observadas por el
+operador. No llama al modelo ni presenta texto de casos al agente evaluado; el ejecutor de tareas MCP
+no recibe esta vista. Dev y holdout se califican por separado, se comprueba cobertura exacta de cada
+caso/repetición elegido y todas las repeticiones deben pasar para declarar elegibilidad. La elegibilidad
+es informativa, no una admisión automática. El UI permite inspeccionar historial y restaurar un digest
+histórico de skill con motivo, validado de nuevo bajo la política vigente y auditado en el journal.
+
+- **RCP9 — Curación sin ejecución implícita**: validar/preview no persiste ni arranca; evaluar procesa
+  solo las salidas del split elegido y no hace llamadas externas; restaurar solo puede seleccionar un
+  digest histórico válido para la identidad y política actuales. *Verificador:* API y Playwright
+  prueban validación sin escritura, cobertura/repeticiones, filtrado por split, publicación manual y
+  rollback auditable. *Falsación:* `check` añade un evento, holdout fallido resulta elegible, el UI
+  dispara un modelo o se restaura un digest que no pertenece al historial.
+
 - **RCP1 — Autoridad**: recetas, skills y documentos de biblioteca no amplían permisos del perfil,
   presupuesto, red, sandbox o herramientas. Falsación: una skill o receta cambia un flag protegido o
   un perfil no autorizado recibe una skill; debe fallar antes de crear el proceso.
