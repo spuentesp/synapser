@@ -205,8 +205,10 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   un holdout o repetir requests excede la cuota efectiva.
 - **RCP6 — MCP cerrado**: solo servidores y tools habilitados por el operador se exponen al perfil;
   configuración inyectada solo en el entorno aislado del perfil; origen y versión quedan fijados, y
-  tools con efectos no mediados por Synapser son inaccesibles. Falsación: servidor/tool desconocido,
-  versión no aprobada, secreto filtrado o tool de efecto alcanza datos/escritura fuera de política.
+  tools con efectos no mediados por Synapser son inaccesibles. Las configuraciones MCP preexistentes
+  del HOME o workspace no constituyen autorización y deben quedar deshabilitadas por defecto.
+  Falsación: servidor/tool desconocido, versión no aprobada, secreto filtrado o tool de efecto alcanza
+  datos/escritura fuera de política, o un CLI arranca un servidor heredado sin autorización.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

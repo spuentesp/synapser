@@ -58,7 +58,7 @@ describe("ClaudeCodeAdapter", () => {
     );
 
     assert.deepEqual(invocation.argv, [
-      "claude", "-p", "fix one thing", "--output-format", "json", "--model", "sonnet",
+      "claude", "-p", "fix one thing", "--output-format", "json", "--strict-mcp-config", "--model", "sonnet",
       "--allowedTools", "Read,Glob,Grep,Edit,Write", "--max-budget-usd", "1",
     ]);
     assert.deepEqual(invocation.argvTemplate.slice(0, 3), ["claude", "-p", "{prompt}"]);

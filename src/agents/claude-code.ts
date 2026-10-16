@@ -13,8 +13,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   readonly capabilities = capabilitiesForAdapter("claude-code");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
-    const argv = ["claude", "-p", task.prompt, "--output-format", "json"];
-    const template = ["claude", "-p", "{prompt}", "--output-format", "json"];
+    // The real HOME is deliberately overlaid for Claude login/settings compatibility, but its
+    // MCP registrations are not operator authorization. Until an approved MCP snapshot is
+    // injected explicitly, fail closed and ignore user/project MCP configuration.
+    const argv = ["claude", "-p", task.prompt, "--output-format", "json", "--strict-mcp-config"];
+    const template = ["claude", "-p", "{prompt}", "--output-format", "json", "--strict-mcp-config"];
     const add = (...args: string[]) => {
       argv.push(...args);
       template.push(...args);
