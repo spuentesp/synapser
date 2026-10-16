@@ -1,6 +1,6 @@
 # Plan 18 — Infraestructura de pruebas
 
-Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. E4 está cerrada; las demás épicas siguen el estado de §8 y del [seguimiento](14-seguimiento.md). Este documento es la lista de tareas: catorce épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
+Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. E4 está cerrada; las demás épicas siguen el estado de §8 y del [seguimiento](14-seguimiento.md). Este documento es la lista de tareas: quince épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
 
 ## 1. Problema
 
@@ -196,6 +196,13 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 **Objetivo:** extender el patrón de escritura pública seguida de consumo real a los flujos críticos que aún preparan el estado interno directamente. No se prohíben fixtures en pruebas unitarias; esta historia cubre una frontera API→biblioteca→runtime.
 
 - **H14.1** La aceptación de biblioteca escribe proveedor, agente y skill mediante `PUT /api/library/...`, consulta cada documento mediante `GET` usando el id que devolvió la escritura y ejecuta después un workflow real que los consume. *Invariantes:* los datos iniciales de este caso se crean mediante la API pública; la lectura por API y la instantánea del workflow observan esos documentos; se mantienen la procedencia de skill, el registro del modelo y el aislamiento de la instantánea. *Verificador:* `test/library/run-e2e.test.ts`, servidor API real en loopback, `ProductionEngine`, journal y endpoint de modelo local. *Falsación:* escritura que no persiste, id devuelto que no se puede releer, o runtime que no usa proveedor/agente/skill debe hacer fallar la prueba. Sin dependencias de ejecución nuevas.
+
+### E15 — Gate de mutación de cambios
+
+**Objetivo:** seleccionar gates de mutación a partir del diff sin debilitar los suelos existentes ni asumir cobertura para módulos que aún no tienen configuración Stryker.
+
+- **H15.1** Resolver rutas modificadas de `src/` contra los módulos ya configurados (`security`, `journal`, `executor`, `library`). *Invariantes:* una ruta de runtime conocida selecciona su gate; toda ruta de runtime desconocida se reporta como no cubierta y nunca se interpreta como diff vacío; rutas ajenas a `src/` no disparan mutación. *Verificador:* `test/mutation/mutation-scope.test.ts`. *Falsación:* una ruta conocida no seleccionada o una ruta `src/` desconocida descartada debe fallar. Sin dependencias nuevas.
+- **H15.2** Ejecutar el gate de cada módulo seleccionado con su configuración y suelo estables, modo incremental y evidencia/estado de caché aislados por módulo. *Invariantes:* no se estrecha `mutate` reutilizando una caché incompatible; todo módulo tocado con gate conocido ejecuta su compuerta; un módulo de producción sin gate bloquea el cierre. *Verificador:* comando específico documentado y prueba de integración sobre un diff sintético de módulos. *Falsación:* ocultar una mutación fallida, compartir caché entre configuraciones o aceptar código cambiado sin gate debe fallar.
 
 ## 5. Herramientas: resumen
 
