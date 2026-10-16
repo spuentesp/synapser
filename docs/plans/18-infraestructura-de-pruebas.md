@@ -1,6 +1,6 @@
 # Plan 18 — Infraestructura de pruebas
 
-Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. E4 está cerrada; las demás épicas siguen el estado de §8 y del [seguimiento](14-seguimiento.md). Este documento es la lista de tareas: trece épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
+Estado: **aprobado** (15 oct 2026); en ejecución, en el orden de §3. E4 está cerrada; las demás épicas siguen el estado de §8 y del [seguimiento](14-seguimiento.md). Este documento es la lista de tareas: catorce épicas, cada una desglosada en historias. Se ejecuta en el orden de dependencias de §3. Cada épica se reclama en el [seguimiento](14-seguimiento.md) antes de empezar.
 
 ## 1. Problema
 
@@ -190,6 +190,12 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 - **H13.5** Revisión de cobertura de contratos: cada contrato de E2 tiene al menos una prueba que lo ejerce. *Criterio:* el informe lista contratos sin prueba y se revisa al cierre.
 
 *Herramientas:* las ya incorporadas.
+
+### E14 — Cierre de composición
+
+**Objetivo:** extender el patrón de escritura pública seguida de consumo real a los flujos críticos que aún preparan el estado interno directamente. No se prohíben fixtures en pruebas unitarias; esta historia cubre una frontera API→biblioteca→runtime.
+
+- **H14.1** La aceptación de biblioteca escribe proveedor, agente y skill mediante `PUT /api/library/...`, consulta cada documento mediante `GET` usando el id que devolvió la escritura y ejecuta después un workflow real que los consume. *Invariantes:* los datos iniciales de este caso se crean mediante la API pública; la lectura por API y la instantánea del workflow observan esos documentos; se mantienen la procedencia de skill, el registro del modelo y el aislamiento de la instantánea. *Verificador:* `test/library/run-e2e.test.ts`, servidor API real en loopback, `ProductionEngine`, journal y endpoint de modelo local. *Falsación:* escritura que no persiste, id devuelto que no se puede releer, o runtime que no usa proveedor/agente/skill debe hacer fallar la prueba. Sin dependencias de ejecución nuevas.
 
 ## 5. Herramientas: resumen
 

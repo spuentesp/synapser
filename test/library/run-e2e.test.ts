@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { call, ScriptedModel } from "../agent/scripted.ts";
+import { type ApiServer, createApi } from "../../src/api/server.ts";
 import type { ProfileCard } from "../../src/orchestration/catalog.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { sha256Bytes } from "../../src/digest/file.ts";
 import { LibraryStore } from "../../src/library/store.ts";
+import { NO_LIBRARY_POLICY } from "../../src/library/validate.ts";
 import { ProductionEngine } from "../../src/workflow/engine.ts";
 import { type Actor, WorkflowManager } from "../../src/workflow/manager.ts";
 import { BASELINE } from "../executor/env.ts";
@@ -57,6 +59,7 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
   let sj: Journal;
   let lib: LibraryStore;
   let mgr: WorkflowManager | undefined;
+  let api: ApiServer | undefined;
   let servers: { close: () => Promise<void> }[] = [];
   beforeEach(() => {
     ws = realpathSync(mkdtempSync(join(tmpdir(), "lib-e2e-ws-")));
@@ -69,6 +72,8 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
   afterEach(async () => {
     await mgr?.close();
     mgr = undefined;
+    await api?.close();
+    api = undefined;
     for (const s of servers) await s.close();
     servers = [];
     sj.close();
@@ -85,14 +90,11 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
 
     // the library states prices; they must not reach the cost of the run (plan 15 D4)
     const provider = (baseUrl: string) => ({ protocol: "openai-compatible", baseUrl, apiKeyEnv: [KEY], models: [{ id: "lib-model", usdPer1MIn: 1, usdPer1MOut: 2 }] });
-    lib.put("providers", "lib-provider", provider(answers.url), OP.id);
-    lib.put("agents", "lib-reviewer", { adapter: "native", description: "reviews the change", role: "advisor", tags: ["review"], timeoutMs: 120_000, provider: "lib-provider", model: "lib-model" }, OP.id);
-
-    lib.put("skills", "style-guide", { id: "style-guide", name: "style-guide", description: "how to review", content: SKILL_TEXT }, OP.id);
-
+    const skillRefs: Record<string, readonly string[]> = {};
+    let libraryAgentId = "lib-reviewer";
     let plannerSaw: string[] = [];
     const engine = new ProductionEngine({
-      workspaceRoot: ws, stateDir: state, commands: [], profiles: [], providerKeyEnv: [KEY], agentSkills: { "lib-reviewer": ["style-guide"] },
+      workspaceRoot: ws, stateDir: state, commands: [], profiles: [], providerKeyEnv: [KEY], agentSkills: skillRefs,
       models: () => new ScriptedModel(() => ({ calls: [call("finish", { summary: "nothing to do" })] })),
       planner: async (_w, catalog: ProfileCard[]) => {
         plannerSaw = catalog.map((c) => c.id);
@@ -115,22 +117,55 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
       engine, library: snapshotThenEdit, pollMs: 20,
     });
 
+    api = createApi({ stateDir: state, control: {
+      manager: mgr,
+      library: lib,
+      libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [KEY] }),
+    } });
+    const apiBase = `http://127.0.0.1:${await api.listen(0)}`;
+    const apiCall = (method: string, path: string, body?: unknown) => fetch(apiBase + path, {
+      method,
+      headers: { origin: apiBase, "x-synapser-token": api!.token, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const writeThenRead = async (kind: "providers" | "agents" | "skills", id: string, document: unknown): Promise<string> => {
+      const put = await apiCall("PUT", `/api/library/${kind}/${id}`, document);
+      const putText = await put.clone().text();
+      assert.equal(put.status, 200, `${kind}/${id} write: ${putText}`);
+      const written = JSON.parse(putText) as { id: string; kind: string; changed: boolean };
+      assert.equal(written.id, id);
+      assert.equal(written.kind, kind);
+      assert.equal(written.changed, true);
+      const get = await apiCall("GET", `/api/library/${kind}/${encodeURIComponent(written.id)}`);
+      const getText = await get.clone().text();
+      assert.equal(get.status, 200, `${kind}/${id} read: ${getText}`);
+      assert.deepEqual((JSON.parse(getText) as { document: unknown }).document, { ...(document as Record<string, unknown>), id }, `${kind}/${id} public read returns the public write`);
+      return written.id;
+    };
+    const providerId = await writeThenRead("providers", "lib-provider", provider(answers.url));
+    const agentId = await writeThenRead("agents", "lib-reviewer", { adapter: "native", description: "reviews the change", role: "advisor", tags: ["review"], timeoutMs: 120_000, provider: providerId, model: "lib-model" });
+    const skillId = await writeThenRead("skills", "style-guide", { id: "style-guide", name: "style-guide", description: "how to review", content: SKILL_TEXT });
+    libraryAgentId = agentId;
+    skillRefs[libraryAgentId] = [skillId];
+
     const created = mgr.create({
       id: "wf-library", title: "Review with a library agent", description: "a review that runs on a library provider", goals: ["the change is reviewed"], nonGoals: ["no other change"],
       conditions: [
         { id: "schema", statement: "the schema file is there", checker: { kind: "file", path: "app/schema.py", assert: "exists" } },
-        { id: "review", statement: "the change reads well", required: false, checker: { kind: "review", profile: "lib-reviewer", rubric: "judge the change" } },
+        { id: "review", statement: "the change reads well", required: false, checker: { kind: "review", profile: libraryAgentId, rubric: "judge the change" } },
       ],
     }, OP);
     assert.equal(created.ok, true, JSON.stringify(created));
     assert.equal(mgr.start("wf-library", OP).ok, true);
     await mgr.settled("wf-library");
 
-    assert.ok(plannerSaw.includes("lib-reviewer"), `the planner's catalog lacks the library agent: ${plannerSaw.join(", ")}`);
+    const workflow = mgr.list().find((item) => item.id === "wf-library");
+    assert.equal(workflow?.state, "DONE", JSON.stringify(workflow));
+    assert.ok(plannerSaw.includes(libraryAgentId), `the planner's catalog lacks the library agent: ${plannerSaw.join(", ")}`);
     assert.ok(answers.requests.some((r) => r.includes("judge the change")), "the review did not reach the endpoint the snapshot names");
     assert.ok(answers.requests.some((r) => r.includes(SKILL_TEXT)), "the library skill did not reach the endpoint the snapshot names");
     // the run records the skill it used: its id, the digest of its bytes and the mechanism (plan 14 Q5.4)
-    const reviews = mgr.journalOf("wf-library")?.listAgentRuns().filter((r) => r.profileId === "lib-reviewer") ?? [];
+    const reviews = mgr.journalOf("wf-library")?.listAgentRuns().filter((r) => r.profileId === libraryAgentId) ?? [];
     assert.ok(reviews.length > 0, "the library reviewer left no run record");
     assert.deepEqual(reviews.at(-1)?.skills, [{ id: "style-guide", digest: sha256Bytes(Buffer.from(SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
     const libraryCalls = mgr.journalOf("wf-library")?.listModelCalls().filter((c) => c.requestedModel === "lib-model") ?? [];
