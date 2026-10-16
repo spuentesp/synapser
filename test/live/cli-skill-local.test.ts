@@ -277,7 +277,10 @@ for (const profileId of ["codex-writer", "kimi-writer", "mimo-writer"] as const)
         },
       });
 
-      assert.equal(result.exitCode, 0, "installed CLI must finish without a process error after the fixture reply");
+      const localDiagnostic = profileId === "kimi-writer"
+        ? `reason=${(result.reason ?? "none").replaceAll(DUMMY_KEY, "[REDACTED]")}; fixture requests=${fixture.requests.map(({ method, path }) => `${method} ${path}`).join(", ") || "none"}`
+        : "installed CLI must finish without a process error after the fixture reply";
+      assert.equal(result.exitCode, 0, localDiagnostic);
       assert.notEqual(result.outcome, "FAILED", `installed CLI must not report a failed run: ${result.reason ?? "no reason"}`);
       assert.ok(fixture.requests.length > 0, "installed CLI must contact the loopback fixture");
       const expectedPath = adapter.id === "kimi" ? "/v1/messages" : adapter.id === "codex" ? "/v1/responses" : "/v1/chat/completions";
