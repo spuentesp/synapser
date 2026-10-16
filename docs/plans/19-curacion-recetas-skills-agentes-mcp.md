@@ -23,10 +23,18 @@ este plan reutiliza SQLite y el journal existentes; no migra el almacenamiento n
 paralela.
 
 Las plantillas de UI actuales son presets que rellenan el diseñador; las plantillas guardadas en
-la biblioteca apenas validan `id` y no gobiernan una corrida. El plan añadirá un tipo de documento
-estricto para recetas ejecutables. Los perfiles CLI, perfiles nativos y roles internos del sistema
-seguirán distinguiéndose: el worker nativo es un agente que Synapser dirige; un CLI conduce su
-propio bucle en una copia aislada y no recibe un canal de vuelta durante esa invocación.
+la biblioteca apenas validan `id` y no gobiernan una corrida. La biblioteca agrega el tipo
+versionado `recipes` con contrato estricto; `templates` conserva su validación y documentos heredados,
+sin conversión implícita. La versión 1 de receta declara categoría, parámetros tipados, capacidades,
+skills y servidores MCP requeridos, una plantilla de workflow con aceptación, política de inicio y
+presupuesto. Esta validación comprueba forma e invariantes locales; referencias a comandos, perfiles,
+rutas y MCPs se resolverán contra la configuración del operador antes de publicar o iniciar. Un
+checker de revisión basada en el juicio de un agente queda como evidencia informativa en una receta;
+no puede ser por sí solo una condición requerida.
+
+Los perfiles CLI, perfiles nativos y roles internos del sistema seguirán distinguiéndose: el worker
+nativo es un agente que Synapser dirige; un CLI conduce su propio bucle en una copia aislada y no
+recibe un canal de vuelta durante esa invocación.
 
 ## 3. Modelo de conceptos
 

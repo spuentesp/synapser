@@ -8,7 +8,7 @@ import { type Digest, isDigest, sha256Bytes } from "../digest/file.ts";
 import { fsyncDir, writeFileDurable } from "../journal/artifacts.ts";
 import { type EventRow, Journal } from "../journal/journal.ts";
 
-export const LIBRARY_KINDS = ["providers", "skills", "templates", "agents"] as const;
+export const LIBRARY_KINDS = ["providers", "skills", "templates", "agents", "recipes"] as const;
 export type LibraryKind = (typeof LIBRARY_KINDS)[number];
 export type LibraryDocument = Record<string, unknown>;
 

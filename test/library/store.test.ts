@@ -20,12 +20,17 @@ describe("versioned state library", () => {
     rmSync(state, { recursive: true, force: true });
   });
 
-  test("providers, skills, templates and agents are content-addressed and audited", () => {
+  test("providers, skills, legacy templates, agents and recipes are content-addressed and audited", () => {
     const docs = {
       providers: { protocol: "openai-compatible", baseUrl: "https://example.invalid/v1" },
       skills: { name: "Review", description: "Review carefully", content: "Check the result.\n" },
       templates: { title: "Bounded change", parameters: ["scope"] },
       agents: { adapter: "native", tier: "standard" },
+      recipes: {
+        schemaVersion: 1, title: "Review changes", description: "Review a change and report grounded findings.",
+        category: "review", parameters: [], requiredCapabilities: [], requiredSkills: [], requiredMcpServers: [], startPolicy: "draft",
+        workflow: { title: "Review changes", description: "Review the selected change without modifying it.", goals: ["Report findings"], nonGoals: [], conditions: [{ id: "unchanged", statement: "Reviewed files remain unchanged", checker: { kind: "diff", forbid: ["src/"] }, required: true }] },
+      },
     } as const;
     for (const kind of LIBRARY_KINDS) {
       const result = library.put(kind, `one-${kind}`, docs[kind], "ui:operator");
@@ -35,7 +40,7 @@ describe("versioned state library", () => {
       assert.equal(existsSync(join(state, "library", kind, `one-${kind}`, "current.json")), true);
     }
     const events = journal.listEvents().filter((event) => event.entity === "library_change");
-    assert.equal(events.length, 4);
+    assert.equal(events.length, 5);
     assert.ok(events.every((event) => event.toState === "PUT" && (event.data as { actor: string }).actor === "ui:operator"));
     assert.equal(readFileSync(join(state, "library", "skills", "one-skills", "SKILL.md"), "utf8"), "Check the result.\n");
   });

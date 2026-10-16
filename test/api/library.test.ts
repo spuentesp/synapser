@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -127,6 +127,49 @@ describe("API library (plan 14 Q2.6)", () => {
 
     assert.equal((await call("PUT", "/api/library/templates/t1", [], ok())).status, 400, "a template must be an object");
     assert.equal((await call("PUT", "/api/library/templates/t1", { title: "Cambio acotado" }, ok())).status, 200, "templates have no schema before Q3.2");
+  });
+
+  test("recipes have a strict versioned contract while legacy templates remain byte-compatible (P19.1)", async () => {
+    const legacy = { title: "Legacy review", parameters: ["target"] };
+    assert.equal((await call("PUT", "/api/library/templates/review", legacy, ok())).status, 200);
+    assert.deepEqual(lib.get("templates", "review")?.document, { ...legacy, id: "review" });
+
+    const recipe = JSON.parse(readFileSync(new URL("../library/fixtures/task-recipe-v1.json", import.meta.url), "utf8")) as Record<string, unknown>;
+    const put = await call("PUT", "/api/library/recipes/adversarial-review", recipe, ok());
+    assert.equal(put.status, 200, JSON.stringify(await put.clone().json()));
+    assert.deepEqual(lib.get("recipes", "adversarial-review")?.document, { ...recipe, id: "adversarial-review" });
+    const rebuilt = new LibraryStore(state, sj);
+    assert.deepEqual(rebuilt.get("recipes", "adversarial-review")?.document, { ...recipe, id: "adversarial-review" }, "the SQLite journal rebuilds the recipe projection");
+
+    const mismatch = await call("PUT", "/api/library/recipes/wrong-id", { ...recipe, id: "adversarial-review" }, ok());
+    assert.equal(mismatch.status, 400);
+    assert.match((await mismatch.json() as any).errors.join("\n"), /does not match wrong-id/);
+
+    const unknownTop = await call("PUT", "/api/library/recipes/invalid", { ...recipe, command: "npm test" }, ok());
+    assert.equal(unknownTop.status, 400);
+    assert.match((await unknownTop.json() as any).errors.join("\n"), /Unrecognized key: "command"/);
+    assert.equal(lib.get("recipes", "invalid"), null, "invalid documents are rejected before journaling");
+
+    const unknownNested = structuredClone(recipe) as unknown as { workflow: { conditions: Array<{ checker: Record<string, unknown> }> } };
+    unknownNested.workflow.conditions[0]!.checker = { kind: "diff", forbid: ["src/"], bypassBroker: true };
+    const nested = await call("PUT", "/api/library/recipes/invalid", unknownNested, ok());
+    assert.equal(nested.status, 400);
+    assert.match((await nested.json() as any).errors.join("\n"), /workflow\.conditions\.0\.checker: Unrecognized key/);
+    assert.deepEqual(lib.get("templates", "review")?.document, { ...legacy, id: "review" }, "adding recipe support never rewrites templates");
+
+    const impossible = structuredClone(recipe) as unknown as { workflow: { conditions: Array<{ checker: Record<string, unknown> }> } };
+    impossible.workflow.conditions[0]!.checker = { kind: "diff", forbid: [] };
+    const impossibleResult = await call("PUT", "/api/library/recipes/impossible", impossible, ok());
+    assert.equal(impossibleResult.status, 400);
+    const impossibleErrors = (await impossibleResult.json() as any).errors.join("\n");
+    assert.match(impossibleErrors, /diff checker needs at least one/);
+    assert.match(impossibleErrors, /independently satisfiable/);
+
+    const modelOnly = structuredClone(recipe) as unknown as { workflow: { conditions: Array<{ checker: Record<string, unknown> }> } };
+    modelOnly.workflow.conditions[0]!.checker = { kind: "review", profile: "reviewer", rubric: "Find unsupported claims." };
+    const modelOnlyResult = await call("PUT", "/api/library/recipes/model-only", modelOnly, ok());
+    assert.equal(modelOnlyResult.status, 400);
+    assert.match((await modelOnlyResult.json() as any).errors.join("\n"), /review evidence is informational/);
   });
 
   test("an unknown kind is refused; a document id that does not match its path is refused; an id the store cannot hold is refused", async () => {

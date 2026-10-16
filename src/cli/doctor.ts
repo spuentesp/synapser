@@ -98,7 +98,7 @@ export async function doctor(cfg: SynapserConfig, probe: Probe = realProbe): Pro
   try {
     library = readLibrary(cfg.stateDir);
     const count = (kind: string) => library.filter((e) => e.kind === kind).length;
-    checks.push({ name: "library", ok: true, detail: library.length ? `providers ${count("providers")} · agents ${count("agents")} · skills ${count("skills")} · templates ${count("templates")}` : "empty" });
+    checks.push({ name: "library", ok: true, detail: library.length ? `providers ${count("providers")} · agents ${count("agents")} · skills ${count("skills")} · templates ${count("templates")} · recipes ${count("recipes")}` : "empty" });
   } catch (e) {
     checks.push({ name: "library", ok: false, detail: `cannot be read: ${String((e as Error).message ?? e).slice(0, 200)}` });
   }

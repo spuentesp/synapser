@@ -10,7 +10,7 @@ import { type ProviderConfig, validateProviderConfig } from "../model/config.ts"
 import { isBlockedAddress } from "../model/destinations.ts";
 import { isIP } from "node:net";
 import type { LibraryKind } from "./store.ts";
-import { extendingAgentSchema, MAX_SKILL_BYTES, MAX_TIMEOUT_MS, nativeAgentSchema, requiredKeys, skillSchema } from "./schema.ts";
+import { extendingAgentSchema, MAX_SKILL_BYTES, MAX_TIMEOUT_MS, nativeAgentSchema, requiredKeys, skillSchema, taskRecipeSchema } from "./schema.ts";
 
 /** A profile a library agent may extend, and whether the operator's file enables it (plan 15 IC1). */
 export interface LibraryBase {
@@ -70,7 +70,18 @@ export function validateLibraryDocument(kind: LibraryKind, id: string, document:
       return [...idProblems, ...skillProblems(at, d)];
     case "templates":
       return idProblems;
+    case "recipes":
+      return [...idProblems, ...recipeProblems(at, d)];
   }
+}
+
+function recipeProblems(at: string, d: Record<string, unknown>): string[] {
+  const checked = taskRecipeSchema.safeParse(d);
+  if (checked.success) return [];
+  return checked.error.issues.map((issue) => {
+    const path = issue.path.length ? `.${issue.path.map(String).join(".")}` : "";
+    return `${at}${path}: ${issue.message}`;
+  });
 }
 
 /** Q5.1: a library provider may add an id, never take one the operator's file owns. */

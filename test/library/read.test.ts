@@ -89,7 +89,7 @@ describe("the library as doctor and config show read it (plan 14 Q2.7)", () => {
       const rep = await doctor(cfg, probe);
       const check = (name: string) => rep.checks.find((c) => c.name === name)!;
       assert.equal(check("library").ok, true);
-      assert.equal(check("library").detail, "providers 1 · agents 0 · skills 0 · templates 0");
+      assert.equal(check("library").detail, "providers 1 · agents 0 · skills 0 · templates 0 · recipes 0");
       assert.equal(check("library provider key (read-local)").ok, false);
       assert.match(check("library provider key (read-local)").detail, /none of READ_TEST_KEY is set/);
       assert.equal(rep.ok, true, "a missing library provider key is information, not a failure");

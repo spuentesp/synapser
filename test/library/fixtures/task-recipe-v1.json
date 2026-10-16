@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "title": "Adversarial review",
+  "description": "Inspect a fixed change and report actionable evidence.",
+  "category": "adversarial_review",
+  "parameters": [
+    {
+      "name": "scope",
+      "type": "string_list",
+      "description": "Paths included in the review.",
+      "required": true,
+      "maxItems": 20
+    }
+  ],
+  "requiredCapabilities": ["workspace.read"],
+  "requiredSkills": [{ "id": "red-team", "required": true }],
+  "requiredMcpServers": ["source-reader"],
+  "workflow": {
+    "title": "Review the change",
+    "description": "Inspect the fixed change without editing the workspace.",
+    "goals": ["Report findings with evidence"],
+    "nonGoals": [
+      {
+        "statement": "Modify the reviewed files",
+        "guard": { "kind": "diff", "forbid": ["src/"] }
+      }
+    ],
+    "conditions": [
+      {
+        "id": "unchanged",
+        "statement": "The reviewed files remain unchanged",
+        "checker": { "kind": "diff", "forbid": ["src/"] },
+        "required": true
+      }
+    ],
+    "budget": { "minutes": 15 }
+  },
+  "startPolicy": "human_approval"
+}
