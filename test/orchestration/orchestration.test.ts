@@ -13,7 +13,7 @@ import { type Env, makeEnv, RUN } from "../executor/env.ts";
 
 const run = (profileId: string, usd: number | null, at: number, ok = true): RunSample => ({ profileId, succeeded: ok, usd, durationMs: 1000, at });
 const card = (id: string, over: Partial<ProfileCard> = {}): ProfileCard => ({
-  id, kinds: ["write"], integration: "pending", tier: "standard", pool: null, strengths: [], capabilities: { available: true, execution: "isolated-cli", output: "text", skills: "none", mcpClient: false, mcpConfigInjection: false, permissionModes: [], permissionMode: null, toolAllowlist: false, role: "writer", budgetFlag: false, budgetUsd: null, timeoutMs: 60_000, resume: false, steerable: null, capabilityIds: [] }, cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
+  id, kinds: ["write"], integration: "pending", tier: "standard", pool: null, strengths: [], capabilities: { available: true, execution: "isolated-cli", output: "text", skills: "none", mcpClient: false, mcpConfigInjection: false, permissionModes: [], permissionMode: null, toolAllowlist: false, role: "writer", budgetFlag: false, budgetUsd: null, timeoutMs: 60_000, resume: false, steerable: null, capabilityIds: [] }, allowedSkillIds: [], cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
 });
 const est = (usd: number): ProfileCard["cost"] => ({ basis: "estimated", usdPerRun: usd, low: usd, high: usd * 2, n: 5 });
 
@@ -91,10 +91,16 @@ describe("router", () => {
   });
 
   test("hard capability requirements exclude unsupported and unknown capabilities", () => {
-    const cli = card("cli", { capabilities: { available: true, execution: "isolated-cli", output: "structured", skills: "native-dir", mcpClient: true, mcpConfigInjection: false, permissionModes: ["default"], permissionMode: "default", toolAllowlist: true, role: "writer", budgetFlag: true, budgetUsd: 1, timeoutMs: 300_000, resume: true, steerable: null, capabilityIds: ["output.structured", "mcp.client", "permissions.mode.default", "budget.usd"] } });
+    const cli = card("cli", { capabilities: { available: true, execution: "isolated-cli", output: "structured", skills: "native-dir", mcpClient: true, mcpConfigInjection: false, permissionModes: ["default"], permissionMode: "default", toolAllowlist: true, role: "writer", budgetFlag: true, budgetUsd: 1, timeoutMs: 300_000, resume: true, steerable: null, capabilityIds: ["output.structured", "mcp.client", "permissions.mode.default", "budget.usd", "skills.injectable"] }, allowedSkillIds: ["style"] });
     const native = card("native", { capabilities: { ...cli.capabilities, execution: "native-loop", skills: "prompt-prepend", mcpClient: false, permissionModes: [], permissionMode: null, toolAllowlist: false, budgetFlag: false, budgetUsd: null, resume: false, capabilityIds: ["execution.native", "skills.prompt-prepend"] } });
     const selected = route({ kind: "write", requires: ["mcp.client", "output.structured"] }, [native, cli]);
     assert.ok(selected.ok && selected.profileId === "cli");
+    const withSkill = route({ kind: "write", skills: [{ id: "style", required: true, reason: "Review house style." }] }, [native, cli]);
+    assert.ok(withSkill.ok && withSkill.profileId === "cli");
+    const unauthorizedSkill = route({ kind: "write", skills: [{ id: "private", required: true, reason: "Not authorized." }] }, [native, cli]);
+    assert.ok(!unauthorizedSkill.ok && unauthorizedSkill.rejected.every((candidate) => candidate.code === "SKILL_MISMATCH"));
+    const preference = route({ kind: "write", skills: [{ id: "style", required: false, reason: "optional" }] }, [card("cheap", { tier: "cheap" }), card("advanced-with-style", { tier: "advanced", allowedSkillIds: ["style"], capabilities: { ...cli.capabilities, capabilityIds: ["skills.injectable"] } })]);
+    assert.ok(preference.ok && preference.profileId === "cheap", "an optional skill recommendation cannot raise the tier");
     const unavailable = route({ kind: "write", requires: ["mcp.injected"] }, [native, cli]);
     assert.deepEqual(unavailable, { ok: false, code: "NO_CANDIDATE", rejected: [{ profileId: "cli", code: "CAPABILITY_MISMATCH" }, { profileId: "native", code: "CAPABILITY_MISMATCH" }] });
     const future = route({ kind: "write" }, [card("future", { capabilities: { ...native.capabilities, available: false } })]);
@@ -176,6 +182,11 @@ describe("plan validation against the catalog", () => {
   test("hard capability requirements are validated and must be satisfiable", () => {
     assert.match(errs(check([task({ requires: ["mcp.injected"] })])), /NO_ROUTE.*mcp.injected/);
     assert.match(errs(check([task({ requires: ["not a capability"] })])), /requires must be an array/);
+  });
+  test("skill choices need bounded reasons, unique IDs and an authorized compatible profile", () => {
+    assert.match(errs(check([task({ skills: [{ id: "style", required: true, reason: "house style" }] })])), /NO_ROUTE.*required skills style/);
+    assert.match(errs(check([task({ skills: [{ id: "style", required: "yes", reason: " " }] })])), /required must be boolean/);
+    assert.match(errs(check([task({ skills: [{ id: "style", required: true, reason: "r" }, { id: "style", required: false, reason: "again" }] })])), /is duplicated/);
   });
   test("OVER_BUDGET uses known + estimated(high); not applied without a budget", () => {
     const two = [task({ id: "a" }), task({ id: "b", scope: ["app/client.py"] })]; // 2 × 0.10 high

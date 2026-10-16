@@ -121,13 +121,22 @@ describe("library skills in a run (plan 14 Q5.4)", () => {
       { kind: "skills", id: "style", document: skillDoc(STYLE) },
     ]));
     assert.deepEqual(view.skillsFor.get("lib-tuned"), [
-      { id: "style", digest: sha256Bytes(Buffer.from(STYLE, "utf8")), content: STYLE, source: "library" },
+      { id: "style", digest: sha256Bytes(Buffer.from(STYLE, "utf8")), content: STYLE, selectionReason: "operator-default", source: "library" },
     ]);
   });
 
   test("an agent the file does not assign a skill to receives none", () => {
     const view = runLibrary(withSkill({}), snapshot([{ kind: "agents", id: "lib-tuned", document: agentDoc }]));
     assert.equal(view.skillsFor.get("lib-tuned"), undefined);
+  });
+
+  test("the operator cannot authorize skill injection for an adapter without a skill mechanism", () => {
+    const cli: AgentProfile = { ...fileNative, id: "plain-cli", adapter: "cli-oneshot", argv: ["tool", "{prompt}"], parser: "plain" };
+    const operator: OperatorFile = { ...file, profiles: [cli], agentSkills: { "plain-cli": ["style"] } };
+    assert.throws(
+      () => runLibrary(operator, snapshot([{ kind: "skills", id: "style", document: skillDoc(STYLE) }])),
+      (e: unknown) => e instanceof LibraryRunError && e.message.includes("adapter cli-oneshot does not support skill injection"),
+    );
   });
 
   test("a skill the file names but the library does not hold refuses the run, naming the agent and the skill", () => {

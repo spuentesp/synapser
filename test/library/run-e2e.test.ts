@@ -167,7 +167,7 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     // the run records the skill it used: its id, the digest of its bytes and the mechanism (plan 14 Q5.4)
     const reviews = mgr.journalOf("wf-library")?.listAgentRuns().filter((r) => r.profileId === libraryAgentId) ?? [];
     assert.ok(reviews.length > 0, "the library reviewer left no run record");
-    assert.deepEqual(reviews.at(-1)?.skills, [{ id: "style-guide", digest: sha256Bytes(Buffer.from(SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
+    assert.deepEqual(reviews.at(-1)?.skills, [{ id: "style-guide", digest: sha256Bytes(Buffer.from(SKILL_TEXT, "utf8")), mechanism: "prompt-prepend", reason: "operator-default" }]);
     const libraryCalls = mgr.journalOf("wf-library")?.listModelCalls().filter((c) => c.requestedModel === "lib-model") ?? [];
     assert.ok(libraryCalls.length > 0, "the library model left no call record");
     assert.ok(libraryCalls.every((c) => c.costUsd === null), "a library tariff reached the cost of a run");
@@ -185,7 +185,11 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     const engine = new ProductionEngine({
       workspaceRoot: ws, stateDir: state, commands: [], profiles: [cliProfile], agentSkills: { "cli-reviewer": ["cli-guidance"] },
       models: () => new ScriptedModel(() => ({ calls: [call("finish", { summary: "no changes" })] })),
-      planner: async () => ({ tasks: [] }),
+      planner: async () => ({ tasks: [{
+        id: "inspect", objective: "Check the schema without edits", scope: ["app/schema.py"], criteria: ["report the schema"], deps: [],
+        kind: "advise", profile: "cli-reviewer", serves: ["schema"],
+        skills: [{ id: "cli-guidance", required: true, reason: "This review checks public API compatibility." }],
+      }] }),
       limits: { maxRepairRounds: 0, concurrency: 1, missionMs: 60_000 }, pollMs: 20,
     });
     const snapshotThenEdit = {
@@ -216,6 +220,9 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     const output = mgr.journalOf("wf-cli-skill")!.artifacts.get(run.stdoutBlob!).toString("utf8");
     assert.ok(output.includes(CLI_SKILL_TEXT), "the CLI process did not receive the frozen skill in its prompt");
     assert.ok(!output.includes(CLI_SKILL_EDIT), "the CLI process saw a post-snapshot skill edit");
-    assert.deepEqual(run.skills, [{ id: "cli-guidance", digest: sha256Bytes(Buffer.from(CLI_SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
+    assert.deepEqual(run.skills, [{ id: "cli-guidance", digest: sha256Bytes(Buffer.from(CLI_SKILL_TEXT, "utf8")), mechanism: "prompt-prepend", reason: "operator-default" }]);
+    const contextual = runs.find((entry) => entry.taskId === "inspect");
+    assert.ok(contextual, "the task-level review step did not run");
+    assert.deepEqual(contextual.skills, [{ id: "cli-guidance", digest: sha256Bytes(Buffer.from(CLI_SKILL_TEXT, "utf8")), mechanism: "prompt-prepend", reason: "This review checks public API compatibility." }]);
   });
 });

@@ -175,4 +175,13 @@ describe("AgentRunnerRegistry", () => {
   test("two runners for the same adapter are refused", () => {
     assert.throws(() => new AgentRunnerRegistry([new CliOneShotRunner(), new CliOneShotRunner()]), /duplicate runner/);
   });
+
+  test("a required task skill cannot bypass the operator allowlist resolver", () => {
+    const registry = new AgentRunnerRegistry([{ adapter: "cli-oneshot", run: async () => { throw new Error("runner must not be called"); } }]);
+    const profile = { ...BUILTIN_PROFILES.find((candidate) => candidate.id === "claude-sonnet-writer")!, adapter: "cli-oneshot" as const };
+    assert.throws(
+      () => registry.for(profile).run({ task: { skillSelection: [{ id: "private", required: true, reason: "required" }] } } as never),
+      /need an operator allowlist resolver/,
+    );
+  });
 });

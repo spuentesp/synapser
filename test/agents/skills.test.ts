@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { type AgentAdapter, type AgentInvocation, type InjectedSkills } from "../../src/agents/adapter.ts";
+import { type AgentAdapter, type AgentInvocation, type InjectedSkills, type SkillSelection } from "../../src/agents/adapter.ts";
 import { GENERIC_CLI_ADAPTER } from "../../src/agents/generic-cli.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
@@ -11,7 +11,7 @@ import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { BUILTIN_PROFILES, type AgentProfile } from "../../src/agents/profile.ts";
 import { runAgent } from "../../src/agents/runner.ts";
-import { assertSkillPolicyUnchanged, materializeAdapterFiles, validateInjectedSkills } from "../../src/agents/skills.ts";
+import { assertSkillPolicyUnchanged, materializeAdapterFiles, selectAuthorizedSkills, validateInjectedSkills } from "../../src/agents/skills.ts";
 import { sha256Bytes } from "../../src/digest/file.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { BASELINE, RUN } from "../executor/env.ts";
@@ -22,6 +22,16 @@ const skill = { id: "safe-review", digest: sha256Bytes(Buffer.from(content)), co
 const injected: InjectedSkills = { skills: [skill] };
 
 describe("skill injection invariants L1/L2", () => {
+  test("task selection is a subset of operator authority; required misses fail and recommendations may be omitted", () => {
+    const authorized = [skill, { ...skill, id: "tests" }];
+    const selection: SkillSelection[] = [{ id: "tests", required: true, reason: "This task changes a test contract." }];
+    assert.deepEqual(selectAuthorizedSkills(authorized, selection), [{ ...authorized[1]!, selectionReason: selection[0]!.reason }]);
+    assert.throws(() => selectAuthorizedSkills(authorized, [{ id: "private", required: true, reason: "must not bypass authority" }]), /not operator-authorized/);
+    assert.deepEqual(selectAuthorizedSkills(authorized, [{ id: "private", required: false, reason: "optional guidance" }]), []);
+    assert.deepEqual(selectAuthorizedSkills(authorized, []).map((entry) => entry.id), [], "an explicit empty selection is distinct from the legacy operator default");
+    assert.deepEqual(selectAuthorizedSkills(authorized).map((entry) => entry.selectionReason), ["operator-default", "operator-default"]);
+  });
+
   test("L1 rejects non-library, duplicate and digest-mismatched skills", () => {
     assert.throws(() => validateInjectedSkills({ skills: [{ ...skill, source: "upload" as never }] }, "native-dir"), /not from the library/);
     assert.throws(() => validateInjectedSkills({ skills: [{ ...skill, digest: sha256Bytes(Buffer.from("other")) }] }, "native-dir"), /does not match/);
@@ -120,7 +130,7 @@ describe("runner skill audit", () => {
     const change = result.changes.find((entry) => entry.path === "skill-seen.txt")!;
     assert.equal(journal.artifacts.get(change.afterBlob!).toString(), content);
     assert.equal(existsSync(join(ws, "skill-seen.txt")), false, "the real workspace and HOME remain untouched");
-    const expected = [{ id: skill.id, digest: skill.digest, mechanism: "native-dir" }];
+    const expected = [{ id: skill.id, digest: skill.digest, mechanism: "native-dir", reason: "operator-default" }];
     assert.deepEqual(result.skills, expected);
     assert.deepEqual(journal.listAgentRuns()[0]?.skills, expected);
     const event = journal.listEvents().find((entry) => entry.entity === "agent_run")!;

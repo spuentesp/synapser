@@ -74,6 +74,7 @@ export function effectiveProfileCapabilities(profile: AgentProfile): EffectivePr
     ...(adapter === "native" ? ["execution.native"] : adapter === "orca" ? ["execution.remote"] : ["execution.cli"]),
     ...(declared.structuredOutput ? ["output.structured"] : ["output.text"]),
     ...(declared.skills === "native" ? ["skills.native"] : declared.skills === "prompt-prepend" ? ["skills.prompt-prepend"] : []),
+    ...(declared.skillMechanism !== "none" ? ["skills.injectable"] : []),
     ...(declared.mcp ? ["mcp.client"] : []),
     ...(declared.mcpConfigInjection ? ["mcp.injected"] : []),
     ...(declared.budgetFlag ? ["budget.usd"] : []),

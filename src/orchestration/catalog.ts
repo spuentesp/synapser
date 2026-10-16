@@ -5,6 +5,7 @@
 import type { Journal } from "../journal/journal.ts";
 import { type AgentProfile, adapterOf, type Tier } from "../agents/profile.ts";
 import { effectiveProfileCapabilities, type EffectiveProfileCapabilities } from "../agents/capabilities.ts";
+import type { SkillSelection } from "../agents/adapter.ts";
 
 export const STEP_KINDS = ["write", "advise", "research", "review"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
@@ -23,6 +24,8 @@ export interface ProfileCard {
   strengths: string[];
   /** Machine-matchable capabilities derived from the adapter and effective profile, never library text. */
   capabilities: EffectiveProfileCapabilities;
+  /** Skill IDs authorized by the operator for this profile in this run's frozen library snapshot. */
+  allowedSkillIds: string[];
   cost: CostEstimate;
   observed: { runs: number; succeeded: number; medianMs: number } | null;
   enabled: boolean;
@@ -47,6 +50,7 @@ export interface CatalogOptions {
   maxRelErr?: number;
   /** Extra kinds per profile (e.g. a profile wired to a research tool). */
   extraKinds?: Readonly<Record<string, readonly StepKind[]>>;
+  allowedSkillsByProfile?: ReadonlyMap<string, readonly string[]>;
 }
 
 export const kindsOf = (p: AgentProfile): StepKind[] => (p.role === "writer" ? ["write"] : ["advise", "review"]);
@@ -95,6 +99,7 @@ export function buildCatalog(profiles: readonly AgentProfile[], samples: readonl
       pool: p.pool ?? null,
       strengths: [...p.tags],
       capabilities,
+      allowedSkillIds: [...(o.allowedSkillsByProfile?.get(p.id) ?? [])],
       cost,
       observed: mine.length === 0 ? null : { runs: mine.length, succeeded: mine.filter((s) => s.succeeded).length, medianMs: median(mine.map((s) => s.durationMs)) },
       enabled: p.enabled && capabilities.available,

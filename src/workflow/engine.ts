@@ -8,6 +8,7 @@ import { CLAUDE_CODE_ADAPTER } from "../agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../agents/codex.ts";
 import { KIMI_ADAPTER } from "../agents/kimi.ts";
 import { MIMO_ADAPTER } from "../agents/mimo.ts";
+import { selectAuthorizedSkills } from "../agents/skills.ts";
 import { GENERIC_CLI_ADAPTER } from "../agents/generic-cli.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
@@ -98,7 +99,7 @@ export class ProductionEngine implements WorkflowEngine {
       const model = c.models(journal);
       const budget = new BudgetManager({ maxTokens: c.limits?.maxTokens ?? 800_000, maxCalls: 200 });
       const research = c.research?.(journal, runId);
-      const catalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}) });
+      const catalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}), allowedSkillsByProfile: new Map([...library.skillsFor].map(([id, skills]) => [id, skills.map((skill) => skill.id)])) });
       const w0 = r.workflow();
 
       // ---- decompose -------------------------------------------------------------------------
@@ -144,7 +145,7 @@ export class ProductionEngine implements WorkflowEngine {
       };
       // plan 17 P17.6: CLI runners resolve an injectProvider against the operator's providers, never the library's.
       const operatorProviders = () => c.providers ?? defaultModelConfig().providers;
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId) => library.skillsFor.get(profileId) ?? [] });
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection) });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

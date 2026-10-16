@@ -138,6 +138,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
           ...(pt.kind ? { step: pt.kind } : {}),
           ...(pt.profile ? { profile: pt.profile } : {}),
           ...(pt.tags ? { tags: pt.tags } : {}),
+          ...(pt.skills ? { skillSelection: pt.skills } : {}),
           ...(pt.gates ? { gates: pt.gates } : {}),
           ...(pt.tier ? { tier: pt.tier } : {}),
           ...(pt.serves ? { serves: pt.serves } : {}),

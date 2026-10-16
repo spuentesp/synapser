@@ -3,6 +3,7 @@
 
 import { tierRank, type Tier } from "../agents/profile.ts";
 import type { ProfileCard, StepKind } from "./catalog.ts";
+import type { SkillSelection } from "../agents/adapter.ts";
 
 export interface RouteRequest {
   kind: StepKind;
@@ -12,6 +13,8 @@ export interface RouteRequest {
   tags?: readonly string[];
   /** Required effective capability IDs; unknown IDs fail closed because no profile declares them. */
   requires?: readonly string[];
+  /** Selected skills must remain inside the operator allowlist attached to each profile card. */
+  skills?: readonly SkillSelection[];
   /** Profiles that must not be used for this task (e.g. already failed on it). */
   exclude?: readonly string[];
   /** The lowest tier that may do this step (plan 13 §7). Cheaper agents are not candidates. */
@@ -24,7 +27,7 @@ export interface Alert {
   detail?: string;
 }
 
-export type RejectCode = "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" | "BELOW_TIER" | "CAPABILITY_MISMATCH";
+export type RejectCode = "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" | "BELOW_TIER" | "CAPABILITY_MISMATCH" | "SKILL_MISMATCH";
 export type RouteDecision =
   | { ok: true; profileId: string; reason: "policy" | "suggestion"; alerts: Alert[]; considered: { profileId: string; rank: number }[] }
   | { ok: false; code: "NO_CANDIDATE"; rejected: { profileId: string; code: RejectCode }[] };
@@ -44,6 +47,7 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
     else if (!c.kinds.includes(req.kind)) rejected.push({ profileId: c.id, code: "KIND_MISMATCH" });
     else if (tierRank(c.tier) < floor) rejected.push({ profileId: c.id, code: "BELOW_TIER" });
     else if ((req.requires ?? []).some((capability) => !c.capabilities?.capabilityIds.includes(capability))) rejected.push({ profileId: c.id, code: "CAPABILITY_MISMATCH" });
+    else if ((req.skills ?? []).some((selection) => selection.required && (!c.capabilities.capabilityIds.includes("skills.injectable") || !c.allowedSkillIds.includes(selection.id)))) rejected.push({ profileId: c.id, code: "SKILL_MISMATCH" });
     else candidates.push(c);
   }
   // a total order, so the answer does not depend on the order the catalog happened to be listed in
@@ -51,13 +55,15 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
   if (candidates.length === 0) return { ok: false, code: "NO_CANDIDATE", rejected };
 
   const want = new Set(req.tags ?? []);
+  const recommendedSkillIds = new Set((req.skills ?? []).filter((skill) => !skill.required).map((skill) => skill.id));
   const fit = (c: ProfileCard) => c.strengths.filter((s) => want.has(s)).length;
+  const recommendedSkillFit = (c: ProfileCard) => c.allowedSkillIds.filter((id) => recommendedSkillIds.has(id)).length;
   // a profile built for repair rounds does not win ordinary work just by sorting first
   const misfit = (c: ProfileCard): number => (c.strengths.includes("repair") && !want.has("repair") ? 1 : 0);
   // lexicographic: capability fit, then not-a-misfit, then how well the cost is known, then cost, then
   // track record, then the model's suggestion, then id (total order ⇒ deterministic)
   // T1: among the agents that clear the floor, use the LOWEST tier that does (never pay for more than asked)
-  const key = (c: ProfileCard): (number | string)[] => [-fit(c), misfit(c), tierRank(c.tier), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
+  const key = (c: ProfileCard): (number | string)[] => [-fit(c), misfit(c), tierRank(c.tier), -recommendedSkillFit(c), basisRank(c.cost), usd(c.cost), -successRate(c), c.id === req.suggested ? 0 : 1, c.id];
   const cmp = (a: ProfileCard, b: ProfileCard): number => {
     const ka = key(a);
     const kb = key(b);
@@ -87,7 +93,7 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
 
 /** Upper bound of a plan's cost: known + estimated(high); unknown tasks are listed, not guessed. */
 export function planCost(
-  tasks: readonly { id: string; kind: StepKind; profile?: string | undefined; tags?: readonly string[]; requires?: readonly string[] }[],
+  tasks: readonly { id: string; kind: StepKind; profile?: string | undefined; tags?: readonly string[]; requires?: readonly string[]; skills?: readonly SkillSelection[] }[],
   catalog: readonly ProfileCard[],
 ): { knownUsd: number; estimatedHighUsd: number; unknownTasks: string[]; unroutable: string[] } {
   let knownUsd = 0;
@@ -95,7 +101,7 @@ export function planCost(
   const unknownTasks: string[] = [];
   const unroutable: string[] = [];
   for (const t of tasks) {
-    const d = route({ kind: t.kind, suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.requires ? { requires: t.requires } : {}) }, catalog);
+    const d = route({ kind: t.kind, suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.requires ? { requires: t.requires } : {}), ...(t.skills ? { skills: t.skills } : {}) }, catalog);
     if (!d.ok) {
       unroutable.push(t.id);
       continue;

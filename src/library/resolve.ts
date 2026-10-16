@@ -4,6 +4,7 @@
 // (decision D6), as a library document, with the digest of its bytes (L1).
 
 import type { InjectedSkill } from "../agents/adapter.ts";
+import { effectiveProfileCapabilities } from "../agents/capabilities.ts";
 import type { AgentProfile } from "../agents/profile.ts";
 import { sha256Bytes } from "../digest/file.ts";
 import type { ProviderConfig } from "../model/config.ts";
@@ -18,7 +19,7 @@ export interface OperatorFile {
   providers: Record<string, ProviderConfig>;
   profiles: AgentProfile[];
   providerKeyEnv?: readonly string[];
-  /** The library skills each agent receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
+  /** Operator-authorized skill IDs per profile; a task may choose a subset from this list. */
   agentSkills?: Record<string, readonly string[]>;
 }
 
@@ -77,8 +78,7 @@ export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undef
     }
   }
   const allProfiles = [...file.profiles, ...profiles];
-  // skills: only the agents the operator's file names receive one, and only a skill this run's library holds, valid, with
-  // the digest of its bytes (L1)
+  // agentSkills is the operator allowlist; a task may select a subset later. The run sees only this frozen view.
   const skillsFor = new Map<string, InjectedSkill[]>();
   for (const [agentId, skillIds] of Object.entries(file.agentSkills ?? {})) {
     if (!allProfiles.some((p) => p.id === agentId)) {
@@ -90,6 +90,11 @@ export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undef
       continue;
     }
     const injected: InjectedSkill[] = [];
+    const profile = allProfiles.find((p) => p.id === agentId)!;
+    if (skillIds.length > 0 && effectiveProfileCapabilities(profile).skills === "none") {
+      problems.push(`agentSkills.${agentId}: adapter ${profile.adapter ?? "cli-oneshot"} does not support skill injection`);
+      continue;
+    }
     for (const skillId of skillIds) {
       const document = skillDocs.get(skillId);
       if (!document) {
@@ -100,7 +105,7 @@ export function resolveLibrary(file: OperatorFile, source: FrozenLibrary | undef
       problems.push(...found);
       if (found.length === 0) {
         const content = document["content"] as string;
-        injected.push({ id: skillId, digest: sha256Bytes(Buffer.from(content, "utf8")), content, source: "library" });
+        injected.push({ id: skillId, digest: sha256Bytes(Buffer.from(content, "utf8")), content, selectionReason: "operator-default", source: "library" });
       }
     }
     skillsFor.set(agentId, injected);

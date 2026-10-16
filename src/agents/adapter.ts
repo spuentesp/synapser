@@ -13,8 +13,16 @@ export interface InjectedSkill {
   id: string;
   digest: string;
   content: string;
+  /** Why this frozen skill was selected for this task. */
+  selectionReason?: string;
   /** Provenance is checked at the runner boundary; only frozen library entries may enter a run. */
   source: "library";
+}
+
+export interface SkillSelection {
+  id: string;
+  required: boolean;
+  reason: string;
 }
 
 export interface InjectedSkills {

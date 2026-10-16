@@ -11,7 +11,7 @@
 //   orca         (future) workers driven through Orca's orchestration; same contract
 // The ledger row (`agent_runs`) is written by the implementation and has the same fields for all.
 
-import type { InjectedSkill, InjectedSkills } from "./adapter.ts";
+import type { InjectedSkill, InjectedSkills, SkillSelection } from "./adapter.ts";
 import type { Executor } from "../executor/executor.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
@@ -26,6 +26,7 @@ export interface AgentTaskSpec {
   scope: readonly string[];
   criteria: readonly string[];
   context?: readonly string[];
+  skillSelection?: readonly SkillSelection[];
   planRevision: number;
 }
 
@@ -79,12 +80,12 @@ export interface AgentRunner {
 
 export interface RegistryOptions {
   /** The library skills a profile's agents receive in this run (plan 14 Q5.4). */
-  skillsFor?: (profileId: string) => readonly InjectedSkill[];
+  skillsFor?: (profileId: string, selection?: readonly SkillSelection[]) => readonly InjectedSkill[];
 }
 
 export class AgentRunnerRegistry {
   readonly #by = new Map<AdapterId, AgentRunner>();
-  readonly #skillsFor: ((profileId: string) => readonly InjectedSkill[]) | undefined;
+  readonly #skillsFor: ((profileId: string, selection?: readonly SkillSelection[]) => readonly InjectedSkill[]) | undefined;
   constructor(runners: readonly AgentRunner[], options: RegistryOptions = {}) {
     for (const r of runners) {
       if (this.#by.has(r.adapter)) throw new Error(`duplicate runner for adapter ${r.adapter}`);
@@ -96,8 +97,15 @@ export class AgentRunnerRegistry {
     const r = this.#by.get(adapterOf(profile));
     if (!r) throw new Error(`no runner registered for adapter "${adapterOf(profile)}" (profile ${profile.id})`);
     const skillsFor = this.#skillsFor;
-    if (!skillsFor) return r;
-    return { adapter: r.adapter, run: (req) => r.run({ ...req, injectedSkills: { skills: skillsFor(req.profile.id) } }) };
+    return {
+      adapter: r.adapter,
+      run: (req) => {
+        const selection = req.task.skillSelection;
+        if (!skillsFor && selection?.some((skill) => skill.required)) throw new Error("required task skills need an operator allowlist resolver");
+        if (!skillsFor && selection === undefined) return r.run(req);
+        return r.run({ ...req, injectedSkills: { skills: skillsFor ? skillsFor(req.profile.id, selection) : [] } });
+      },
+    };
   }
   adapters(): AdapterId[] {
     return [...this.#by.keys()];

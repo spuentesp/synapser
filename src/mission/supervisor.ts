@@ -30,6 +30,7 @@ export const PLAN_SCHEMA = {
           kind: { type: "string", enum: ["write", "advise", "research", "review"] },
           profile: { type: "string" },
           tags: { type: "array", items: { type: "string" } },
+          skills: { type: "array", maxItems: 5, items: { type: "object", properties: { id: { type: "string" }, required: { type: "boolean" }, reason: { type: "string", maxLength: 300 } }, required: ["id", "required", "reason"], additionalProperties: false } },
           gates: { type: "array", items: { type: "string", enum: ["approval"] } },
         },
         required: ["id", "objective", "scope", "criteria", "deps"],
@@ -47,6 +48,7 @@ Rules:
 - Prefer tasks that touch DIFFERENT files so they can run at the same time. Sharing a file between tasks is allowed when truly needed; the system serializes access.
 - Do not create a validation task: the system always adds a final acceptance run.
 - Keep every task's scope inside the repository. Never include secrets, .git, or state directories.
+- Always include \`skills\`: use [] when no skill is useful, or select only IDs authorized for that profile. Each selection must include required (true only if work cannot proceed without it) and a short reason. Do not invent skill IDs; a required unavailable skill makes the plan invalid. Omission exists only for compatibility with older/custom plans and retains operator-default injection.
 - Put the shared contract (names, signatures, formats) into the \`context\` of EVERY task that depends on it, verbatim, so agents agree without talking to each other. Keep each task's \`criteria\` limited to what must be true of the files in ITS scope: agents are told to implement only their own files.`;
 
 /** Conditions whose satisfaction needs WORK (a human or a reviewer decision does not). */
@@ -83,10 +85,10 @@ export function catalogBlock(catalog: readonly ProfileCard[]): string {
     .filter((c) => c.enabled)
     .map((c) => {
       const cost = c.cost.basis === "unknown" ? "cost unknown" : `${c.cost.basis} ~$${c.cost.usdPerRun.toFixed(3)}/run`;
-      return `- ${c.id} [${c.tier}]: can ${c.kinds.join("/")}; strengths ${c.strengths.join(", ") || "-"}; ${cost}`;
+      return `- ${c.id} [${c.tier}]: can ${c.kinds.join("/")}; strengths ${c.strengths.join(", ") || "-"}; ${cost}; authorized skills ${c.allowedSkillIds.join(", ") || "-"}`;
     });
   return [
-    "AVAILABLE AGENT PROFILES (you may SUGGEST one per task in `profile`, and tag the task in `tags`; the system makes the final assignment):",
+    "AVAILABLE AGENT PROFILES (you may SUGGEST one per task in `profile`, tag the task in `tags`, and request skills from that profile's authorized list; the system makes the final assignment):",
     ...rows,
     "Set `tier` per task: cheap (one-shot chores: renames, small edits, boilerplate), standard (building features), advanced (research, review, hard design or risky changes). The system uses the cheapest agent at or above that tier and escalates on failure.",
     "Use kind \"advise\" or \"review\" for steps that only inspect (they cannot change files). Add gates [\"approval\"] only to risky or irreversible steps.",

@@ -5,12 +5,13 @@
 import { existsSync, lstatSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { isDigest, sha256Bytes } from "../digest/file.ts";
-import type { AdapterDirectory, AdapterFile, AgentInvocation, InjectedSkill, InjectedSkills, SkillMechanism } from "./adapter.ts";
+import type { AdapterDirectory, AdapterFile, AgentInvocation, InjectedSkill, InjectedSkills, SkillMechanism, SkillSelection } from "./adapter.ts";
 
 export interface RecordedSkill {
   id: string;
   digest: string;
   mechanism: Exclude<SkillMechanism, "none">;
+  reason?: string;
 }
 
 const SKILL_ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
@@ -26,7 +27,23 @@ export function validateInjectedSkills(injected: InjectedSkills, mechanism: Skil
     if (!isDigest(skill.digest)) throw new Error(`skill ${skill.id} has an invalid digest`);
     const observed = sha256Bytes(Buffer.from(skill.content, "utf8"));
     if (observed !== skill.digest) throw new Error(`skill ${skill.id} digest does not match its content`);
-    return { id: skill.id, digest: skill.digest, mechanism: mechanism as Exclude<SkillMechanism, "none"> };
+    const reason = skill.selectionReason ?? "operator-default";
+    if (typeof reason !== "string" || reason.trim().length === 0 || reason.length > 300) throw new Error(`skill ${skill.id} has an invalid selection reason`);
+    return { id: skill.id, digest: skill.digest, mechanism: mechanism as Exclude<SkillMechanism, "none">, reason };
+  });
+}
+
+/** A task may choose only from the operator-authorized snapshot. Missing required skills fail closed. */
+export function selectAuthorizedSkills(authorized: readonly InjectedSkill[], selection?: readonly SkillSelection[]): InjectedSkill[] {
+  if (selection === undefined) return authorized.map((skill) => ({ ...skill, selectionReason: skill.selectionReason ?? "operator-default" }));
+  const byId = new Map(authorized.map((skill) => [skill.id, skill]));
+  return selection.flatMap((choice) => {
+    const skill = byId.get(choice.id);
+    if (!skill) {
+      if (choice.required) throw new Error(`required skill ${choice.id} is not operator-authorized for this profile`);
+      return [];
+    }
+    return [{ ...skill, selectionReason: choice.reason }];
   });
 }
 

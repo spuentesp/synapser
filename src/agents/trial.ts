@@ -56,7 +56,7 @@ export interface AgentTrialResult {
   reason: string | null;
   costUsd: number | null;
   durationMs: number;
-  skills: { id: string; digest: string; mechanism: string }[];
+  skills: { id: string; digest: string; mechanism: string; reason?: string }[];
   changedPaths: string[];
   networkIsolated: false;
 }

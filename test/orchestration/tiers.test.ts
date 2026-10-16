@@ -25,7 +25,7 @@ import { cli } from "../audit/scenario.ts";
 import { type Env, makeEnv, RUN } from "../executor/env.ts";
 
 const card = (id: string, tier: Tier, over: Partial<ProfileCard> = {}): ProfileCard => ({
-  id, kinds: ["write"], integration: "pending", tier, pool: null, strengths: [], capabilities: { available: true, execution: "isolated-cli", output: "text", skills: "none", mcpClient: false, mcpConfigInjection: false, permissionModes: [], permissionMode: null, toolAllowlist: false, role: "writer", budgetFlag: false, budgetUsd: null, timeoutMs: 60_000, resume: false, steerable: null, capabilityIds: [] }, cost: { basis: "known", usdPerRun: 0.01 }, observed: null, enabled: true, ...over,
+  id, kinds: ["write"], integration: "pending", tier, pool: null, strengths: [], capabilities: { available: true, execution: "isolated-cli", output: "text", skills: "none", mcpClient: false, mcpConfigInjection: false, permissionModes: [], permissionMode: null, toolAllowlist: false, role: "writer", budgetFlag: false, budgetUsd: null, timeoutMs: 60_000, resume: false, steerable: null, capabilityIds: [] }, allowedSkillIds: [], cost: { basis: "known", usdPerRun: 0.01 }, observed: null, enabled: true, ...over,
 });
 
 describe("router tiers (T1)", () => {

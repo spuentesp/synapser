@@ -146,12 +146,23 @@ puede imponer, timeout, reanudación y steering. `mcp.client` significa solo que
 cliente MCP; no afirma que Synapser inyectó una conexión. Hasta P19.5, `mcp.injected` no está disponible.
 
 Las recetas y planes pueden requerir identificadores (`execution.native`, `execution.cli`,
-`output.structured`, `output.text`, `skills.native`, `skills.prompt-prepend`, `mcp.client`,
+`output.structured`, `output.text`, `skills.native`, `skills.prompt-prepend`, `skills.injectable`, `mcp.client`,
 `mcp.injected`, `budget.usd`, `resume`, `permissions.tool-allowlist` o
 `permissions.mode.<modo>`). El router solo compara estos requisitos con la matriz derivada del perfil
 efectivo: etiquetas de biblioteca no pueden crear capacidades. Un identificador desconocido o ausente
 de la matriz no es compatible y no se despacha tarea. Las pruebas de conformidad cotejan los flags
 emitidos con la matriz y, cuando el binario está instalado, con su `--help` real.
+
+### Selección de skills por tarea (P19.3)
+
+`agentSkills` en el archivo del operador es una allowlist por perfil, no una instrucción que el modelo
+pueda ampliar. Una tarea puede pedir un subconjunto explícito con id, si es requerido y el motivo. Si
+omite la selección, se conserva el comportamiento previo de recibir la allowlist completa; una lista
+vacía explícita significa que no recibe ninguna. Las skills requeridas deben estar autorizadas y el
+perfil debe soportar inyección; de lo contrario la ruta se rechaza antes del proceso. Las recomendadas
+que no estén autorizadas se omiten, nunca se buscan en la biblioteca viva. El runner valida el digest
+contra el contenido congelado y registra id, digest, mecanismo y motivo de cada skill inyectada; el
+motivo no altera permisos ni políticas del adaptador.
 
 - **RCP1 — Autoridad**: recetas, skills y documentos de biblioteca no amplían permisos del perfil,
   presupuesto, red, sandbox o herramientas. Falsación: una skill o receta cambia un flag protegido o
