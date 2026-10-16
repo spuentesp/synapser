@@ -1,5 +1,6 @@
 // REAL agent CLIs (claude / codex / kimi) make a tiny edit in an isolated copy; the patch broker
 // integrates it through claims and digests; the ledger records usage. Spends subscription quota.
+// Kimi is explicitly routed to MiniMax M3 when selected; set MINIMAX_API_KEY in the process env.
 //   SYNAPSER_LIVE_CLIS=claude-sonnet-writer,codex-writer,kimi-writer node --env-file=.env --test test/live/cli-agents.test.ts
 
 import assert from "node:assert/strict";
@@ -11,21 +12,44 @@ import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
 import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
+import type { InjectedProvider } from "../../src/agents/inject.ts";
 import { makeEnv, RUN, T1 } from "../executor/env.ts";
 
 const wanted = (process.env["SYNAPSER_LIVE_CLIS"] ?? "").split(",").filter(Boolean);
 const PROMPT = "Append exactly one comment line `# audited by synapser` at the very end of app/schema.py. Change nothing else. Do not create any other file.";
+const MINIMAX_KIMI_PROVIDER: InjectedProvider = {
+  id: "minimax",
+  baseUrl: "https://api.minimax.io/anthropic",
+  apiKeyEnv: "MINIMAX_API_KEY",
+  model: "MiniMax-M3",
+  protocol: "anthropic",
+};
 
 for (const id of wanted) {
   test(`live CLI profile ${id}: isolated edit → broker → ledger`, { timeout: 330_000 }, async () => {
     const profile = new ProfileRegistry().get(id);
     assert.ok(profile, `unknown profile ${id}`);
+    // Explicit opt-in with no credential is a configuration error, not a silent skip. Never inspect
+    // another CLI's config or print the secret; runAgent passes this process variable only to Kimi.
+    if (id === "kimi-writer") {
+      assert.ok((process.env["MINIMAX_API_KEY"] ?? "").trim(), "MINIMAX_API_KEY must be set in the process environment for the opted-in Kimi/MiniMax live test");
+    }
     const env = await makeEnv();
     try {
       const { incarnation } = env.exec.beginSession(T1);
       const before = env.read("app/schema.py");
       const adapter = profile.adapter === "claude-code" ? CLAUDE_CODE_ADAPTER : profile.adapter === "codex" ? CODEX_ADAPTER : profile.adapter === "kimi" ? KIMI_ADAPTER : profile.adapter === "mimo" ? MIMO_ADAPTER : undefined;
-      const run = await runAgent({ profile, prompt: PROMPT, workspaceRoot: env.ws, runId: RUN, taskId: "t1", journal: env.journal, generation: env.lock.generation, ...(adapter ? { adapter } : {}) });
+      const run = await runAgent({
+        profile,
+        prompt: PROMPT,
+        workspaceRoot: env.ws,
+        runId: RUN,
+        taskId: "t1",
+        journal: env.journal,
+        generation: env.lock.generation,
+        ...(adapter ? { adapter } : {}),
+        ...(id === "kimi-writer" ? { provider: MINIMAX_KIMI_PROVIDER } : {}),
+      });
       assert.equal(env.read("app/schema.py"), before, "isolation: nothing changed in the real workspace during the run");
 
       const integ = run.outcome === "SUCCEEDED" ? await integrateRun(env.exec, { taskId: "t1", incarnation }, run) : null;

@@ -82,6 +82,25 @@ describe("P17.5: kimi receives an Anthropic-protocol provider through its config
     assert.equal(invocation.env["A1_KEY"], SECRET);
     assertNoSecret(invocation);
   });
+
+  test("the MiniMax M3 live-test settings produce a Kimi config without embedding the key", () => {
+    const minimax: InjectedProvider = {
+      id: "minimax",
+      baseUrl: "https://api.minimax.io/anthropic",
+      apiKeyEnv: "MINIMAX_API_KEY",
+      model: "MiniMax-M3",
+      protocol: "anthropic",
+    };
+    const minimaxSource = { PATH: "/bin", MINIMAX_API_KEY: SECRET };
+    const invocation = KIMI_ADAPTER.build(profile("kimi-writer"), task(planInjection("kimi", minimax, minimaxSource)), NO_INJECTED_SKILLS);
+    const file = invocation.files.find((f) => f.path === ".kimi-code/config.toml");
+    assert.ok(file);
+    assert.match(file.content, /default_model = "minimax\/MiniMax-M3"/);
+    assert.match(file.content, /base_url = "https:\/\/api\.minimax\.io\/anthropic"/);
+    assert.match(file.content, /api_key_env = "MINIMAX_API_KEY"/);
+    assert.equal(invocation.env["MINIMAX_API_KEY"], SECRET);
+    assertNoSecret(invocation);
+  });
 });
 
 describe("P17.3: kimi passes the profile's model as -m", () => {
