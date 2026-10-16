@@ -127,10 +127,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   PUT y JSON de compuerta inválido deshabilita Guardar (`test/ui/workflow.spec.ts`). Suite completa.
   nota: esta tarea se empezó sin commit de reclamo previo (ver bitácora).
 - [x] Q3.2 Plantillas parametrizadas e integradas: cambio acotado con pruebas, investigación con citas,
-  revisión, migración con no-metas. commit: 1a118df · prueba: navegador real: cada plantilla, con parámetros, rellena
+  revisión, migración con no-metas. commit: 1a118df, 09fb4f5 · prueba: navegador real: cada plantilla, con parámetros, rellena
   el diseñador y el validador del servidor la acepta (Guardar habilitado); un alcance vacío muestra el problema del
-  validador y deja Guardar deshabilitado. Las plantillas guardadas en la biblioteca siguen sin esquema (decisión
-  abierta). Suite completa.
+  validador y deja Guardar deshabilitado. Regresión añadida: `test/ui/workflow-templates.spec.ts` comprueba en Chromium
+  el documento JSON completo de las cuatro plantillas tras aplicar sus parámetros. Las plantillas guardadas en la
+  biblioteca siguen sin esquema (decisión abierta). Suite completa.
 - [x] Q3.3 Diseñador de agente: adaptador, nivel, rol, permisos, presupuesto, pool, skills; muestra qué se
   puede y no controlar en cada modo.
   nota: D6 reserva al archivo del operador la asignación de skills; el diseñador las muestra como solo lectura. IC1 reserva permisos, presupuesto CLI y pool al perfil que fija el operador.
@@ -186,7 +187,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   commit: 04a58ad · prueba: `test/library/run-e2e.test.ts`: una corrida real con `ProductionEngine` (diario, Zoanthrope, ejecutor), con un servidor local que hace de endpoint. El revisor de biblioteca corre por el proveedor de biblioteca y el planificador ve al agente en su catálogo. Una edición posterior a la instantánea, y otra hecha mientras se planifica, no llegan a la corrida. Falsación: un `FrozenLibrary` que lee la biblioteca viva manda la revisión al endpoint posterior y la prueba falla.
 - [x] Q5.4 Skills de biblioteca inyectadas desde la instantánea (L1): `injectedSkills` en `AgentRunRequest`; agentes CLI con su mecanismo y nativos por `prompt-prepend`; id, digest y mecanismo registrados en la corrida. Sin cambio de permisos (L2).
   motivo: desbloqueada por D6 (14 oct): el archivo decide qué skill recibe cada agente; la biblioteca aporta el contenido; límites de 64 KiB por skill y 5 por agente.
-  commit: e0c9e2b · prueba: `test/library/run-e2e.test.ts` (la revisión de un agente de biblioteca lleva al endpoint de la instantánea el texto de su skill, y su fila de la corrida guarda id, digest y mecanismo `prompt-prepend`); `test/library/resolve.test.ts` (6 pruebas: asignación con digest de sus bytes, skill ausente, tope de 64 KiB, más de 5 por agente, agente que no existe); `test/config/agent-skills.test.ts` (4 pruebas del mapa `agentSkills`). Falsación hecha en tres sitios: el registro no entrega skills (la prueba extremo a extremo falla), el bucle nativo no las antepone (falla), y el runner acepta una skill que no es de la biblioteca (falla `test/agents/skills.test.ts`). Camino CLI: conectado (`injectedSkills` llega a `runAgent`); su mecanismo y la prueba de L2 son los de Q1, sin volver a ejecutarlos de extremo a extremo en esta tarea. Suite completa: 559 pruebas, 550 pasan, 9 omitidas, 0 fallan.
+  commit: e0c9e2b, 09fb4f5 · prueba: `test/library/run-e2e.test.ts` comprueba revisión nativa y CLI local por ProductionEngine: un skill se edita tras freeze, pero el CLI recibe solo el texto congelado y su fila de corrida guarda id, digest y `prompt-prepend`; `test/library/resolve.test.ts` (6 pruebas: asignación con digest de sus bytes, skill ausente, tope de 64 KiB, más de 5 por agente, agente que no existe); `test/config/agent-skills.test.ts` (4 pruebas del mapa `agentSkills`). Falsación hecha en tres sitios: el registro no entrega skills (la prueba extremo a extremo falla), el bucle nativo o CLI no las antepone (falla), y el runner acepta una skill que no es de la biblioteca (falla `test/agents/skills.test.ts`). Sin cambio de permisos (L2). Suite completa.
 - [x] Q5.5 «Probar agente»: sólo investigación escrita de lo que necesita (copia desechable, costo, permisos, proveedor sin costo). No se construye aquí; su diseño va al final.
   commit: 87a8403 · prueba: `docs/plans/14-probar-agente.md`: investigación con los hechos del código (copia desechable, tope de costo por adaptador, permisos, proveedor sin costo, registro) y sus preguntas al usuario. No construye nada, así que no hay código que falsar.
 

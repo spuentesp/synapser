@@ -20,6 +20,9 @@ import { BASELINE } from "../executor/env.ts";
 const OP: Actor = { id: "ana", role: "operator" };
 const KEY = "LIB_E2E_KEY";
 const SKILL_TEXT = "Review the change against the house style: short sentences, no jargon.";
+const CLI_SKILL_TEXT = "Frozen CLI guidance: preserve public API compatibility.";
+const CLI_SKILL_EDIT = "Edited guidance must not enter the already-frozen workflow.";
+const FAKE_AGENT = new URL("../fixtures/fake-agent.mjs", import.meta.url).pathname;
 
 /** A stand-in for an OpenAI-compatible endpoint. It answers every request with a finish call and keeps what it was asked. */
 async function endpoint(summary: string): Promise<{ url: string; requests: string[]; close: () => Promise<void> }> {
@@ -135,5 +138,49 @@ describe("a library provider and agent in a real run (plan 14 Q5.2, Q5.3)", () =
     assert.ok(libraryCalls.every((c) => c.costUsd === null), "a library tariff reached the cost of a run");
     assert.equal(after.requests.length, 0, "an edit made after the snapshot redirected the run");
     assert.equal(later.requests.length, 0, "an edit made while planning redirected the run");
+  });
+
+  test("a frozen library skill reaches a CLI reviewer through ProductionEngine and its registry", { timeout: 120_000 }, async () => {
+    lib.put("skills", "cli-guidance", { id: "cli-guidance", name: "CLI guidance", description: "compatibility rules", content: CLI_SKILL_TEXT }, OP.id);
+    const cliProfile = {
+      id: "cli-reviewer", description: "local deterministic CLI reviewer", role: "advisor", adapter: "generic-cli",
+      argv: [process.execPath, FAKE_AGENT, "skill-prompt", "{prompt}"], parser: "plain", timeoutMs: 10_000,
+      tags: ["review"], enabled: true,
+    } as const;
+    const engine = new ProductionEngine({
+      workspaceRoot: ws, stateDir: state, commands: [], profiles: [cliProfile], agentSkills: { "cli-reviewer": ["cli-guidance"] },
+      models: () => new ScriptedModel(() => ({ calls: [call("finish", { summary: "no changes" })] })),
+      planner: async () => ({ tasks: [] }),
+      limits: { maxRepairRounds: 0, concurrency: 1, missionMs: 60_000 }, pollMs: 20,
+    });
+    const snapshotThenEdit = {
+      freeze: (j: Journal) => {
+        const snapshot = lib.freeze(j);
+        lib.put("skills", "cli-guidance", { id: "cli-guidance", name: "CLI guidance", description: "updated", content: CLI_SKILL_EDIT }, OP.id);
+        return snapshot;
+      },
+    } as unknown as LibraryStore;
+    mgr = new WorkflowManager({
+      stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: () => new Set([cliProfile.id]),
+      engine, library: snapshotThenEdit, pollMs: 20,
+    });
+    const created = mgr.create({
+      id: "wf-cli-skill", title: "Review with a CLI skill", description: "use frozen skill contents", goals: ["the review passes"], nonGoals: ["no other change"],
+      conditions: [
+        { id: "schema", statement: "the schema file is there", checker: { kind: "file", path: "app/schema.py", assert: "exists" } },
+        { id: "review", statement: "the CLI review passes", required: false, checker: { kind: "review", profile: cliProfile.id, rubric: "confirm public API compatibility" } },
+      ],
+    }, OP);
+    assert.equal(created.ok, true, JSON.stringify(created));
+    assert.equal(mgr.start("wf-cli-skill", OP).ok, true);
+    await mgr.settled("wf-cli-skill");
+
+    const runs = mgr.journalOf("wf-cli-skill")?.listAgentRuns().filter((r) => r.profileId === cliProfile.id) ?? [];
+    assert.ok(runs.length > 0, "the CLI reviewer left no run record");
+    const run = runs.at(-1)!;
+    const output = mgr.journalOf("wf-cli-skill")!.artifacts.get(run.stdoutBlob!).toString("utf8");
+    assert.ok(output.includes(CLI_SKILL_TEXT), "the CLI process did not receive the frozen skill in its prompt");
+    assert.ok(!output.includes(CLI_SKILL_EDIT), "the CLI process saw a post-snapshot skill edit");
+    assert.deepEqual(run.skills, [{ id: "cli-guidance", digest: sha256Bytes(Buffer.from(CLI_SKILL_TEXT, "utf8")), mechanism: "prompt-prepend" }]);
   });
 });

@@ -56,6 +56,9 @@ switch (mode) {
     writeFileSync("skill-seen.txt", readFileSync(process.argv[3], "utf8"));
     ok("read injected skill");
     break;
+  case "skill-prompt":
+    console.log(`${process.argv[3]}\nVERDICT: PASS`);
+    break;
   case "error-exit0":
     console.log(JSON.stringify({ type: "error", sessionID: "s1", error: { name: "APIError", data: { message: "Insufficient account balance", statusCode: 402 } } }));
     break; // exit code 0 on purpose
