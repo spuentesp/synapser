@@ -239,6 +239,7 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E12, E13. En curso: E6, E7, E11 (cada
 - **H6.1**: cubierto por `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts`.
 - **H6.2**: falta acordar el corpus exacto de archivos de credenciales antes de afirmar cobertura exhaustiva; luego ejecutar matriz de CLI/protocolo y capturar requests al endpoint local.
 - **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
+- **H6.4**: `test/sandbox/isolation.test.ts` verifica aisladamente el timeout, `RLIMIT_AS` y `TasksMax` en scope transitorio; la comprobación de `TasksMax` se omite si el host no admite scopes de usuario. Falta integrar límites definidos en la corrida real de agentes y comprobar que un timeout deja estado registrado, por lo que E6 no se cierra aún.
 
 ### Bloqueado por una decisión del operador o del usuario
 
