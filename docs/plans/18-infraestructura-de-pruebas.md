@@ -231,12 +231,12 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 ## 7. Decisiones
 
 - **E10 (TLA+) y E11 (simulación determinista):** aprobadas el 15 oct. Entran en el plan.
-- **Pantalla de configuración (H9.5):** fuera de este ciclo. P17.9 queda con su parte de CLI y API; la pantalla se decide más adelante.
+- **Pantalla de configuración (H9.5):** se reabrió el 16 oct 2026 por decisión del usuario; se implementa y verifica como parte de P17.9.
 - **Umbral de mutación (H4.3):** desde el primer ciclo, para los módulos de seguridad.
 
-## 8. Estado y pendientes (15 oct 2026)
+## 8. Estado y pendientes (16 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11, E12 y E13. En curso: E6 y E7 (con historias pendientes abajo). E9 cierra sin H9.5, que quedó fuera de este ciclo por decisión.
+Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6, E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
 
 ### Hecho en esta pasada
 

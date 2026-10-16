@@ -26,7 +26,7 @@ test("chat then workflows: the application keeps its navigation", async ({ page 
   await page.goto("/");
   await page.locator('nav[aria-label="views"] button[data-view="chat"]').click();
   await page.locator('nav[aria-label="views"] button[data-view="workflows"]').click();
-  await expect(page.locator('nav[aria-label="views"] button[data-view]')).toHaveCount(12);
+  await expect(page.locator('nav[aria-label="views"] button[data-view]')).toHaveCount(13);
 });
 
 test("every navigation button has an accessible name", async ({ page }) => {

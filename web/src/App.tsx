@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, LayoutDashboard, Layers, Moon, ShieldCheck, Sun, Users, CheckCheck } from 'lucide-react'
+import { Activity, Bot, Coins, MessageSquare, Workflow, GitBranch, History, Languages, LayoutDashboard, Layers, Moon, ShieldCheck, Sun, Users, CheckCheck, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -9,6 +9,7 @@ import { AgentsView } from '@/components/views/agents-view'
 import { ChatView } from '@/components/views/chat-view'
 import { WorkflowsView } from '@/components/views/workflows-view'
 import { LibraryView } from '@/components/views/library-view'
+import { ConfigView } from '@/components/views/config-view'
 import { HomeView } from '@/components/views/home-view'
 import { SessionGate } from '@/components/views/session-gate'
 import { ApprovalsView } from '@/components/views/approvals-view'
@@ -24,10 +25,10 @@ import { shortHash } from '@/lib/format'
 import { I18nContext, makeT, type Key, type Lang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-const VIEWS = ['home', 'chat', 'workflows', 'agents', 'library', 'swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
+const VIEWS = ['home', 'chat', 'workflows', 'agents', 'library', 'config', 'swarm', 'timeline', 'why', 'cost', 'coordination', 'approvals', 'integrity'] as const
 type View = (typeof VIEWS)[number]
 const ICON: Record<View, typeof Users> = {
-  home: LayoutDashboard, chat: MessageSquare, workflows: Workflow, agents: Bot, library: Layers, swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
+  home: LayoutDashboard, chat: MessageSquare, workflows: Workflow, agents: Bot, library: Layers, config: Settings2, swarm: Users, timeline: History, why: GitBranch, cost: Coins, coordination: Activity, approvals: CheckCheck, integrity: ShieldCheck,
 }
 
 const readHash = (): View => {
@@ -80,9 +81,9 @@ export default function App() {
   }
   const pending = L.state?.pendingApprovals.length ?? 0
   const run = L.run
-  const labels: Record<View, Key> = { home: 'home', chat: 'chat', workflows: 'workflows', agents: 'agents', library: 'library', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
+  const labels: Record<View, Key> = { home: 'home', chat: 'chat', workflows: 'workflows', agents: 'agents', library: 'library', config: 'config', swarm: 'swarm', timeline: 'timeline', why: 'why', cost: 'cost', coordination: 'coordination', approvals: 'approvals', integrity: 'integrity' }
 
-  const GLOBAL: View[] = ['home', 'chat', 'workflows', 'agents', 'library']
+  const GLOBAL: View[] = ['home', 'chat', 'workflows', 'agents', 'library', 'config']
   // adversarial mode: nothing works until the one-time code is redeemed (plan 15 D7)
   const gated = !L.session && L.needsCode
   let body: React.ReactNode
@@ -92,6 +93,7 @@ export default function App() {
       workflows: <WorkflowsView session={L.session} tick={L.tick} selected={wfId} onSelect={openWorkflow} createRequest={createRequest} onCreateRequestHandled={consumeCreateRequest} />,
       agents: <AgentsView session={L.session} />,
       library: <LibraryView session={L.session} />,
+      config: <ConfigView session={L.session} />,
       home: <HomeView onNavigate={(v) => go(v)} onCreateWorkflow={createWorkflow} onOpenRun={(id) => { if (id) L.setRunId(id); go('approvals') }} />,
     }[view as 'home' | 'chat' | 'workflows' | 'agents' | 'library']
   } else if (L.error && !run) body = <ErrorNote code={L.error} />

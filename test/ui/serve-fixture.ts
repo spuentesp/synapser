@@ -9,7 +9,7 @@ const dir = mkdtempSync(join(tmpdir(), "ui-fixture-"));
 writeFileSync(join(dir, "synapser.config.json"), JSON.stringify({ workspace: dir, stateDir: join(dir, "state"), agentSkills: { "q33-inspect-agent": ["fixture-skill"] } }));
 const port = process.env["UI_PORT"] ?? "4199";
 const cli = new URL("../../src/cli/main.ts", import.meta.url).pathname;
-const child = spawn(process.execPath, [cli, "serve", "--port", port], { cwd: dir, stdio: "inherit" });
+const child = spawn(process.execPath, [cli, "serve", "--port", port], { cwd: dir, env: { ...process.env, UI_P17_KEY: "sentinel-ui-p17-secret-never-return" }, stdio: "inherit" });
 const stop = () => child.kill("SIGTERM");
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
