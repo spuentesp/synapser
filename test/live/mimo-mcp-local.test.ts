@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { test } from "node:test";
 
 const DUMMY_KEY = "synapser-p162-local-dummy-key-not-a-credential";
@@ -83,6 +83,72 @@ function reply(res: ServerResponse, message: Record<string, unknown>, finishReas
   res.end("data: [DONE]\n\n");
 }
 
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid !== undefined) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+  }
+}
+
+function groupExists(child: ChildProcess): boolean {
+  if (child.pid === undefined) return false;
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+async function waitForGroupExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (groupExists(child) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+  return !groupExists(child);
+}
+
+async function stopAndReap(child: ChildProcess): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) {
+    const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+    signalGroup(child, "SIGTERM");
+    const grace = setTimeout(() => signalGroup(child, "SIGKILL"), 1_500);
+    await closed;
+    clearTimeout(grace);
+  }
+  // MiMo may leave the stdio MCP child in the same process group during shutdown.
+  if (!groupExists(child)) return;
+  signalGroup(child, "SIGTERM");
+  if (await waitForGroupExit(child, 1_500)) return;
+  if (groupExists(child)) signalGroup(child, "SIGKILL");
+  await waitForGroupExit(child, 1_500);
+}
+
+async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<{ code: number | null; timedOut: boolean }> {
+  let timedOut = false;
+  return await new Promise((resolve) => {
+    let forceKill: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      signalGroup(child, "SIGTERM");
+      forceKill = setTimeout(() => signalGroup(child, "SIGKILL"), 1_500);
+    }, timeoutMs);
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      if (forceKill) clearTimeout(forceKill);
+      resolve({ code, timedOut });
+    });
+  });
+}
+
+test("P16.2 local MiMo harness timeout stops and reaps the child process group", async () => {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+  const result = await waitForExit(child, 100);
+  await stopAndReap(child);
+  assert.equal(result.timedOut, true);
+  assert.equal(groupExists(child), false, "no timed-out test child may outlive its run");
+});
+
 test("P16.2 installed MiMo calls a real Synapser MCP tool using a local model fixture", {
   skip: process.env["SYNAPSER_MIMO_LOCAL"] === "1" ? false : "opt in inside bwrap --unshare-net",
   timeout: 180_000,
@@ -116,41 +182,46 @@ test("P16.2 installed MiMo calls a real Synapser MCP tool using a local model fi
       }] }, "tool_calls", stream);
       return;
     }
-    const returnedToolResult = messages.some((message) => message["role"] === "tool" && message["tool_call_id"] === invocation.id);
+    const returnedToolResult = messages.some((message) => {
+      if (message["role"] !== "tool" || message["tool_call_id"] !== invocation.id || typeof message["content"] !== "string") return false;
+      return (message["content"] as string).includes('"workflows":[]');
+    });
     if (!returnedToolResult) { res.writeHead(422).end("expected real MCP result in follow-up request"); return; }
     reply(res, { role: "assistant", content: "The local Synapser MCP tool returned successfully." }, "stop", stream);
   });
-  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-
-  const scratch = mkdtempSync(join(tmpdir(), "synapser-p162-mimo-"));
-  const home = join(scratch, "home");
-  const configDir = join(home, ".config", "mimocode");
-  const workspace = join(scratch, "workspace");
-  const state = join(scratch, "state");
-  mkdirSync(configDir, { recursive: true });
-  mkdirSync(workspace);
-  const synapserConfig = join(scratch, "synapser.json");
-  writeFileSync(synapserConfig, JSON.stringify({ workspace, stateDir: state, research: false, profiles: [] }));
-  const localModelConfig = {
-    model: "local/synapser-p162-local-model",
-    provider: { local: {
-      npm: "@ai-sdk/openai-compatible",
-      name: "Synapser local fixture",
-      options: { baseURL: `http://127.0.0.1:${address.port}/v1`, apiKey: "{env:SYNAPSER_MIMO_DUMMY_KEY}" },
-      models: { "synapser-p162-local-model": { name: MODEL } },
-    } },
-    mcp: { synapser: {
-      type: "local",
-      command: [nodeBin, join(repo, "src/cli/main.ts"), "mcp", "--config", synapserConfig],
-      enabled: true,
-    } },
-  };
-  writeFileSync(join(configDir, "mimocode.jsonc"), JSON.stringify(localModelConfig));
-
+  let scratch: string | undefined;
+  let child: ChildProcess | undefined;
   try {
-    const child = spawn(mimoBin, ["run", "Use the Synapser MCP workflow_list tool once, then report the result.", "--model", "local/synapser-p162-local-model", "--format", "json", "--yolo", "--pure"], {
+    await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+
+    scratch = mkdtempSync(join(tmpdir(), "synapser-p162-mimo-"));
+    const home = join(scratch, "home");
+    const configDir = join(home, ".config", "mimocode");
+    const workspace = join(scratch, "workspace");
+    const state = join(scratch, "state");
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(workspace);
+    const synapserConfig = join(scratch, "synapser.json");
+    writeFileSync(synapserConfig, JSON.stringify({ workspace, stateDir: state, research: false, profiles: [] }));
+    const localModelConfig = {
+      model: "local/synapser-p162-local-model",
+      provider: { local: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Synapser local fixture",
+        options: { baseURL: `http://127.0.0.1:${address.port}/v1`, apiKey: "{env:SYNAPSER_MIMO_DUMMY_KEY}" },
+        models: { "synapser-p162-local-model": { name: MODEL } },
+      } },
+      mcp: { synapser: {
+        type: "local",
+        command: [nodeBin, join(repo, "src/cli/main.ts"), "mcp", "--config", synapserConfig],
+        enabled: true,
+      } },
+    };
+    writeFileSync(join(configDir, "mimocode.jsonc"), JSON.stringify(localModelConfig));
+
+    child = spawn(mimoBin, ["run", "Use the Synapser MCP workflow_list tool once, then report the result.", "--model", "local/synapser-p162-local-model", "--format", "json", "--yolo", "--pure"], {
       cwd: workspace,
       env: {
         PATH: [process.env["PATH"] ?? "", delimiter, "/usr/bin:/bin"].join(""),
@@ -160,26 +231,28 @@ test("P16.2 installed MiMo calls a real Synapser MCP tool using a local model fi
         XDG_DATA_HOME: join(home, ".local", "share"),
         SYNAPSER_MIMO_DUMMY_KEY: DUMMY_KEY,
       },
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stderr = "";
-    child.stdout.resume();
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
-    const exitCode = await new Promise<number>((resolve, reject) => {
-      const timeout = setTimeout(() => { child.kill("SIGTERM"); reject(new Error("MiMo local MCP proof timed out")); }, 120_000);
-      child.once("error", (error) => { clearTimeout(timeout); reject(error); });
-      child.once("close", (code) => { clearTimeout(timeout); resolve(code ?? 1); });
-    });
-    assert.equal(exitCode, 0, `MiMo must complete the local MCP call (stderr: ${stderr.slice(-1500)})`);
+    const childStdout = child.stdout;
+    const childStderr = child.stderr;
+    assert.ok(childStdout && childStderr);
+    childStdout.resume();
+    childStderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+    const result = await waitForExit(child, 120_000);
+    assert.equal(result.timedOut, false, "MiMo must finish before the local test timeout");
+    assert.equal(result.code, 0, `MiMo must complete the local MCP call (stderr: ${stderr.slice(-1500)})`);
     assert.ok(invocation.name?.endsWith("workflow_list"), "the local provider must invoke the real Synapser workflow_list tool");
     assert.ok(requests.length >= 2, "MiMo must make a follow-up model request after the tool call");
     assert.ok(requests.slice(1).some((request) => {
       const messages = Array.isArray(request["messages"]) ? request["messages"] as Record<string, unknown>[] : [];
-      return messages.some((message) => message["role"] === "tool" && message["tool_call_id"] === invocation.id);
+      return messages.some((message) => message["role"] === "tool" && message["tool_call_id"] === invocation.id && typeof message["content"] === "string" && (message["content"] as string).includes('"workflows":[]'));
     }), "the real MCP tool result must be sent back to the local provider");
   } finally {
+    if (child) await stopAndReap(child);
     server.closeAllConnections();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    rmSync(scratch, { recursive: true, force: true });
+    if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
   }
 });
