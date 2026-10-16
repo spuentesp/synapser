@@ -24,6 +24,7 @@ Objetivo de salida de la ventana (diseño §11): **S01–S07 pasan sin depender 
 | [16 Spike, validación, curación y optimización](16-spike-validacion-curacion-optimizacion.md) | dependencias con baja superficie: SDK oficial de MCP, zod, curación de skills con casos de regresión y optimización offline | 14, 15 |
 | [17 Inyección de configuración a los CLIs](17-inyeccion-de-configuracion-a-los-clis.md) | proveedores y modelos del operador inyectados a cada CLI; claves por variables de entorno; dos conectores MCP (tareas y configuración) | 14, 15 |
 | [18 Infraestructura de pruebas](18-infraestructura-de-pruebas.md) | trece épicas: contratos por herramienta, propiedades, mutación, fixtures, sandbox, MCP e2e, oráculo oculto, UI con Playwright, verificación formal opcional, arquitectura y gobierno | 14, 15, 17 |
+| [19 Recetas, skills, agentes y MCP](19-curacion-recetas-skills-agentes-mcp.md) | recetas/workflows curados, selección contextual de skills, perfiles CLI y nativos, MCPs curados, persistencia en el journal SQLite existente y pruebas contra reward hacking | 14, 16, 17, 18 |
 
 ## Decisiones tomadas en estos planes (para aprobar)
 
