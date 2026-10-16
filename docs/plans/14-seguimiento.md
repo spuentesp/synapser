@@ -72,7 +72,11 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   `--help` del binario real (omitida si el binario no está). commit: 246b858 · prueba: variantes con modelo
   y proveedor añadido cubren `-c` de Codex y `-m` de Kimi; igualdad entre los flags construidos y
   `capabilities.cliFlags`; `--help` instalado de Claude, Codex, Kimi y MiMo; suite completa.
-- [~] Q1.9 (quién: GPT-6 Codex; desde: 2026-10-15) completar la matriz de CLI instalados con skill inyectada. Claude Code ya tiene prueba con modelo (commit 27e89c4). Se añade prueba local bajo `bwrap --unshare-net` para Codex/Kimi/MiMo, sin credenciales reales ni salida de red. *Invariante:* el marcador existe solo en la skill y debe aparecer en el cuerpo recibido por el proveedor loopback; la red no tiene ruta por defecto. *Verificador:* `test/live/cli-skill-local.test.ts` comprueba request capturado, id/digest/mecanismo en `runAgent` y `agent_runs`. *Falsación:* quitar o desviar la inyección debe impedir que el servidor vea el marcador.
+- [x] Q1.9 Una corrida real por CLI instalado con una skill inyectada, verificando que la skill llegó.
+  commit: 15906d9 · prueba: Claude con modelo (27e89c4); Codex, Kimi y MiMo instalados enviaron el marcador único
+  de la skill al proveedor loopback dentro de `bwrap --unshare-net`; la prueba comprueba id/digest/mecanismo
+  en `runAgent` y `agent_runs`, sin credenciales reales ni ruta de red externa. `npm test` y la prueba opt-in
+  `test/live/cli-skill-local.test.ts` pasaron; el verificador confirma la llegada leyendo el request capturado.
 
 ### Q2 — Biblioteca, proveedores y API
 
