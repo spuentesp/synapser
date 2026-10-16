@@ -1,5 +1,5 @@
-// Offline, deterministic demo: a real mission on the real executor, journal and Zoanthrope, driven by
-// scripted agents with realistic pauses, and the UI served on top of it.
+// Offline, repeatable demo: a real mission on the real executor, journal and Zoanthrope, driven by
+// scripted agents with fixed pauses, and the UI served on top of it. No real provider is called.
 //   node scripts/demo.ts [--port 4173] [--approve-after SECONDS]
 // Without --approve-after the gated step waits for a human (open the Approvals view).
 import { cpSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
@@ -51,12 +51,15 @@ const executor = new Executor({ workspace: ws, runId, journal, zoo, generation: 
 
 // One scripted "brain" for every native task. It knows the reference solution and pauses like a model.
 const brain = new ScriptedModel(async (messages) => {
-  await sleep(500 + Math.random() * 900);
+  await sleep(700);
   const first = messages.find((m) => m.role === "user")!.content!;
   // files only: a directory entry in the scope is permission, not something to read
   const scope = (/SCOPE[^:]*: (.*)/.exec(first)?.[1] ?? "").split(", ").filter((p) => p && !p.endsWith("/"));
   const last = lastTool(messages);
   const isApi = /Implement the discount computation/.test(first);
+  const isReview = /Review the combined change/.test(first);
+  if (isReview && (last === null || last.status === "STALE_VIEW" || last.error === "READ_FIRST")) return { calls: [call("read_files", { paths: scope })] };
+  if (isReview && last?.files) return { calls: [call("finish", { summary: "Offline scripted review completed; no model judgement is represented." })] };
   if (isApi && last === null) {
     return { calls: [call("request_subtask", { objective: "Write unittest cases for the discount contract", scope: ["tests/test_discount.py"], criteria: ["covers 0 and 10000 bps and floor rounding"], why: "tests are separable from the implementation" })] };
   }
@@ -92,12 +95,23 @@ const brainPort: ModelPort = {
   },
 };
 
-const ADVISOR: AgentProfile = {
-  id: "claude-opus-advisor", description: "advisor (demo double)", role: "advisor", argv: [process.execPath, resolve("test/fixtures/fake-agent.mjs"), "noop", "{prompt}"],
-  parser: "codex-jsonl", timeoutMs: 20_000, tags: ["review", "advice"], enabled: true,
+const SCRIPTED_WORKER: AgentProfile = {
+  ...BUILTIN_PROFILES.find((p) => p.id === "nemotron-worker")!,
+  id: "scripted-worker",
+  description: "Scripted native worker for the offline demo; not Nemotron",
+  model: "scripted/offline",
+  provider: "demo",
+  tags: ["code", "tests", "worker"],
 };
-const PROFILES = [BUILTIN_PROFILES.find((p) => p.id === "nemotron-worker")!, ADVISOR];
-const catalog = buildCatalog(PROFILES, [], { knownUsdPerRun: { "nemotron-worker": 0.003, "claude-opus-advisor": 0.08 } });
+const ADVISOR: AgentProfile = {
+  ...SCRIPTED_WORKER,
+  id: "scripted-advisor",
+  description: "Scripted native advisor for the offline demo; not Claude",
+  role: "advisor",
+  tags: ["review", "advice"],
+};
+const PROFILES = [SCRIPTED_WORKER, ADVISOR];
+const catalog = buildCatalog(PROFILES, []);
 
 const plan: Plan = {
   tasks: [
@@ -111,7 +125,7 @@ const plan: Plan = {
 const collector = new ZooCollector({ source: zoo, journal, runId });
 const api = createApi({ stateDir: state, journals: new Map([[runId, journal]]) });
 const port = await api.listen(PORT);
-console.log(`\n  Synapser UI  →  http://127.0.0.1:${port}/\n  run: ${runId}   workspace: ${ws}\n`);
+console.log(`\n  Synapser UI  →  http://127.0.0.1:${port}/#swarm\n  run: ${runId}   workspace: ${ws}\n`);
 if (APPROVE_AFTER > 0) {
   setTimeout(async () => {
     const digest = (await (await fetch(`http://127.0.0.1:${port}/api/runs/${runId}/state`)).json() as { planDigest: string }).planDigest;

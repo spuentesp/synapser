@@ -46,12 +46,10 @@ rota se muestra como tal (insignia roja con el primer `seq` malo), no se oculta.
 
 ## 5. Guion de demostración (3–5 min)
 
-1. Misión dada a Nemotron; el enjambre se arma y se ve el árbol (catálogo → perfiles asignados).
-2. Contención en vivo sobre un archivo; se ve una espera y un re-anclaje, sin pérdida.
-3. Compuerta de aprobación humana; se aprueba desde la bandeja.
-4. Pregunta de auditoría: "¿por qué cambió esta línea?" → cadena declarada con citas.
-5. Panel de costo: quién gastó qué, con lo desconocido marcado.
-6. Insignia de integridad; se altera un byte del export y la verificación falla.
+El guion ejecutable actual es **offline y repetible**: `scripts/demo.ts` usa agentes simulados y el
+runner real, sin llamar a Nemotron ni a un CLI externo. La toma de aprobación, coste e integridad,
+con sus límites de afirmación, está en `docs/guion-demo-c3.md`. No afirmar contención/re-anclaje si
+Coordinación no los muestra ni presentar actividad simulada como salida de un modelo real.
 
 ## 6. Falsación
 

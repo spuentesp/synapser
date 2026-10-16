@@ -240,7 +240,7 @@ P1 workflow/condiciones/MCP · P2 compuertas de efectos · P3 asesor · P4 nivel
   documento; cabecera y pie en 0.5. El paquete se valida (XML bien formado, zip íntegro), convierte a PDF sin errores
   y la página de la sección 37 se revisó en imagen (`docx-section-37.png` en `evidence/`). El script no se versiona.
 - [x] C.2 README: sección de configuración desde la UI. commit: c18a4b0 · prueba: sección `Configure from the console` en README.md, revisada contra el estado real (la biblioteca aún no la leen las corridas, y se dice así).
-- [ ] C.3 Demo integrada y guion de vídeo (el usuario pidió **no** hacerla todavía).
+- [~] C.3 (quién: GPT-6 Codex; desde: 2026-10-16) Demo integrada offline, verificada en Chromium, y guion de vídeo honesto sobre el modo simulado. Invariantes, verificador y falsación: `docs/guion-demo-c3.md`.
 
 ## Decisiones del usuario
 
@@ -254,7 +254,7 @@ Ronda 4 (14 oct): «llévalo a plan. Me gusta el spike, validación, curación y
 
 Ronda 5 (14 oct): «ok» a incorporar el SDK (decisión 1 del plan 16) y a seguir con P16.3, con zod como dependencia directa en su versión exacta (decisión 2 del plan 16; el árbol de producción no cambia). Plan 16 §3 queda con su resultado.
 
-Abiertas: licencia (decidir más tarde). P16.4: fixtures bajo `test/`, evaluación local y guardado manual tras holdout, todas las repeticiones deben pasar; no se crea endpoint de admisión. P16.6 aprobado para proveedores y workflows (incluido el validador de archivo compartido). C.3 sin hacer, por pedido del usuario. Traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
+Abiertas: licencia (decidir más tarde). P16.4: fixtures bajo `test/`, evaluación local y guardado manual tras holdout, todas las repeticiones deben pasar; no se crea endpoint de admisión. P16.6 aprobado para proveedores y workflows (incluido el validador de archivo compartido). C.3 autorizada y en curso; traducción al inglés, sin tarea todavía. Resultados medidos: quitados de `06 §14` y `06 §15` (14 oct); `05` no tiene ninguno.
 
 ## Bitácora de traspaso
 
