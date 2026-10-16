@@ -17,7 +17,7 @@ import { WorkflowManager } from "../../src/workflow/manager.ts";
 const OPERATOR = "operator-token-0123456789abcdef0123";
 const HOT = { protocol: "openai-compatible", baseUrl: "https://hot.example/v1/", apiKeyEnv: ["HOT_KEY"], models: [{ id: "hot-model" }] };
 
-describe("C-CFG-API-1: PUT /api/config/... answers as the contract says", () => {
+describe("C-CFG-API: config API answers follow their contracts", () => {
   let dir: string;
   let state: string;
   let ws: string;
@@ -49,14 +49,20 @@ describe("C-CFG-API-1: PUT /api/config/... answers as the contract says", () => 
   const put = (path: string, body: unknown) =>
     fetch(`${base}${path}`, { method: "PUT", headers: { "content-type": "application/json", origin: base, "x-synapser-token": OPERATOR }, body: JSON.stringify(body) });
 
-  test("an accepted provider answers { ok: true }", async () => {
+  test("C-CFG-API-2: GET /api/config returns the configured view", async () => {
+    const r = await fetch(`${base}/api/config`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { ok: true });
+  });
+
+  test("C-CFG-API-1: an accepted provider answers { ok: true }", async () => {
     assert.equal(ProviderBody.safeParse(HOT).success, true, "the request body is a valid contract body");
     const r = await put("/api/config/providers/hot", HOT);
     assert.equal(r.status, 200);
     assert.equal(ConfigWriteOk.safeParse(await r.json()).success, true);
   });
 
-  test("a refused provider answers INVALID_CONFIG with the problems", async () => {
+  test("C-CFG-API-1: a refused provider answers INVALID_CONFIG with the problems", async () => {
     const r = await put("/api/config/providers/meta", { ...HOT, baseUrl: "http://169.254.169.254/" });
     assert.equal(r.status, 400);
     assert.equal(ConfigWriteRefused.safeParse(await r.json()).success, true);

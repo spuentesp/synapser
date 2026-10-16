@@ -234,7 +234,7 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E11 y E12. En curso: E6, E7 y E13 (co
 - **E11:** H11.2 (pérdida simulada de fsync de archivo/directorio y recuperación desde snapshot durable) y H11.3 en corrida completa (el journal leía el reloj real; ahora pasa por el entorno).
 - **E10:** H10.1–H10.4 modelan los claims y la cola FIFO, trazan propiedades a pruebas de implementación y ejecutan TLC con jar fijado. El hallazgo inicial de inanición condujo a implementar FIFO; la decisión está tomada y registrada en `formal/README.md`.
 - **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
-- **E13 en curso:** H13.1 tiene ahora lista vacía y regresiones para `kimi --help` y S13. H13.2 tiene un presupuesto definido. `scripts/verify.ts` separa cada corrida de mutación en un temporal absoluto y un reporte únicos, y excluye `.env*` de la copia de Stryker. Mantener la épica abierta hasta comprobar `npm run verify` completo y conservar su evidencia en `evidence/` (ignorado).
+- **E13 en curso:** H13.1 tiene ahora lista vacía y regresiones para `kimi --help` y S13. H13.2 tiene un presupuesto definido. H13.5 se revisó en `docs/contracts/README.md`; los diez contratos tienen una prueba trazable y `GET /api/config` cuenta ahora con regresión contra la API. `scripts/verify.ts` separa cada corrida de mutación en un temporal absoluto y un reporte únicos, y excluye `.env*` de la copia de Stryker. H13.3–H13.4 siguen pendientes: mantener la épica abierta hasta comprobar `npm run verify` completo y conservar su evidencia en `evidence/` (ignorado).
 
 ### E6 en curso
 
