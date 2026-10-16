@@ -136,6 +136,23 @@ fixtures ni respuestas del verificador.
 
 ## 6. Invariantes y criterios de falsación
 
+### Registro efectivo de capacidades (P19.2)
+
+Una sola declaración canónica por adaptador alimenta el adaptador de ejecución, la validación de
+perfiles y la tarjeta derivada que consulta el router. La matriz efectiva expone modo de ejecución,
+salida estructurada/texto, mecanismo de skills, cliente MCP, inyección MCP de Synapser, modos y modo
+de permisos configurado, allowlist de herramientas, dirección, presupuesto que el adaptador realmente
+puede imponer, timeout, reanudación y steering. `mcp.client` significa solo que el CLI implementa un
+cliente MCP; no afirma que Synapser inyectó una conexión. Hasta P19.5, `mcp.injected` no está disponible.
+
+Las recetas y planes pueden requerir identificadores (`execution.native`, `execution.cli`,
+`output.structured`, `output.text`, `skills.native`, `skills.prompt-prepend`, `mcp.client`,
+`mcp.injected`, `budget.usd`, `resume`, `permissions.tool-allowlist` o
+`permissions.mode.<modo>`). El router solo compara estos requisitos con la matriz derivada del perfil
+efectivo: etiquetas de biblioteca no pueden crear capacidades. Un identificador desconocido o ausente
+de la matriz no es compatible y no se despacha tarea. Las pruebas de conformidad cotejan los flags
+emitidos con la matriz y, cuando el binario está instalado, con su `--help` real.
+
 - **RCP1 — Autoridad**: recetas, skills y documentos de biblioteca no amplían permisos del perfil,
   presupuesto, red, sandbox o herramientas. Falsación: una skill o receta cambia un flag protegido o
   un perfil no autorizado recibe una skill; debe fallar antes de crear el proceso.

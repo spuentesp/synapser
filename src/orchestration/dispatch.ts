@@ -37,7 +37,7 @@ export interface OrchestrationDeps {
 export interface StepRow {
   taskId: string;
   scope: string[];
-  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; gates?: string[]; kind?: string; tier?: Tier };
+  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; requires?: string[]; gates?: string[]; kind?: string; tier?: Tier };
 }
 
 export interface StepOutcome {
@@ -66,7 +66,7 @@ export async function dispatchStep(
   // runs out of rungs falls back to the plan's own floor before it gives up
   const planTier = row.spec.tier as Tier | undefined;
   const tierReq = minTier ?? planTier;
-  const attempt = (e: readonly string[], t: Tier | undefined) => route({ kind, suggested: row.spec.profile, tags, exclude: e, ...(t ? { minTier: t } : {}) }, o.catalog);
+  const attempt = (e: readonly string[], t: Tier | undefined) => route({ kind, suggested: row.spec.profile, tags, ...(row.spec.requires ? { requires: row.spec.requires } : {}), exclude: e, ...(t ? { minTier: t } : {}) }, o.catalog);
   let d = attempt(exclude, tierReq);
   if (!d.ok && exclude.length) d = attempt([], tierReq);
   if (!d.ok && tierReq !== planTier) d = attempt(exclude, planTier);

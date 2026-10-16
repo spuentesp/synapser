@@ -2,28 +2,16 @@
 // configuration nor future injected skills can escape into the operator's real home directory.
 
 import { join } from "node:path";
-import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { buildAgentEnv, type AgentAdapter, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { capabilitiesForAdapter } from "./capabilities.ts";
 import type { AgentProfile } from "./profile.ts";
 import { skillFiles } from "./skills.ts";
 import { parseCodex, type ParsedRun } from "./usage.ts";
 
-const CAPABILITIES: AgentCapabilities = Object.freeze({
-  headless: true,
-  structuredOutput: true,
-  skills: "native",
-  skillMechanism: "native-dir",
-  mcp: false,
-  permissionModes: ["read-only", "workspace-write"],
-  budgetFlag: false,
-  resume: true,
-  cliFlags: ["--json", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "-s", "-C", "-c", "-m"],
-  profileDefinedFlags: false,
-});
-
 export class CodexAdapter implements AgentAdapter {
   readonly id = "codex" as const;
   readonly displayName = "Codex CLI";
-  readonly capabilities = CAPABILITIES;
+  readonly capabilities = capabilitiesForAdapter("codex");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const sandbox = profile.permissions?.mode ?? (profile.role === "advisor" ? "read-only" : "workspace-write");

@@ -3,26 +3,11 @@
 
 import { join } from "node:path";
 import type { AdapterId, AgentProfile } from "./profile.ts";
+import { capabilitiesForAdapter, type AgentCapabilities } from "./capabilities.ts";
 import type { InjectionPlan } from "./inject.ts";
 import { PARSERS, type KimiOptions, type ParsedRun } from "./usage.ts";
 
-export type SkillSupport = "native" | "prompt-prepend" | "none";
-export type SkillMechanism = "native-dir" | "skills-dir-flag" | "prompt-prepend" | "none";
-
-export interface AgentCapabilities {
-  headless: boolean;
-  structuredOutput: boolean;
-  skills: SkillSupport;
-  skillMechanism: SkillMechanism;
-  mcp: boolean;
-  permissionModes: readonly string[];
-  budgetFlag: boolean;
-  resume: boolean;
-  /** Complete option surface emitted by this dedicated adapter (positional commands excluded). */
-  cliFlags: readonly string[];
-  /** Generic wrappers forward flags from the operator-owned profile instead of emitting their own. */
-  profileDefinedFlags: boolean;
-}
+export type { AgentCapabilities, SkillMechanism, SkillSupport } from "./capabilities.ts";
 
 export interface InjectedSkill {
   id: string;
@@ -121,18 +106,7 @@ export function buildAgentEnv(profile: AgentProfile, source: NodeJS.ProcessEnv, 
 export class ProfileCliAdapter implements AgentAdapter {
   readonly id = "cli-oneshot";
   readonly displayName = "Configured CLI";
-  readonly capabilities: AgentCapabilities = Object.freeze({
-    headless: true,
-    structuredOutput: false,
-    skills: "none",
-    skillMechanism: "none",
-    mcp: false,
-    permissionModes: [],
-    budgetFlag: false,
-    resume: false,
-    cliFlags: [],
-    profileDefinedFlags: true,
-  });
+  readonly capabilities: AgentCapabilities = capabilitiesForAdapter("cli-oneshot");
 
   build(profile: AgentProfile, task: AdapterTask, _injected: InjectedSkills): AgentInvocation {
     return {

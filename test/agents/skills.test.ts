@@ -99,7 +99,7 @@ describe("runner skill audit", () => {
       id: "generic-cli",
       displayName: "skill double",
       capabilities: {
-        headless: true, structuredOutput: true, skills: "native", skillMechanism: "native-dir", mcp: false,
+        available: true, headless: true, structuredOutput: true, skills: "native", skillMechanism: "native-dir", mcp: false, mcpConfigInjection: false, toolAllowlist: false,
         permissionModes: [], budgetFlag: false, resume: false, cliFlags: [], profileDefinedFlags: false,
       },
       build(_profile, task, selected): AgentInvocation {

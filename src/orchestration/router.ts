@@ -10,6 +10,8 @@ export interface RouteRequest {
   suggested?: string | undefined;
   /** Capability tags the task asks for (matched against card strengths). */
   tags?: readonly string[];
+  /** Required effective capability IDs; unknown IDs fail closed because no profile declares them. */
+  requires?: readonly string[];
   /** Profiles that must not be used for this task (e.g. already failed on it). */
   exclude?: readonly string[];
   /** The lowest tier that may do this step (plan 13 §7). Cheaper agents are not candidates. */
@@ -22,7 +24,7 @@ export interface Alert {
   detail?: string;
 }
 
-export type RejectCode = "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" | "BELOW_TIER";
+export type RejectCode = "DISABLED" | "KIND_MISMATCH" | "EXCLUDED" | "BELOW_TIER" | "CAPABILITY_MISMATCH";
 export type RouteDecision =
   | { ok: true; profileId: string; reason: "policy" | "suggestion"; alerts: Alert[]; considered: { profileId: string; rank: number }[] }
   | { ok: false; code: "NO_CANDIDATE"; rejected: { profileId: string; code: RejectCode }[] };
@@ -38,8 +40,10 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
   for (const c of catalog) {
     if (req.exclude?.includes(c.id)) rejected.push({ profileId: c.id, code: "EXCLUDED" });
     else if (!c.enabled) rejected.push({ profileId: c.id, code: "DISABLED" });
+    else if (!c.capabilities.available) rejected.push({ profileId: c.id, code: "DISABLED" });
     else if (!c.kinds.includes(req.kind)) rejected.push({ profileId: c.id, code: "KIND_MISMATCH" });
     else if (tierRank(c.tier) < floor) rejected.push({ profileId: c.id, code: "BELOW_TIER" });
+    else if ((req.requires ?? []).some((capability) => !c.capabilities?.capabilityIds.includes(capability))) rejected.push({ profileId: c.id, code: "CAPABILITY_MISMATCH" });
     else candidates.push(c);
   }
   // a total order, so the answer does not depend on the order the catalog happened to be listed in
@@ -83,7 +87,7 @@ export function route(req: RouteRequest, catalog: readonly ProfileCard[]): Route
 
 /** Upper bound of a plan's cost: known + estimated(high); unknown tasks are listed, not guessed. */
 export function planCost(
-  tasks: readonly { id: string; kind: StepKind; profile?: string | undefined; tags?: readonly string[] }[],
+  tasks: readonly { id: string; kind: StepKind; profile?: string | undefined; tags?: readonly string[]; requires?: readonly string[] }[],
   catalog: readonly ProfileCard[],
 ): { knownUsd: number; estimatedHighUsd: number; unknownTasks: string[]; unroutable: string[] } {
   let knownUsd = 0;
@@ -91,7 +95,7 @@ export function planCost(
   const unknownTasks: string[] = [];
   const unroutable: string[] = [];
   for (const t of tasks) {
-    const d = route({ kind: t.kind, suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}) }, catalog);
+    const d = route({ kind: t.kind, suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.requires ? { requires: t.requires } : {}) }, catalog);
     if (!d.ok) {
       unroutable.push(t.id);
       continue;

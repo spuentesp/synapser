@@ -8,8 +8,33 @@ import { KIMI_ADAPTER } from "../../src/agents/kimi.ts";
 import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { GENERIC_CLI_ADAPTER } from "../../src/agents/generic-cli.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
+import { effectiveProfileCapabilities } from "../../src/agents/capabilities.ts";
 
 describe("profile permission fields match adapter capabilities", () => {
+  test("permission validation and the effective catalog matrix derive from one declaration", () => {
+    for (const profile of BUILTIN_PROFILES) {
+      const effective = effectiveProfileCapabilities(profile);
+      assert.equal(effective.permissionMode, profile.permissions?.mode ?? null, profile.id);
+      assert.equal(effective.timeoutMs, profile.timeoutMs, profile.id);
+      assert.equal(effective.mcpConfigInjection, false, `${profile.id}: P19.5 has not yet injected external MCP configuration`);
+      if (profile.permissions?.mode) assert.ok(effective.permissionModes.includes(profile.permissions.mode), profile.id);
+      if (profile.maxBudgetUsd !== undefined) assert.ok(effective.budgetFlag, profile.id);
+    }
+    const claude = effectiveProfileCapabilities(BUILTIN_PROFILES.find((p) => p.id === "claude-sonnet-writer")!);
+    assert.equal(claude.execution, "isolated-cli");
+    assert.equal(claude.output, "structured");
+    assert.equal(claude.mcpClient, true);
+    assert.equal(claude.budgetUsd, 1);
+    assert.equal(claude.permissionMode, null, "the built-in Claude profile relies on the adapter default");
+    const native = effectiveProfileCapabilities(BUILTIN_PROFILES.find((p) => p.id === "nemotron-worker")!);
+    assert.equal(native.execution, "native-loop");
+    assert.equal(native.skills, "prompt-prepend");
+    assert.equal(native.mcpClient, false, "native Synapser tools are not external MCP clients");
+    const future = effectiveProfileCapabilities({ ...BUILTIN_PROFILES[0]!, id: "future", adapter: "orca" });
+    assert.equal(future.available, false, "reserved adapters are not treated as implemented runners");
+    assert.match(validateProfile({ ...BUILTIN_PROFILES[0]!, adapter: "unknown" } as never).join(" "), /adapter unknown is not supported/);
+  });
+
   test("only adapters that implement exact tool allow/deny lists accept them", () => {
     for (const id of ["codex-writer", "kimi-writer", "mimo-writer"] as const) {
       const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === id)!;

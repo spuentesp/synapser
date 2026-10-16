@@ -13,7 +13,7 @@ import { call, lastTool, ScriptedModel } from "../agent/scripted.ts";
 import { type Env, makeEnv, RUN } from "../executor/env.ts";
 
 const card = (id: string, over: Partial<ProfileCard> = {}): ProfileCard => ({
-  id, kinds: ["write"], integration: "pending", tier: "standard", pool: null, strengths: [], cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
+  id, kinds: ["write"], integration: "pending", tier: "standard", pool: null, strengths: [], capabilities: { available: true, execution: "isolated-cli", output: "text", skills: "none", mcpClient: false, mcpConfigInjection: false, permissionModes: [], permissionMode: null, toolAllowlist: false, role: "writer", budgetFlag: false, budgetUsd: null, timeoutMs: 60_000, resume: false, steerable: null, capabilityIds: [] }, cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true, ...over,
 });
 
 describe("DelegationBroker", () => {

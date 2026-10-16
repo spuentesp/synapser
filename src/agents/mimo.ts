@@ -2,28 +2,16 @@
 // XDG configuration; Q1.7 materialises that isolated config. No prompt fallback is needed.
 
 import { join } from "node:path";
-import { buildAgentEnv, type AdapterFile, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { buildAgentEnv, type AdapterFile, type AgentAdapter, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { capabilitiesForAdapter } from "./capabilities.ts";
 import type { AgentProfile } from "./profile.ts";
 import { skillFiles } from "./skills.ts";
 import { parseMimo, type ParsedRun } from "./usage.ts";
 
-const CAPABILITIES: AgentCapabilities = Object.freeze({
-  headless: true,
-  structuredOutput: true,
-  skills: "native",
-  skillMechanism: "native-dir",
-  mcp: true,
-  permissionModes: ["default", "yolo"],
-  budgetFlag: false,
-  resume: true,
-  cliFlags: ["--format", "--pure", "--dir", "--model", "--dangerously-skip-permissions"],
-  profileDefinedFlags: false,
-});
-
 export class MimoAdapter implements AgentAdapter {
   readonly id = "mimo" as const;
   readonly displayName = "MiMo Code";
-  readonly capabilities = CAPABILITIES;
+  readonly capabilities = capabilitiesForAdapter("mimo");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["mimo", "run", task.prompt, "--format", "json", "--pure", "--dir", task.cwd];

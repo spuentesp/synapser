@@ -4,6 +4,7 @@
 
 import type { Journal } from "../journal/journal.ts";
 import { type AgentProfile, adapterOf, type Tier } from "../agents/profile.ts";
+import { effectiveProfileCapabilities, type EffectiveProfileCapabilities } from "../agents/capabilities.ts";
 
 export const STEP_KINDS = ["write", "advise", "research", "review"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
@@ -20,6 +21,8 @@ export interface ProfileCard {
   tier: Tier;
   pool: string | null;
   strengths: string[];
+  /** Machine-matchable capabilities derived from the adapter and effective profile, never library text. */
+  capabilities: EffectiveProfileCapabilities;
   cost: CostEstimate;
   observed: { runs: number; succeeded: number; medianMs: number } | null;
   enabled: boolean;
@@ -83,6 +86,7 @@ export function buildCatalog(profiles: readonly AgentProfile[], samples: readonl
     const tariff = o.knownUsdPerRun?.[p.id];
     const cost: CostEstimate = tariff !== undefined ? { basis: "known", usdPerRun: tariff } : estimateCost(costed, o.nMin ?? 3, o.maxRelErr ?? 1);
     const kinds = [...new Set([...kindsOf(p), ...(o.extraKinds?.[p.id] ?? [])])].sort() as StepKind[];
+    const capabilities = effectiveProfileCapabilities(p);
     return {
       id: p.id,
       kinds,
@@ -90,10 +94,11 @@ export function buildCatalog(profiles: readonly AgentProfile[], samples: readonl
       tier: p.tier ?? "standard",
       pool: p.pool ?? null,
       strengths: [...p.tags],
+      capabilities,
       cost,
       observed: mine.length === 0 ? null : { runs: mine.length, succeeded: mine.filter((s) => s.succeeded).length, medianMs: median(mine.map((s) => s.durationMs)) },
-      enabled: p.enabled,
-      ...(p.disabledReason ? { disabledReason: p.disabledReason } : {}),
+      enabled: p.enabled && capabilities.available,
+      ...(!capabilities.available ? { disabledReason: `adapter ${adapterOf(p)} has no runner implementation` } : p.disabledReason ? { disabledReason: p.disabledReason } : {}),
     };
   });
 }

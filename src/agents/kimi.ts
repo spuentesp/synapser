@@ -2,28 +2,16 @@
 // same disposable HOME used for the invocation rather than the operator's real home directory.
 
 import { join } from "node:path";
-import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AgentParseOptions, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { buildAgentEnv, type AgentAdapter, type AgentInvocation, type AgentParseOptions, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { capabilitiesForAdapter } from "./capabilities.ts";
 import type { AgentProfile } from "./profile.ts";
 import { skillFiles } from "./skills.ts";
 import { parseKimi, type ParsedRun } from "./usage.ts";
 
-const CAPABILITIES: AgentCapabilities = Object.freeze({
-  headless: true,
-  structuredOutput: true,
-  skills: "native",
-  skillMechanism: "skills-dir-flag",
-  mcp: false,
-  permissionModes: ["default", "yolo", "plan"],
-  budgetFlag: false,
-  resume: true,
-  cliFlags: ["-p", "--output-format", "--yolo", "--plan", "--skills-dir", "-m"],
-  profileDefinedFlags: false,
-});
-
 export class KimiAdapter implements AgentAdapter {
   readonly id = "kimi" as const;
   readonly displayName = "Kimi Code";
-  readonly capabilities = CAPABILITIES;
+  readonly capabilities = capabilitiesForAdapter("kimi");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["kimi", "-p", task.prompt, "--output-format", "stream-json"];

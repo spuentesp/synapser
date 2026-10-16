@@ -2,6 +2,7 @@
 // A profile is data, validated by control; a model may choose among profiles but cannot edit them.
 
 import type { ParserId } from "./usage.ts";
+import { capabilitiesForAdapter, isAdapterId } from "./capabilities.ts";
 
 export type AgentRole = "writer" | "advisor";
 /** What the agent is for: cheap = one-shot chores, standard = building, advanced = research/review/hard calls. */
@@ -198,34 +199,25 @@ export function validateProfile(p: AgentProfile): string[] {
   }
   if (adapterOf(p) === "generic-cli" && p.parser !== "plain") errs.push("generic-cli always uses the plain parser");
   const adapter = adapterOf(p);
-  if (adapter !== "claude-code" && (p.permissions?.allowedTools !== undefined || p.permissions?.disallowedTools !== undefined)) {
+  if (!isAdapterId(adapter)) return [...errs, `adapter ${String(adapter)} is not supported`];
+  const capabilities = capabilitiesForAdapter(adapter);
+  if (!capabilities.toolAllowlist && (p.permissions?.allowedTools !== undefined || p.permissions?.disallowedTools !== undefined)) {
     errs.push(`${adapter} does not support allowedTools or disallowedTools`);
   }
-  if (!["claude-code", "codex", "kimi", "mimo"].includes(adapter) && p.permissions?.mode !== undefined) {
+  if (capabilities.permissionModes.length === 0 && p.permissions?.mode !== undefined) {
     errs.push(`${adapter} does not support a named permission mode`);
   }
   if (adapterOf(p) === "claude-code") {
     if (!p.model) errs.push("a claude-code profile needs a model");
-    const modes = ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
-    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`claude-code permission mode must be one of ${modes.join(", ")}`);
     for (const [field, tools] of [["allowedTools", p.permissions?.allowedTools], ["disallowedTools", p.permissions?.disallowedTools]] as const) {
       if (tools?.some((tool) => !tool || tool.includes(","))) errs.push(`claude-code ${field} entries must be non-empty and contain no commas`);
     }
   }
-  if (adapterOf(p) === "codex") {
-    const modes = ["read-only", "workspace-write"];
-    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`codex permission mode must be one of ${modes.join(", ")}`);
-    if (p.maxBudgetUsd !== undefined) errs.push("codex has no per-run USD budget flag");
+  if (p.permissions?.mode !== undefined && capabilities.permissionModes.length > 0 && !capabilities.permissionModes.includes(p.permissions.mode)) {
+    errs.push(`${adapter} permission mode must be one of ${capabilities.permissionModes.join(", ")}`);
   }
-  if (adapterOf(p) === "kimi") {
-    const modes = ["default", "yolo", "plan"];
-    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`kimi permission mode must be one of ${modes.join(", ")}`);
-    if (p.maxBudgetUsd !== undefined) errs.push("kimi has no per-run USD budget flag");
-  }
-  if (adapterOf(p) === "mimo") {
-    const modes = ["default", "yolo"];
-    if (p.permissions?.mode !== undefined && !modes.includes(p.permissions.mode)) errs.push(`mimo permission mode must be one of ${modes.join(", ")}`);
-    if (p.maxBudgetUsd !== undefined) errs.push("mimo has no per-run USD budget flag");
+  if (p.maxBudgetUsd !== undefined && !capabilities.budgetFlag) {
+    errs.push(`${adapter} has no per-run USD budget flag`);
   }
   if (p.maxBudgetUsd !== undefined && (!Number.isFinite(p.maxBudgetUsd) || p.maxBudgetUsd <= 0 || p.maxBudgetUsd > 1_000)) errs.push("maxBudgetUsd must be greater than 0 and at most 1000");
   if (p.timeoutMs < 1000 || p.timeoutMs > 3_600_000) errs.push("timeoutMs out of range");

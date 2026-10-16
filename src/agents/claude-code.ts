@@ -1,28 +1,16 @@
 // Claude Code owns its headless invocation and result format here. Profiles contain policy choices;
 // the isolated runner still owns HOME, credentials, process lifetime and change observation.
 
-import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { buildAgentEnv, type AgentAdapter, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { capabilitiesForAdapter } from "./capabilities.ts";
 import type { AgentProfile } from "./profile.ts";
 import { skillFiles } from "./skills.ts";
 import { parseClaude, type ParsedRun } from "./usage.ts";
 
-const CAPABILITIES: AgentCapabilities = Object.freeze({
-  headless: true,
-  structuredOutput: true,
-  skills: "native",
-  skillMechanism: "native-dir",
-  mcp: true,
-  permissionModes: ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"],
-  budgetFlag: true,
-  resume: true,
-  cliFlags: ["-p", "--output-format", "--model", "--allowedTools", "--disallowedTools", "--permission-mode", "--max-budget-usd"],
-  profileDefinedFlags: false,
-});
-
 export class ClaudeCodeAdapter implements AgentAdapter {
   readonly id = "claude-code" as const;
   readonly displayName = "Claude Code";
-  readonly capabilities = CAPABILITIES;
+  readonly capabilities = capabilitiesForAdapter("claude-code");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const argv = ["claude", "-p", task.prompt, "--output-format", "json"];

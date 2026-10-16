@@ -22,6 +22,8 @@ export interface PlanTask {
   gates?: "approval"[];
   /** Capability tags the step asks for (matched against profile strengths). */
   tags?: string[];
+  /** Effective capability identifiers required from the selected adapter/profile. */
+  requires?: string[];
   /** Ids of the workflow conditions this task works towards (plan 13 §4.2). */
   serves?: string[];
   /** The lowest agent tier that should do it: cheap (one-shot chore), standard (build), advanced (research/review/hard). */
@@ -111,6 +113,10 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
       if (Array.isArray(o["tags"]) && o["tags"].every((x) => typeof x === "string" && x.length <= 40)) task.tags = o["tags"] as string[];
       else errors.push(`${at}.tags must be an array of short strings`);
     }
+    if (o["requires"] !== undefined) {
+      if (Array.isArray(o["requires"]) && o["requires"].length <= 16 && o["requires"].every((x) => typeof x === "string" && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(x))) task.requires = [...new Set(o["requires"] as string[])];
+      else errors.push(`${at}.requires must be an array of at most 16 capability ids`);
+    }
     if (o["tier"] !== undefined) {
       if (o["tier"] === "cheap" || o["tier"] === "standard" || o["tier"] === "advanced") task.tier = o["tier"];
       else errs_tier(errors, at);
@@ -151,11 +157,11 @@ export function validatePlan(raw: unknown, opts: ValidateOptions): PlanCheck {
   }
   if (opts.catalog) {
     for (const t of tasks) {
-      const d = route({ kind: t.kind ?? "write", suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.tier ? { minTier: t.tier } : {}) }, opts.catalog);
-      if (!d.ok) errors.push(`task "${t.id}": NO_ROUTE (no enabled profile can do a ${t.kind ?? "write"} step${t.tier ? ` at tier ${t.tier} or above` : ""})`);
+      const d = route({ kind: t.kind ?? "write", suggested: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.requires ? { requires: t.requires } : {}), ...(t.tier ? { minTier: t.tier } : {}) }, opts.catalog);
+      if (!d.ok) errors.push(`task "${t.id}": NO_ROUTE (no enabled profile can do a ${t.kind ?? "write"} step${t.tier ? ` at tier ${t.tier} or above` : ""}${t.requires?.length ? ` with capabilities ${t.requires.join(", ")}` : ""})`);
     }
     if (opts.budgetUsd !== undefined && errors.length === 0) {
-      const c = planCost(tasks.map((t) => ({ id: t.id, kind: t.kind ?? "write", profile: t.profile, ...(t.tags ? { tags: t.tags } : {}) })), opts.catalog);
+      const c = planCost(tasks.map((t) => ({ id: t.id, kind: t.kind ?? "write", profile: t.profile, ...(t.tags ? { tags: t.tags } : {}), ...(t.requires ? { requires: t.requires } : {}) })), opts.catalog);
       const upper = c.knownUsd + c.estimatedHighUsd;
       if (upper > opts.budgetUsd) errors.push(`OVER_BUDGET: known+estimated upper bound $${upper.toFixed(4)} exceeds the $${opts.budgetUsd.toFixed(4)} limit`);
     }

@@ -1,28 +1,16 @@
 // Explicit wrapper for an arbitrary one-shot CLI. It trusts no structured events: exit status and
 // later acceptance are the evidence, while stdout is retained only as plain final text.
 
-import { buildAgentEnv, type AgentAdapter, type AgentCapabilities, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { buildAgentEnv, type AgentAdapter, type AgentInvocation, type AdapterTask, type InjectedSkills } from "./adapter.ts";
+import { capabilitiesForAdapter } from "./capabilities.ts";
 import type { AgentProfile } from "./profile.ts";
 import { prependSkills } from "./skills.ts";
 import { parsePlain, type ParsedRun } from "./usage.ts";
 
-const CAPABILITIES: AgentCapabilities = Object.freeze({
-  headless: true,
-  structuredOutput: false,
-  skills: "prompt-prepend",
-  skillMechanism: "prompt-prepend",
-  mcp: false,
-  permissionModes: [],
-  budgetFlag: false,
-  resume: false,
-  cliFlags: [],
-  profileDefinedFlags: true,
-});
-
 export class GenericCliAdapter implements AgentAdapter {
   readonly id = "generic-cli" as const;
   readonly displayName = "Generic CLI";
-  readonly capabilities = CAPABILITIES;
+  readonly capabilities = capabilitiesForAdapter("generic-cli");
 
   build(profile: AgentProfile, task: AdapterTask, injected: InjectedSkills): AgentInvocation {
     const prompt = prependSkills(task.prompt, injected.skills);
