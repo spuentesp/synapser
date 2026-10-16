@@ -178,6 +178,8 @@ Criterios:
 - **O2 Tope.** Sin tope, no arranca. Con tope, se detiene al alcanzarlo, y el recuento de llamadas coincide con el tope. *Falsación:* ignorar el tope; la prueba falla.
 - **O3 Retención.** Un candidato que mejora `dev` y empeora `holdout` se rechaza. *Verificador:* un modelo de prueba construido para sobreajustar. *Falsación:* decidir con `dev`; la prueba falla.
 
+**Cierre del spike (16 oct 2026).** Prototipos GEPA y Ax GEPA ejercitados fuera del árbol de ejecución, con MiniMax-M3 (hasta 20 evaluaciones y 50 solicitudes por proceso) y Nemotron-3-Super (hasta 4 evaluaciones, 50 solicitudes y reserva acumulada de US$0,10; una sola herramienta live). No se añadió ninguna dependencia al proyecto ni se escribió en la biblioteca. Los prototipos y las salidas reproducibles quedan en `evidence/p16-5/` (ignorado). La incorporación futura de un optimizador o de su runtime requiere una decisión separada del usuario.
+
 ## 7. Dependencias: registro
 
 Datos de los registros de npm y PyPI, consultados el 14 oct 2026. La fecha es la de la versión indicada.
