@@ -1,6 +1,6 @@
 # Plan 16 — Spike, validación, curación y optimización
 
-Estado: el SDK de P16.2 y las migraciones P16.3, P16.4 y P16.6 están incorporados a `main`; P16.2 no se considera cerrada porque X3 sigue incompleto para Mimo y el modo headless de Kimi. P16.4 completado el 15 oct 2026 (`d14d4ff`). P16.5 bloqueado según el [seguimiento](14-seguimiento.md), pendiente de proveedor/modelo y límite de llamadas o costo para una comparación real. Cada tarea se reclama allí antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias en el proyecto: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
+Estado: el SDK de P16.2 y las migraciones P16.3, P16.4 y P16.6 están incorporados a `main`; X3 quedó verificado para Claude Code, codex, Kimi (ACP) y MiMo (CLI con endpoint local falso), sin llamadas pagadas. P16.4 completado el 15 oct 2026 (`d14d4ff`). P16.5 bloqueado según el [seguimiento](14-seguimiento.md), pendiente de proveedor/modelo y límite exacto de llamadas o costo para una comparación real. Cada tarea se reclama allí antes de tocar código. Orden: P16.2 → P16.3 → P16.4 → P16.5. Este plan no instala dependencias en el proyecto: cada una necesita la aprobación del usuario antes de entrar en `package.json`.
 
 El usuario pidió llevar a plan cuatro líneas: un spike del SDK oficial de MCP, validación con zod, curación de skills y optimización. Salieron de revisar qué código propio es difícil de construir bien y qué paquetes existen para ello. Rige la regla de baja superficie (ronda 3 del plan 14): cada dependencia nueva la justifica el plan que la añade, con versión exacta.
 
@@ -76,12 +76,12 @@ Rama `spike/mcp-sdk`: `b53f601` (caracterización y X1, contra el servidor de `m
 **Clientes reales (X3).**
 - Claude Code 2.1.299: conectado al arrancar; `workflow_list` respondió sin error.
 - codex-cli 0.160.1: llamada completada. Para esa invocación se habilitó solo esa herramienta y se aprobó: el bloqueo inicial lo puso la política de aprobación del cliente, no el servidor.
-- mimo 0.1.15: `mimo mcp list` lo ve conectado. Por ACP (`mimo acp`, agente OpenCode 0.1.15), la sesión con el servidor de Synapser se acepta, pero la llamada no llegó a ocurrir: el proveedor respondió `402 Insufficient account balance`. Sin esa llamada no hay prueba de la herramienta; hace falta saldo y repetir el chequeo.
+- mimo 0.1.15: una corrida del CLI configurado con proveedor OpenAI-compatible de loopback llamó `workflow_list` en el servidor real de Synapser por stdio, y el resultado volvió al modelo local. El test aislado `test/live/mimo-mcp-local.test.ts` no requiere saldo. Esto prueba el camino MCP del CLI, no la compatibilidad con proveedores remotos.
 - kimi 2.1.1: su CLI no tiene subcomando ni flag MCP, pero su runtime carga servidores MCP desde `$KIMI_CODE_HOME/mcp.json`, desde `.mcp.json` del proyecto (con workspace de confianza) y desde `mcpServers` de ACP. Verificado por ACP: `session/new` con el servidor de Synapser, una llamada a `workflow_list` con permiso concedido una vez y respuesta `{"workflows":[]}`. La sesión queda en `~/.kimi-code/sessions/`. Headless con MCP no verificado: sin credenciales la corrida se para antes de arrancar MCP.
 
 El detalle está en `evidence/p16-2-clients/` (no versionado).
 
-**Criterios.** X1 cumplido: la instantánea de `tools/list` por rol coincide, y se falsó quitando una herramienta y cambiando una descripción. X2 cumplido: `mcp.test.ts` y `stdio-e2e.test.ts` pasan sin cambiar sus líneas. X3 cumplido con Claude Code, codex y kimi (por ACP); mimo queda pendiente por saldo insuficiente de su proveedor. X4 cumplido: tres paquetes en el árbol de producción.
+**Criterios.** X1 cumplido: la instantánea de `tools/list` por rol coincide, y se falsó quitando una herramienta y cambiando una descripción. X2 cumplido: `mcp.test.ts` y `stdio-e2e.test.ts` pasan sin cambiar sus líneas. X3 cumplido con Claude Code, codex, Kimi (por ACP) y MiMo (CLI contra un fixture local). X4 cumplido: tres paquetes en el árbol de producción.
 
 **Lo que la adopción compra:** la negociación de las revisiones 2025 y los tipos del protocolo, mantenidos por el SDK. No compra la revisión `2026-07-28`, y el encuadre y `tools/call` siguen siendo nuestros.
 
