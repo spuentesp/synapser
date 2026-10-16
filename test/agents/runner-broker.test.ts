@@ -141,6 +141,19 @@ describe("runner (isolation + observation)", () => {
     assert.match(env["HOME"] ?? "", /synapser-agent-.*\/home$/);
     assert.ok(env["PATH"]);
     for (const k of ["NEBIUS_API_KEY", "NEMOTRON_TOKEN", "TAVILY_TOKEN", "ANTHROPIC_API_KEY"]) assert.equal(k in env, false, `${k} leaked`);
+    assert.equal("DBUS_SESSION_BUS_ADDRESS" in env, false, "the scope transport is not inherited by the CLI");
+    assert.equal("XDG_RUNTIME_DIR" in env, false, "the scope transport is not inherited by the CLI");
+  });
+
+  test("the real run is inside its bounded transient scope and inherits RLIMIT_AS", async () => {
+    const r = await run("resource-limits");
+    assert.equal(r.outcome, "SUCCEEDED", r.reason ?? "");
+    const limitsFile = r.changes.find((c) => c.path === "resource-limits.json");
+    assert.ok(limitsFile);
+    const observed = JSON.parse(journal.artifacts.get(limitsFile.afterBlob!).toString()) as { virtualMemoryLimitKiB: string; cgroup: string; tasksMax: string };
+    assert.equal(observed.virtualMemoryLimitKiB, "2097152");
+    assert.match(observed.cgroup, /synapser-agent-[0-9a-f-]+\.scope/);
+    assert.equal(observed.tasksMax, "64");
   });
 
   test("a Claude HOME overlay never exposes or mutates operator skills", async () => {

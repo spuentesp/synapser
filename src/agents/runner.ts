@@ -15,6 +15,7 @@ import { listTree, takeSnapshot, treeEntries } from "../validation/snapshot.ts";
 import { NO_INJECTED_SKILLS, PROFILE_CLI_ADAPTER, type AgentAdapter, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
 import { type InjectedProvider, planInjection } from "./inject.ts";
+import { boundedAgentArgv } from "./limits.ts";
 import { assertSkillPolicyUnchanged, materializeAdapterFiles, type RecordedSkill, validateInjectedSkills } from "./skills.ts";
 import { type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
 
@@ -147,7 +148,15 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       let timedOut = false;
       let child;
       try {
-        child = spawn(argv[0] as string, argv.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: invocation.env });
+        const bounded = boundedAgentArgv(argv);
+        // systemd-run needs the user's session bus to create its transient scope. Pass only the
+        // two transport variables to that launcher; the wrapper unsets them before exec'ing the CLI.
+        const scopeEnv = {
+          ...invocation.env,
+          ...(process.env["DBUS_SESSION_BUS_ADDRESS"] ? { DBUS_SESSION_BUS_ADDRESS: process.env["DBUS_SESSION_BUS_ADDRESS"] } : {}),
+          ...(process.env["XDG_RUNTIME_DIR"] ? { XDG_RUNTIME_DIR: process.env["XDG_RUNTIME_DIR"] } : {}),
+        };
+        child = spawn(bounded[0] as string, bounded.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: scopeEnv });
       } catch (e) {
         return resolve({ code: null, signal: null, timedOut: false, stdout, stderr, spawnError: String((e as Error).message) });
       }
@@ -191,6 +200,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       parsed = { outcome: "FAILED", reason: `spawn failed: ${exec.spawnError}`, finalText: null, sessionId: null, permissionDenials: null, toolUse: null, usage: { provenance: "unknown", inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, reasoningTokens: null, costUsd: null, models: [], turns: null, apiMs: null, note: "did not start" } };
     } else {
       parsed = adapter.parse(exec.stdout, profile, { home, ...(o.kimi ? { kimi: o.kimi } : {}) });
+      if (exec.code === 127 && /exec: .*: not found/.test(exec.stderr)) parsed = { ...parsed, outcome: "FAILED", reason: `spawn failed: ${exec.stderr.trim().split("\n").at(-1)}` };
       if (exec.timedOut) parsed = { ...parsed, outcome: "FAILED", reason: `timed out after ${profile.timeoutMs} ms` };
       else if (parsed.outcome === "SUCCEEDED" && exec.code !== 0) parsed = { ...parsed, outcome: "FAILED", reason: `exit code ${String(exec.code)} despite a success event` };
       else if (parsed.outcome === "UNKNOWN" && exec.code !== 0) {

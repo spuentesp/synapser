@@ -86,6 +86,16 @@ switch (mode) {
     writeFileSync("home-skills.json", JSON.stringify({ privateVisible: existsSync(`${process.env.HOME}/.claude/skills/private-skill`) }));
     ok();
     break;
+  case "resource-limits": {
+    const { execFileSync } = await import("node:child_process");
+    const virtualMemoryLimitKiB = execFileSync("/bin/bash", ["-c", "ulimit -v"], { encoding: "utf8" }).trim();
+    const cgroup = readFileSync("/proc/self/cgroup", "utf8").trim().split(":").at(-1);
+    const cgroupPath = `/sys/fs/cgroup${cgroup}`;
+    const tasksMax = readFileSync(`${cgroupPath}/pids.max`, "utf8").trim();
+    writeFileSync("resource-limits.json", JSON.stringify({ virtualMemoryLimitKiB, cgroup, tasksMax }));
+    ok();
+    break;
+  }
   case "crash-midway":
     // Plan 18 H5.2: a change lands, then the process dies before it reports. The runner must not call it a success.
     writeFileSync("partial.txt", "half written\n");
