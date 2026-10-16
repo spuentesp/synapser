@@ -236,7 +236,8 @@ Cerradas: E1, E2, E3, E4, E5, E8, E9, E10, E12, E13. En curso: E6, E7, E11 (cada
 
 ### E6 en curso
 
-- **H6.1–H6.2**: falta cubrir los ataques y la matriz explícita de centinelas indicados en los criterios.
+- **H6.1**: cubierto por `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts`.
+- **H6.2**: falta acordar el corpus exacto de archivos de credenciales antes de afirmar cobertura exhaustiva; luego ejecutar matriz de CLI/protocolo y capturar requests al endpoint local.
 - **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
 
 ### Bloqueado por una decisión del operador o del usuario
