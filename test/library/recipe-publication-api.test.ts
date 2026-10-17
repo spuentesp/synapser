@@ -74,6 +74,8 @@ describe("recipe publication HTTP lifecycle", () => {
 
   test("publication requires operator token and the exact current digest; unpublish removes catalog visibility", async () => {
     const entry = library.get("recipes", "review-change")!;
+    const listingBefore = await call("GET", "/api/library/recipes");
+    assert.equal(((await listingBefore.json() as { entries: { id: string; published: boolean }[] }).entries.find((item) => item.id === entry.id))?.published, false);
 
     const unauthenticated = await call("POST", "/api/library/recipes/review-change/publish", { digest: entry.digest }, false);
     assert.equal(unauthenticated.status, 401);
@@ -100,6 +102,8 @@ describe("recipe publication HTTP lifecycle", () => {
       published: true,
     });
     assert.deepEqual(library.publishedRecipes().map((item) => [item.id, item.digest]), [["review-change", entry.digest]]);
+    const listingPublished = await call("GET", "/api/library/recipes");
+    assert.equal(((await listingPublished.json() as { entries: { id: string; published: boolean }[] }).entries.find((item) => item.id === entry.id))?.published, true);
 
     const history = await call("GET", "/api/library/recipes/review-change/history", undefined, false);
     assert.equal(history.status, 200);
@@ -118,5 +122,7 @@ describe("recipe publication HTTP lifecycle", () => {
       published: false,
     });
     assert.deepEqual(library.publishedRecipes(), []);
+    const listingWithdrawn = await call("GET", "/api/library/recipes");
+    assert.equal(((await listingWithdrawn.json() as { entries: { id: string; published: boolean }[] }).entries.find((item) => item.id === entry.id))?.published, false);
   });
 });

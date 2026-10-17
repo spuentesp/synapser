@@ -160,7 +160,7 @@ export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res:
       return json(res, 400, { error: "EVALUATION_REFUSED", errors: [String((e as Error).message ?? e).slice(0, 300)] });
     }
   }
-  if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map(entryJson) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
+  if (key === undefined) return method === "GET" ? json(res, 200, { entries: lib.list(k).map((entry) => ({ ...entryJson(entry), ...(k === "recipes" ? { published: lib.publishedRecipes().some((published) => published.id === entry.id && published.digest === entry.digest) } : {}) })) }) : fail(res, 405, "METHOD_NOT_ALLOWED");
   if (sub !== undefined) {
     // POST /api/library/providers/:id/test tests the STORED endpoint and key, never ones sent in the body. A cross-site
     // page cannot make the server send the key to its own address. A local process that can read the session token

@@ -38,6 +38,7 @@ interface Entry {
   document: Record<string, unknown>
   seq: number
   actor: string
+  published?: boolean
 }
 
 interface Report {
@@ -58,6 +59,7 @@ export function LibraryView({ session }: { session: boolean }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [newId, setNewId] = useState('')
   const [text, setText] = useState('')
+  const [savedText, setSavedText] = useState('')
   const [errors, setErrors] = useState<string[]>([])
   const [failure, setFailure] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -116,6 +118,7 @@ export function LibraryView({ session }: { session: boolean }) {
     reset()
     setSelected(e.id)
     setText(JSON.stringify(e.document, null, 2))
+    setSavedText(JSON.stringify(e.document, null, 2))
     setEvaluation(null)
     setHistory([])
     if (e.kind === 'skills') void api<{ history: SkillHistory[] }>(`/api/library/skills/${encodeURIComponent(e.id)}/history`).then((r) => setHistory(r.history)).catch((error: unknown) => setFailure((error as Error).message))
@@ -129,6 +132,7 @@ export function LibraryView({ session }: { session: boolean }) {
     setRollbackReason('')
     setSelected(id)
     setText(JSON.stringify(STARTER[kind](id), null, 2))
+    setSavedText('')
   }
 
   const save = async () => {
@@ -145,6 +149,7 @@ export function LibraryView({ session }: { session: boolean }) {
     reset()
     try {
       await api<{ digest: string; changed: boolean }>(`/api/library/${kind}/${encodeURIComponent(selected)}`, { method: 'PUT', headers: headers(), body: JSON.stringify(doc) })
+      setSavedText(JSON.stringify(doc, null, 2))
       await load()
       if (kind === 'skills') setHistory((await api<{ history: SkillHistory[] }>(`/api/library/skills/${encodeURIComponent(selected)}/history`)).history)
     } catch (e) {
@@ -193,6 +198,30 @@ export function LibraryView({ session }: { session: boolean }) {
       const entry = await api<Entry>(`/api/library/skills/${encodeURIComponent(selected)}`)
       setText(JSON.stringify(entry.document, null, 2))
     } catch (e) { setFailure(e instanceof ApiError ? e.errors.join(' · ') || e.code : (e as Error).message) } finally { setBusy(false) }
+  }
+
+  const publishRecipe = async () => {
+    if (!session || !selected || !stored || kind !== 'recipes' || text !== savedText) return
+    setBusy(true); reset()
+    try {
+      await api(`/api/library/recipes/${encodeURIComponent(selected)}/publish`, { method: 'POST', headers: headers(), body: JSON.stringify({ digest: stored.digest }) })
+      await load()
+      setNotice(t('recipePublished'))
+    } catch (e) {
+      setFailure(e instanceof ApiError ? e.errors.join(' · ') || e.code : (e as Error).message)
+    } finally { setBusy(false) }
+  }
+
+  const unpublishRecipe = async () => {
+    if (!session || !selected || !stored || kind !== 'recipes') return
+    setBusy(true); reset()
+    try {
+      await api(`/api/library/recipes/${encodeURIComponent(selected)}/unpublish`, { method: 'POST', headers: headers() })
+      await load()
+      setNotice(t('recipeUnpublished'))
+    } catch (e) {
+      setFailure(e instanceof ApiError ? e.errors.join(' · ') || e.code : (e as Error).message)
+    } finally { setBusy(false) }
   }
 
   const remove = async () => {
@@ -263,6 +292,7 @@ export function LibraryView({ session }: { session: boolean }) {
                   <span className="font-mono">{selected}</span>
                   <Badge variant="outline">{t(KIND_KEY[kind])}</Badge>
                   <span className="text-xs font-normal text-muted-foreground">{stored ? `${t('libraryVersion')} ${stored.seq} · ${stored.digest.slice(7, 19)}` : t('libraryUnsaved')}</span>
+                  {kind === 'recipes' && stored ? <Badge variant="outline">{stored.published ? t('recipePublicationPublished') : t('recipePublicationDraft')}</Badge> : null}
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -299,6 +329,7 @@ export function LibraryView({ session }: { session: boolean }) {
                     {testing ? t('libraryTesting') : t('libraryTest')}
                   </Button>
                 ) : null}
+                {stored && kind === 'recipes' ? <Button variant="outline" disabled={!session || busy || (!stored.published && text !== savedText)} onClick={() => void (stored.published ? unpublishRecipe() : publishRecipe())}>{stored.published ? t('recipeUnpublish') : t('recipePublish')}</Button> : null}
                 {!session ? <p className="text-xs text-destructive">{t('designerNoSession')}</p> : null}
               </CardFooter>
             </Card>
@@ -345,23 +376,125 @@ function RecipeDesigner({ text, onChange }: { text: string; onChange: (value: st
   let doc: Record<string, unknown> = {}
   try { doc = JSON.parse(text) as Record<string, unknown> } catch { /* the JSON editor owns parse errors */ }
   const workflow = (doc.workflow && typeof doc.workflow === 'object' ? doc.workflow : {}) as Record<string, unknown>
+  const conditions = Array.isArray(workflow.conditions) ? workflow.conditions as Record<string, unknown>[] : []
+  const parameters = Array.isArray(doc.parameters) ? doc.parameters as Record<string, unknown>[] : []
+  const skills = Array.isArray(doc.requiredSkills) ? doc.requiredSkills as Record<string, unknown>[] : []
+  const mcpTools = Array.isArray(doc.requiredMcpTools) ? doc.requiredMcpTools as Record<string, unknown>[] : []
   const update = (key: string, value: unknown) => onChange(JSON.stringify({ ...doc, [key]: value, ...(key === 'title' ? { workflow: { ...workflow, title: value } } : key === 'description' ? { workflow: { ...workflow, description: value } } : {}) }, null, 2))
+  const updateMany = (values: Record<string, unknown>) => onChange(JSON.stringify({ ...doc, ...values }, null, 2))
   const updateWorkflow = (key: string, value: unknown) => update('workflow', { ...workflow, [key]: value })
+  const updateCondition = (index: number, changes: Record<string, unknown>) => updateWorkflow('conditions', conditions.map((condition, i) => i === index ? { ...condition, ...changes } : condition))
+  const updateChecker = (index: number, checker: Record<string, unknown>) => updateCondition(index, { checker })
+  const updateParameter = (index: number, changes: Record<string, unknown>) => update('parameters', parameters.map((parameter, i) => i === index ? { ...parameter, ...changes } : parameter))
+  const updateSkill = (index: number, changes: Record<string, unknown>) => update('requiredSkills', skills.map((skill, i) => i === index ? { ...skill, ...changes } : skill))
+  const updateMcpTool = (index: number, changes: Record<string, unknown>) => {
+    const tools = mcpTools.map((tool, i) => i === index ? { ...tool, ...changes } : tool)
+    updateMany({ requiredMcpTools: tools, requiredMcpServers: [...new Set(tools.map((tool) => String(tool.serverId ?? '')).filter(Boolean))] })
+  }
+  const addParameter = () => update('parameters', [...parameters, { name: `input-${parameters.length + 1}`, type: 'string', description: 'Describe this input.', required: true }])
+  const setParameterType = (index: number, type: string) => {
+    const parameter = parameters[index] ?? {}
+    const defaults: Record<string, unknown> = {
+      string: { default: '', maxLength: 4000 }, string_list: { default: [], maxItems: 40 },
+      integer: { minimum: 0, maximum: 100 }, boolean: { default: false }, enum: { options: ['option-a'], default: 'option-a' },
+    }
+    const common = Object.fromEntries(Object.entries(parameter).filter(([key]) => !['default', 'maxLength', 'maxItems', 'minimum', 'maximum', 'options'].includes(key)))
+    updateParameter(index, { ...common, type, ...(defaults[type] ?? {}) })
+  }
+  const addSkill = () => update('requiredSkills', [...skills, { id: 'skill-id', required: true }])
+  const addMcpTool = () => {
+    const tools = [...mcpTools, { serverId: 'server-id', toolName: 'tool-name' }]
+    updateMany({ requiredMcpTools: tools, requiredMcpServers: [...new Set(tools.map((tool) => String(tool.serverId ?? '')).filter(Boolean))] })
+  }
+  const nonGoals = Array.isArray(workflow.nonGoals) ? workflow.nonGoals : []
+  const editableNonGoals = nonGoals.filter((goal): goal is string => typeof goal === 'string')
+  const updateTextList = (key: string, value: string) => update(key, value.split('\n').map((line) => line.trim()).filter(Boolean))
+  const addCondition = () => updateWorkflow('conditions', [...conditions, { id: `acceptance-${conditions.length + 1}`, statement: 'The required result is present.', checker: { kind: 'approval', prompt: 'Does the result meet the acceptance condition?' }, required: true }])
+  const removeCondition = (index: number) => updateWorkflow('conditions', conditions.filter((_, i) => i !== index))
+  const setCheckerKind = (index: number, kind: string) => {
+    const defaults: Record<string, Record<string, unknown>> = {
+      approval: { kind, prompt: 'Does the result meet the acceptance condition?' },
+      file: { kind, path: 'report.md', assert: 'exists' },
+      command: { kind, commandId: '' },
+      citations: { kind, file: 'report.md', min: 1 },
+      diff: { kind, require: [], forbid: [] },
+      review: { kind, profile: '', rubric: 'Report findings with evidence.' },
+    }
+    updateChecker(index, defaults[kind] ?? { kind })
+    if (kind === 'review') updateCondition(index, { required: false, checker: defaults[kind] })
+  }
   return (
     <section className="grid gap-3 rounded-xl border p-4" aria-label={t('recipeDesigner')}>
       <h3 className="font-semibold">{t('recipeDesigner')}</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field><FieldLabel htmlFor="recipe-title">{t('recipeTitle')}</FieldLabel><Input id="recipe-title" value={String(doc.title ?? '')} onChange={(e) => update('title', e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor="recipe-category">{t('recipeCategory')}</FieldLabel><Input id="recipe-category" value={String(doc.category ?? '')} onChange={(e) => update('category', e.target.value)} /></Field>
+        <Field><FieldLabel htmlFor="recipe-category">{t('recipeCategory')}</FieldLabel><select id="recipe-category" className="h-9 rounded-lg border bg-background px-2 text-sm" value={String(doc.category ?? 'review')} onChange={(e) => update('category', e.target.value)}>{['review', 'adversarial_review', 'alternatives', 'research', 'implementation'].map((category) => <option key={category} value={category}>{category}</option>)}</select></Field>
         <Field><FieldLabel htmlFor="recipe-start-policy">{t('recipeStartPolicy')}</FieldLabel><select id="recipe-start-policy" className="h-9 rounded-lg border bg-background px-2 text-sm" value={String(doc.startPolicy ?? 'human_approval')} onChange={(e) => update('startPolicy', e.target.value)}><option value="draft">draft</option><option value="human_approval">human_approval</option><option value="auto_start_bounded">auto_start_bounded</option></select></Field>
         <Field><FieldLabel htmlFor="recipe-budget">{t('recipeBudget')}</FieldLabel><Input id="recipe-budget" type="number" min="1" max="1440" value={String((workflow.budget as Record<string, unknown> | undefined)?.minutes ?? 15)} onChange={(e) => updateWorkflow('budget', { ...(workflow.budget as object ?? {}), minutes: Number(e.target.value) })} /></Field>
+        <Field><FieldLabel htmlFor="recipe-budget-usd">{t('recipeBudgetUsd')}</FieldLabel><Input id="recipe-budget-usd" type="number" min="0.01" step="0.01" value={String((workflow.budget as Record<string, unknown> | undefined)?.usd ?? '')} onChange={(e) => updateWorkflow('budget', { ...(workflow.budget as object ?? {}), usd: e.target.value === '' ? undefined : Number(e.target.value) })} /></Field>
       </div>
       <Field><FieldLabel htmlFor="recipe-description">{t('recipePurpose')}</FieldLabel><Textarea id="recipe-description" rows={2} value={String(doc.description ?? '')} onChange={(e) => update('description', e.target.value)} /></Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field><FieldLabel htmlFor="recipe-workflow-title">{t('recipeWorkflowTitle')}</FieldLabel><Input id="recipe-workflow-title" value={String(workflow.title ?? '')} onChange={(e) => updateWorkflow('title', e.target.value)} /></Field>
+        <Field><FieldLabel htmlFor="recipe-workflow-description">{t('recipeWorkflowDescription')}</FieldLabel><Textarea id="recipe-workflow-description" rows={2} value={String(workflow.description ?? '')} onChange={(e) => updateWorkflow('description', e.target.value)} /></Field>
+      </div>
       <Field><FieldLabel htmlFor="recipe-goals">{t('recipeGoals')}</FieldLabel><Textarea id="recipe-goals" rows={3} value={Array.isArray(workflow.goals) ? workflow.goals.join('\n') : ''} onChange={(e) => updateWorkflow('goals', e.target.value.split('\n').filter(Boolean))} /></Field>
+      <Field><FieldLabel htmlFor="recipe-non-goals">{t('recipeNonGoals')}</FieldLabel><Textarea id="recipe-non-goals" rows={2} value={editableNonGoals.join('\n')} onChange={(e) => updateWorkflow('nonGoals', [...nonGoals.filter((goal) => typeof goal !== 'string'), ...e.target.value.split('\n').map((line) => line.trim()).filter(Boolean)])} /></Field>
+      <section className="grid gap-3 rounded-lg border p-3" aria-label={t('recipeRequirements')}>
+        <h4 className="text-sm font-semibold">{t('recipeRequirements')}</h4>
+        <Field><FieldLabel htmlFor="recipe-capabilities">{t('recipeCapabilities')}</FieldLabel><Textarea id="recipe-capabilities" rows={2} value={Array.isArray(doc.requiredCapabilities) ? doc.requiredCapabilities.join('\n') : ''} onChange={(e) => updateTextList('requiredCapabilities', e.target.value)} /></Field>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-2"><h5 className="text-sm">{t('recipeRequiredSkills')}</h5><Button type="button" size="sm" variant="outline" onClick={addSkill}>{t('recipeAddSkill')}</Button></div>
+          {skills.map((skill, index) => <div key={index} className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end"><Field><FieldLabel htmlFor={`recipe-skill-${index}`}>{t('recipeSkillId')}</FieldLabel><Input id={`recipe-skill-${index}`} value={String(skill.id ?? '')} onChange={(e) => updateSkill(index, { id: e.target.value })} /></Field><label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={skill.required !== false} onChange={(e) => updateSkill(index, { required: e.target.checked })} />{t('recipeRequired')}</label><Button type="button" size="sm" variant="ghost" aria-label={`${t('recipeRemoveSkill')} ${index + 1}`} onClick={() => update('requiredSkills', skills.filter((_, i) => i !== index))}>{t('recipeRemoveSkill')}</Button></div>)}
+        </div>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-2"><h5 className="text-sm">{t('recipeMcpTools')}</h5><Button type="button" size="sm" variant="outline" onClick={addMcpTool}>{t('recipeAddMcpTool')}</Button></div>
+          <p className="text-xs text-muted-foreground">{t('recipeMcpToolNote')}</p>
+          {mcpTools.map((tool, index) => <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><Field><FieldLabel htmlFor={`recipe-mcp-server-${index}`}>{t('recipeMcpServer')}</FieldLabel><Input id={`recipe-mcp-server-${index}`} value={String(tool.serverId ?? '')} onChange={(e) => updateMcpTool(index, { serverId: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-mcp-tool-${index}`}>{t('recipeMcpTool')}</FieldLabel><Input id={`recipe-mcp-tool-${index}`} value={String(tool.toolName ?? '')} onChange={(e) => updateMcpTool(index, { toolName: e.target.value })} /></Field><Button type="button" size="sm" variant="ghost" aria-label={`${t('recipeRemoveMcpTool')} ${index + 1}`} onClick={() => { const tools = mcpTools.filter((_, i) => i !== index); updateMany({ requiredMcpTools: tools, requiredMcpServers: [...new Set(tools.map((item) => String(item.serverId ?? '')).filter(Boolean))] }) }}>{t('recipeRemoveMcpTool')}</Button></div>)}
+        </div>
+      </section>
+      <section className="grid gap-3 rounded-lg border p-3" aria-label={t('recipeParameters')}>
+        <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{t('recipeParameters')}</h4><Button type="button" size="sm" variant="outline" onClick={addParameter}>{t('recipeAddParameter')}</Button></div>
+        {parameters.map((parameter, index) => {
+          const parameterType = String(parameter.type ?? 'string')
+          return <div key={index} className="grid gap-3 rounded-lg border p-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_2fr_auto_auto] sm:items-end"><Field><FieldLabel htmlFor={`recipe-param-name-${index}`}>{t('recipeParameterName')}</FieldLabel><Input id={`recipe-param-name-${index}`} value={String(parameter.name ?? '')} onChange={(e) => updateParameter(index, { name: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-param-type-${index}`}>{t('recipeParameterType')}</FieldLabel><select id={`recipe-param-type-${index}`} className="h-9 rounded-lg border bg-background px-2 text-sm" value={parameterType} onChange={(e) => setParameterType(index, e.target.value)}>{['string', 'string_list', 'integer', 'boolean', 'enum'].map((type) => <option key={type} value={type}>{type}</option>)}</select></Field><Field><FieldLabel htmlFor={`recipe-param-description-${index}`}>{t('recipeParameterDescription')}</FieldLabel><Input id={`recipe-param-description-${index}`} value={String(parameter.description ?? '')} onChange={(e) => updateParameter(index, { description: e.target.value })} /></Field><label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={parameter.required === true} onChange={(e) => updateParameter(index, { required: e.target.checked })} />{t('recipeRequired')}</label><Button type="button" size="sm" variant="ghost" aria-label={`${t('recipeRemoveParameter')} ${index + 1}`} onClick={() => update('parameters', parameters.filter((_, i) => i !== index))}>{t('recipeRemoveParameter')}</Button></div>
+            {parameterType === 'string' ? <div className="grid gap-2 sm:grid-cols-2"><Field><FieldLabel htmlFor={`recipe-param-default-${index}`}>{t('recipeParameterDefault')}</FieldLabel><Input id={`recipe-param-default-${index}`} value={String(parameter.default ?? '')} onChange={(e) => updateParameter(index, { default: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-param-max-${index}`}>{t('recipeParameterMaximumLength')}</FieldLabel><Input id={`recipe-param-max-${index}`} type="number" min="1" max="4000" value={String(parameter.maxLength ?? 4000)} onChange={(e) => updateParameter(index, { maxLength: Number(e.target.value) })} /></Field></div> : null}
+            {parameterType === 'string_list' ? <div className="grid gap-2 sm:grid-cols-2"><Field><FieldLabel htmlFor={`recipe-param-default-${index}`}>{t('recipeParameterDefault')}</FieldLabel><Textarea id={`recipe-param-default-${index}`} rows={2} value={Array.isArray(parameter.default) ? parameter.default.join('\n') : ''} onChange={(e) => updateParameter(index, { default: e.target.value.split('\n').filter(Boolean) })} /></Field><Field><FieldLabel htmlFor={`recipe-param-max-${index}`}>{t('recipeParameterMaximumItems')}</FieldLabel><Input id={`recipe-param-max-${index}`} type="number" min="1" max="40" value={String(parameter.maxItems ?? 40)} onChange={(e) => updateParameter(index, { maxItems: Number(e.target.value) })} /></Field></div> : null}
+            {parameterType === 'integer' ? <div className="grid gap-2 sm:grid-cols-3">{(['minimum', 'maximum', 'default'] as const).map((key) => <Field key={key}><FieldLabel htmlFor={`recipe-param-${key}-${index}`}>{t(key === 'default' ? 'recipeParameterDefault' : key === 'minimum' ? 'recipeParameterMinimum' : 'recipeParameterMaximum')}</FieldLabel><Input id={`recipe-param-${key}-${index}`} type="number" value={String(parameter[key] ?? '')} onChange={(e) => updateParameter(index, { [key]: e.target.value === '' ? undefined : Number(e.target.value) })} /></Field>)}</div> : null}
+            {parameterType === 'boolean' ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={parameter.default === true} onChange={(e) => updateParameter(index, { default: e.target.checked })} />{t('recipeParameterDefaultTrue')}</label> : null}
+            {parameterType === 'enum' ? <div className="grid gap-2 sm:grid-cols-2"><Field><FieldLabel htmlFor={`recipe-param-options-${index}`}>{t('recipeParameterOptions')}</FieldLabel><Textarea id={`recipe-param-options-${index}`} rows={2} value={Array.isArray(parameter.options) ? parameter.options.join('\n') : ''} onChange={(e) => updateParameter(index, { options: e.target.value.split('\n').map((line) => line.trim()).filter(Boolean) })} /></Field><Field><FieldLabel htmlFor={`recipe-param-default-${index}`}>{t('recipeParameterDefault')}</FieldLabel><Input id={`recipe-param-default-${index}`} value={String(parameter.default ?? '')} onChange={(e) => updateParameter(index, { default: e.target.value })} /></Field></div> : null}
+          </div>
+        })}
+      </section>
+      <section className="grid gap-3" aria-label={t('recipeAcceptanceConditions')}>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{t('recipeAcceptanceConditions')}</h4><Button type="button" size="sm" variant="outline" onClick={addCondition}>{t('recipeAddCondition')}</Button></div>
+        {conditions.map((condition, index) => {
+          const checker = condition.checker && typeof condition.checker === 'object' ? condition.checker as Record<string, unknown> : {}
+          return <div key={`${index}:${String(condition.id ?? '')}`} className="grid gap-3 rounded-lg border p-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+            <Field><FieldLabel htmlFor={`recipe-condition-id-${index}`}>{t('recipeConditionId')}</FieldLabel><Input id={`recipe-condition-id-${index}`} value={String(condition.id ?? '')} onChange={(e) => updateCondition(index, { id: e.target.value })} /></Field>
+            <Field><FieldLabel htmlFor={`recipe-condition-statement-${index}`}>{t('recipeConditionStatement')}</FieldLabel><Input id={`recipe-condition-statement-${index}`} value={String(condition.statement ?? '')} onChange={(e) => updateCondition(index, { statement: e.target.value })} /></Field>
+            <div className="flex items-end justify-between gap-2 sm:justify-end"><label className="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" checked={condition.required !== false} onChange={(e) => updateCondition(index, { required: e.target.checked })} />{t('recipeRequired')}</label><Button type="button" size="sm" variant="ghost" disabled={conditions.length <= 1} aria-label={`${t('recipeRemoveCondition')} ${index + 1}`} onClick={() => removeCondition(index)}>{t('recipeRemoveCondition')}</Button></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field><FieldLabel htmlFor={`recipe-checker-kind-${index}`}>{t('recipeChecker')}</FieldLabel><select id={`recipe-checker-kind-${index}`} className="h-9 rounded-lg border bg-background px-2 text-sm" value={String(checker.kind ?? 'approval')} onChange={(e) => setCheckerKind(index, e.target.value)}>{['approval', 'file', 'command', 'citations', 'diff', 'review', 'effect'].map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></Field>
+              {checker.kind === 'approval' ? <Field><FieldLabel htmlFor={`recipe-checker-prompt-${index}`}>{t('recipeCheckerPrompt')}</FieldLabel><Input id={`recipe-checker-prompt-${index}`} value={String(checker.prompt ?? '')} onChange={(e) => updateChecker(index, { ...checker, prompt: e.target.value })} /></Field> : null}
+              {checker.kind === 'file' ? <><Field><FieldLabel htmlFor={`recipe-checker-path-${index}`}>{t('recipeCheckerPath')}</FieldLabel><Input id={`recipe-checker-path-${index}`} value={String(checker.path ?? '')} onChange={(e) => updateChecker(index, { ...checker, path: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-checker-assert-${index}`}>{t('recipeCheckerAssertion')}</FieldLabel><select id={`recipe-checker-assert-${index}`} className="h-9 rounded-lg border bg-background px-2 text-sm" value={typeof checker.assert === 'string' ? checker.assert : 'contains'} onChange={(e) => updateChecker(index, { ...checker, assert: e.target.value === 'contains' ? { contains: '' } : e.target.value })}><option value="exists">exists</option><option value="absent">absent</option><option value="contains">contains</option></select>{typeof checker.assert === 'object' && checker.assert !== null ? <Input aria-label={t('recipeCheckerContains')} value={String((checker.assert as Record<string, unknown>).contains ?? '')} onChange={(e) => updateChecker(index, { ...checker, assert: { contains: e.target.value } })} /> : null}</Field></> : null}
+              {checker.kind === 'command' ? <Field><FieldLabel htmlFor={`recipe-checker-command-${index}`}>{t('recipeCheckerCommand')}</FieldLabel><Input id={`recipe-checker-command-${index}`} value={String(checker.commandId ?? '')} onChange={(e) => updateChecker(index, { ...checker, commandId: e.target.value })} /></Field> : null}
+              {checker.kind === 'citations' ? <><Field><FieldLabel htmlFor={`recipe-checker-citations-file-${index}`}>{t('recipeCheckerFile')}</FieldLabel><Input id={`recipe-checker-citations-file-${index}`} value={String(checker.file ?? '')} onChange={(e) => updateChecker(index, { ...checker, file: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-checker-citations-min-${index}`}>{t('recipeCheckerMinimum')}</FieldLabel><Input id={`recipe-checker-citations-min-${index}`} type="number" min="1" max="50" value={String(checker.min ?? 1)} onChange={(e) => updateChecker(index, { ...checker, min: Number(e.target.value) })} /></Field></> : null}
+              {checker.kind === 'diff' ? <><Field><FieldLabel htmlFor={`recipe-checker-diff-require-${index}`}>{t('recipeCheckerRequire')}</FieldLabel><Textarea id={`recipe-checker-diff-require-${index}`} rows={2} value={Array.isArray(checker.require) ? checker.require.join('\n') : ''} onChange={(e) => updateChecker(index, { ...checker, require: e.target.value.split('\n').filter(Boolean) })} /></Field><Field><FieldLabel htmlFor={`recipe-checker-diff-forbid-${index}`}>{t('recipeCheckerForbid')}</FieldLabel><Textarea id={`recipe-checker-diff-forbid-${index}`} rows={2} value={Array.isArray(checker.forbid) ? checker.forbid.join('\n') : ''} onChange={(e) => updateChecker(index, { ...checker, forbid: e.target.value.split('\n').filter(Boolean) })} /></Field></> : null}
+              {checker.kind === 'review' ? <><Field><FieldLabel htmlFor={`recipe-checker-review-profile-${index}`}>{t('recipeCheckerProfile')}</FieldLabel><Input id={`recipe-checker-review-profile-${index}`} value={String(checker.profile ?? '')} onChange={(e) => updateChecker(index, { ...checker, profile: e.target.value })} /></Field><Field><FieldLabel htmlFor={`recipe-checker-review-rubric-${index}`}>{t('recipeCheckerRubric')}</FieldLabel><Textarea id={`recipe-checker-review-rubric-${index}`} rows={2} value={String(checker.rubric ?? '')} onChange={(e) => updateChecker(index, { ...checker, rubric: e.target.value })} /></Field></> : null}
+              {checker.kind === 'effect' ? <p className="text-xs text-muted-foreground">{t('recipeEffectCheckerJsonNote')}</p> : null}
+            </div>
+          </div>
+        })}
+      </section>
       <div className="rounded-lg bg-muted/50 p-3 text-xs">
         <p className="font-semibold">{t('recipePreview')}</p>
         <p className="mt-1">{String(workflow.title ?? doc.title ?? '—')} · {String(doc.category ?? '—')} · {String(doc.startPolicy ?? 'human_approval')}</p>
         <p className="mt-1">{Array.isArray(workflow.goals) ? workflow.goals.join(' · ') : ''}</p>
+        <ul className="mt-2 grid gap-1">{conditions.map((condition, index) => <li key={`${index}:${String(condition.id ?? '')}`}>{String(condition.id ?? '—')}: {String(condition.statement ?? '—')}</li>)}</ul>
         <p className="mt-1 text-muted-foreground">{t('recipePreviewNote')}</p>
       </div>
     </section>
@@ -369,7 +502,8 @@ function RecipeDesigner({ text, onChange }: { text: string; onChange: (value: st
 }
 
 function SkillCurationPanel({ caseText, setCaseText, outputText, setOutputText, evaluation, evaluating, onEvaluate, history, currentDigest, rollbackReason, setRollbackReason, onRollback, busy }: {
-  caseText: string; setCaseText: (value: string) => void; outputText: string; setOutputText: (value: string) => void
+  caseText: string; setCaseText: (value: string) => void
+  outputText: string; setOutputText: (value: string) => void
   evaluation: Evaluation | null; evaluating: boolean; onEvaluate: (split: 'dev' | 'holdout') => void; history: SkillHistory[]; currentDigest: string | null
   rollbackReason: string; setRollbackReason: (value: string) => void; onRollback: (digest: string) => void; busy: boolean
 }) {
@@ -377,10 +511,8 @@ function SkillCurationPanel({ caseText, setCaseText, outputText, setOutputText, 
   return (
     <section className="grid gap-3 rounded-xl border p-4" aria-label={t('skillCuration')}>
       <div><h3 className="font-semibold">{t('skillCuration')}</h3><p className="text-xs text-muted-foreground">{t('skillCurationNote')}</p></div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Field><FieldLabel htmlFor="skill-cases">{t('skillCasesJson')}</FieldLabel><Textarea id="skill-cases" rows={7} className="font-mono text-xs" value={caseText} onChange={(e) => setCaseText(e.target.value)} /></Field>
-        <Field><FieldLabel htmlFor="skill-outputs">{t('skillOutputsJson')}</FieldLabel><Textarea id="skill-outputs" rows={7} className="font-mono text-xs" value={outputText} onChange={(e) => setOutputText(e.target.value)} /></Field>
-      </div>
+      <Field><FieldLabel htmlFor="skill-cases">{t('skillCasesJson')}</FieldLabel><Textarea id="skill-cases" rows={5} className="font-mono text-xs" value={caseText} onChange={(e) => setCaseText(e.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="skill-outputs">{t('skillOutputsJson')}</FieldLabel><Textarea id="skill-outputs" rows={7} className="font-mono text-xs" value={outputText} onChange={(e) => setOutputText(e.target.value)} /></Field>
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={evaluating} onClick={() => onEvaluate('dev')}>{evaluating ? t('skillEvaluating') : t('skillEvaluateDev')}</Button><Button variant="outline" disabled={evaluating} onClick={() => onEvaluate('holdout')}>{evaluating ? t('skillEvaluating') : t('skillEvaluateHoldout')}</Button></div>
       {evaluation ? <div role="status" className="grid gap-2 rounded-lg border p-3 text-sm"><p className={evaluation.eligible ? 'text-status-done' : 'text-destructive'}>{evaluation.eligible ? t('skillEvaluationPassed') : t('skillEvaluationFailed')} · {evaluation.checks.filter((check) => check.passed).length}/{evaluation.checks.length}</p><ul className="grid gap-1 text-xs">{evaluation.checks.map((check) => <li key={`${check.caseId}:${check.repetition}`}>{check.caseId} · {t('skillRepetition')} {check.repetition} · {check.passed ? 'PASS' : 'FAIL'}</li>)}</ul><p className="text-xs text-muted-foreground">{t('skillManualAdmission')}</p></div> : null}
       {history.length > 0 ? <div className="grid gap-2 border-t pt-3"><h4 className="text-sm font-semibold">{t('libraryHistory')}</h4><Field><FieldLabel htmlFor="rollback-reason">{t('libraryRollbackReason')}</FieldLabel><Input id="rollback-reason" value={rollbackReason} onChange={(e) => setRollbackReason(e.target.value)} /></Field>{history.slice().reverse().map((entry) => <div key={`${entry.seq}:${entry.digest}`} className="flex flex-wrap items-center justify-between gap-2 text-xs"><span>#{entry.seq} · {entry.operation} · <code>{entry.digest.slice(7, 19)}</code>{entry.reason ? ` · ${entry.reason}` : ''}</span>{entry.digest !== currentDigest && entry.operation !== 'DELETE' ? <Button size="sm" variant="outline" disabled={busy || !rollbackReason.trim()} onClick={() => onRollback(entry.digest)}>{t('libraryRollback')}</Button> : null}</div>)}</div> : null}
