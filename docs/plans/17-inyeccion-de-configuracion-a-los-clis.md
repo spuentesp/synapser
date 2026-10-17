@@ -1,6 +1,6 @@
 # Plan 17 — Inyección de configuración a los CLIs
 
-Estado: **aprobado en lo esencial** (14 oct 2026). Las decisiones 1, 4 y 5 las aprobó el operador ese día. La 2, la 3, la 6 y la 7 siguen como propuesta. P17.1 y P17.2 están hechas. Cada tarea siguiente se reclama en el [seguimiento](14-seguimiento.md) antes de empezar, y ninguna necesita una llamada a un modelo real sin aprobación explícita.
+Estado: documento de diseño y análisis fechado el 14 oct 2026; no es la fuente actual de ejecución. Las decisiones y el estado vigente de sus tareas están en el [seguimiento](14-seguimiento.md): las siete decisiones quedaron resueltas y las tareas P17.1–P17.9 están cerradas. La numeración P17.5/P17.6 de este diseño es la original; el seguimiento subdivide P17.5 para distinguir inyección de proveedor de redacción/retención de claves. Las pruebas live de proveedores siguen requiriendo opt-in explícito.
 
 El usuario propone que Synapser sea el centro de mando de los CLIs. El operador guarda sus proveedores (endpoint y nombre de variable de clave) en una sola lista; elige agentes; y les inyecta el proveedor y el modelo que necesitan. Un mismo CLI puede correr con distintos modelos. El orquestador (rol `supervisor`) ya corre con Nemotron por defecto, y el plan permite cambiarlo. La configuración se hace desde la UI, desde la CLI del operador o desde un conector MCP propio de configuración, separado del conector de tareas (decisión 5).
 

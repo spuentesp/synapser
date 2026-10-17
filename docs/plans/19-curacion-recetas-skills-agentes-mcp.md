@@ -165,10 +165,12 @@ independiente por frame. La contención verificada reduce acceso accidental y pe
 pero no es una frontera frente a exploits del kernel: no configura seccomp. El namespace PID separa la
 enumeración de procesos del host, pero no es una frontera contra exploits del kernel. Tampoco
 provee proxy de salida; el networking queda completamente aislado. Las anotaciones del servidor no
-autorizan herramientas. El cliente por sí solo no es un broker de efectos: hasta que pin de
-artefacto/origen, allowlist efectiva, identidad esperada, inyección por perfil y mediación de efectos
-estén conectados y verificados, no se habilitan llamadas MCP desde agentes ni se inyectan secretos o
-herramientas de efecto. El transporte HTTP queda fuera de este incremento.
+autorizan herramientas. El cliente por sí solo no es un broker de efectos. La integración existente
+es una concesión opt-in limitada a perfiles native/worker y herramientas que el operador atestigua
+como read-only; no prueba semántica ni concede efectos. Fuera de ese corte, hasta que procedencia,
+allowlist efectiva, identidad esperada, inyección por perfil y mediación de efectos estén conectados
+y verificados, no se habilitan llamadas MCP ni se inyectan secretos o herramientas de efecto. El
+transporte HTTP queda fuera de este incremento.
 
 Cada MCP mantiene su scope propio (4 GiB y 64 tareas), y cada CLI conserva sus límites por invocación.
 Además, `ProductionEngine` crea de manera perezosa un slice transitorio privado por workflow con

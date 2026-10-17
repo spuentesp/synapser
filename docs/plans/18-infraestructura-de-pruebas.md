@@ -236,7 +236,7 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (17 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
+Cerradas: E1, E2, E3, E4, E5, E6, E8, E9, E10, E11, E12 y E13. E9/H9.5 se reabrió por decisión del usuario y se cerró en P17.9. E7/H7.5 sigue pendiente de una corrida live exitosa; H7.1–H7.4 tienen pruebas locales de proceso real.
 
 ### Hecho en esta pasada
 
