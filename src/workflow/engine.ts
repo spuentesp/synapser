@@ -26,6 +26,7 @@ import { reviewProfilesOf } from "./model.ts";
 import type { DelegationConfig } from "../orchestration/delegation.ts";
 import type { ResearchSession } from "../research/session.ts";
 import { LocalRunner, type AllowedCommand } from "../validation/runner.ts";
+import { listTree, treeDigest } from "../validation/snapshot.ts";
 import { ZooAdapter } from "../zoo/adapter.ts";
 import { ZooCollector } from "../zoo/collector.ts";
 import { zooIntentSink } from "../zoo/intent.ts";
@@ -221,16 +222,33 @@ export class ProductionEngine implements WorkflowEngine {
                 }
                 return rec ? { state: rec.state, reason: rec.reason, evidence: rec.evidence, summary: rec.summary } : { state: "UNKNOWN", reason: null, evidence: null, summary: "" };
               },
-              review: async (profileId, rubric) => {
+              review: async (profileId, rubric, expectedSnapshot) => {
                 const profile = library.profiles.find((p) => p.id === profileId);
                 if (!profile || !profileIds.has(profileId)) return { verdict: "fail", text: `unknown reviewer ${profileId}` };
+                if (profile.role !== "advisor") return { verdict: "fail", text: `reviewer ${profileId} must have advisor role` };
+                if (journal.listAgentRuns().some((run) => run.profileId === profileId && run.role !== "advisor")) {
+                  return { verdict: "fail", text: `reviewer ${profileId} already wrote in this run and cannot review its own work` };
+                }
+                if (treeDigest(c.workspaceRoot) !== expectedSnapshot) return { verdict: "fail", text: "review snapshot changed before reviewer launch" };
+                const reviewScope = listTree(c.workspaceRoot);
                 const run = await registry.for(profile).run({
                   profile, workspaceRoot: c.workspaceRoot, runId, journal, executor, generation: lock.generation, ...(budget ? { budget } : {}),
                   task: {
-                    taskId: `review-${Date.now().toString(36)}`, objective: `Review the repository against this rubric and end your answer with exactly "VERDICT: PASS" or "VERDICT: FAIL".\nRUBRIC: ${rubric}`,
-                    scope: [], criteria: [rubric], planRevision: 1,
+                    taskId: `review-${Date.now().toString(36)}`, objective: `Inspect the exact read-only repository snapshot ${expectedSnapshot}. Do not modify files or use effects. End your answer with exactly "VERDICT: PASS" or "VERDICT: FAIL".\nRUBRIC: ${rubric}`,
+                    scope: reviewScope, criteria: [rubric], planRevision: 1,
                   },
                 });
+                const isolatedResult = run.integration.mode === "pending" ? run.integration.run : null;
+                const runRow = journal.listAgentRuns().find((row) => row.agentRunId === run.agentRunId);
+                const reviewerBaseDigest = isolatedResult?.baseDigest ?? runRow?.baseDigest;
+                const reviewerBaseConsistent = isolatedResult?.baseConsistent ?? reviewerBaseDigest === expectedSnapshot;
+                const reviewerChanges = isolatedResult?.changes ?? run.changedPaths;
+                if (!reviewerBaseConsistent || reviewerBaseDigest !== expectedSnapshot) {
+                  return { verdict: "fail", text: "reviewer snapshot was inconsistent with the condition-round digest" };
+                }
+                if (reviewerChanges.length > 0) return { verdict: "fail", text: "reviewer attempted to change its isolated snapshot; result rejected" };
+                if (treeDigest(c.workspaceRoot) !== expectedSnapshot) return { verdict: "fail", text: "live workspace changed during review; result rejected as stale" };
+                if (run.outcome !== "SUCCEEDED") return { verdict: "fail", text: `reviewer did not complete successfully (${run.outcome})` };
                 const text = run.finalText ?? "";
                 return { verdict: /VERDICT:\s*PASS/i.test(text) && !/VERDICT:\s*FAIL/i.test(text) ? "pass" : "fail", text };
               },

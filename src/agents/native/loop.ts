@@ -65,7 +65,9 @@ export interface LoopDeps {
   /** Absolute epoch-ms deadline (the mission's); checked before every model call. */
   deadlineMs?: number;
   /** Model role for this task; repair rounds use "repair". Default "worker". */
-  role?: "worker" | "repair";
+  role?: "worker" | "repair" | "advisor";
+  /** Advisor profiles are observational: hide write/effect tools and reject them if the model still asks. */
+  readOnly?: boolean;
   limits?: Partial<LoopLimits>;
   /** When present the agent may call web_search (plan 07). */
   research?: ResearchSession;
@@ -128,6 +130,7 @@ function mismatchHint(cur: string, old: string): string {
 export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunResult> {
   const L: LoopLimits = { ...DEFAULT_LIMITS, ...(deps.limits ?? {}) };
   const { executor, journal, model } = deps;
+  const readOnly = deps.readOnly === true || deps.role === "advisor";
   const { incarnation } = executor.beginSession({ taskId: task.taskId, scope: task.scope, planRevision: task.planRevision });
 
   const messages: ChatMessage[] = [
@@ -200,8 +203,11 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
     result.steps = step;
     let res;
     try {
+      const offeredTools = readOnly
+        ? TOOL_SPECS.filter((tool) => ["read_files", "finish"].includes(tool.function.name))
+        : [...TOOL_SPECS, ...(deps.research ? [WEB_SEARCH_SPEC] : []), ...(deps.delegation ? [REQUEST_SUBTASK_SPEC] : []), ...(deps.effects ? EFFECT_SPECS : [])];
       res = await model.complete(
-        { role: deps.role ?? "worker", messages, tools: [...TOOL_SPECS, ...(deps.research ? [WEB_SEARCH_SPEC] : []), ...(deps.delegation ? [REQUEST_SUBTASK_SPEC] : []), ...(deps.effects ? EFFECT_SPECS : [])], toolChoice: "auto", maxTokens: L.maxTokensPerCall },
+        { role: deps.role ?? "worker", messages, tools: offeredTools, toolChoice: "auto", maxTokens: L.maxTokensPerCall },
         { runId: deps.runId, taskId: task.taskId, ...(deps.budget ? { budget: deps.budget } : {}) },
       );
       result.modelCalls++;
@@ -322,6 +328,9 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
   }
 
   async function handleInner(call: ParsedToolCall): Promise<Out & { stop?: LoopStatus }> {
+    if (readOnly && !["read_files", "finish"].includes(call.name)) {
+      return { ok: false, invalid: true, payload: { error: "READ_ONLY_PROFILE", tool: call.name }, detail: "advisor profile is read-only" };
+    }
     const schema = TOOL_SCHEMAS[call.name];
     if (!schema) return { ok: false, invalid: true, payload: { error: "UNKNOWN_TOOL", tool: call.name, available: Object.keys(TOOL_SCHEMAS) }, detail: "unknown tool" };
     if (!call.argsValid) return { ok: false, invalid: true, payload: { error: "INVALID_ARGUMENTS", details: ["arguments are not valid JSON"], example: TOOL_EXAMPLES[call.name] }, detail: "bad json" };

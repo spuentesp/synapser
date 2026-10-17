@@ -436,3 +436,27 @@ describe("staged-state feedback", () => {
     }
   });
 });
+
+test("read-only native advisors are not offered mutation tools and cannot invoke them anyway", async () => {
+  const env = await makeEnv();
+  try {
+    const before = env.read("app/schema.py");
+    let offered: string[] = [];
+    const scripted = new ScriptedModel((_messages, n) => n === 1
+      ? { calls: [call("write_file", { path: "app/schema.py", content: "# unauthorized" })] }
+      : { calls: [call("finish", { summary: "read-only inspection complete" })] });
+    const model = {
+      complete: (request: Parameters<ScriptedModel["complete"]>[0], context: Parameters<ScriptedModel["complete"]>[1]) => {
+        offered = (request.tools ?? []).map((tool) => tool.function.name);
+        return scripted.complete(request, context);
+      },
+    };
+    const result = await runTask({ model, executor: env.exec, journal: env.journal, runId: RUN, role: "advisor", readOnly: true }, T1);
+    assert.deepEqual(offered, ["read_files", "finish"]);
+    assert.equal(env.read("app/schema.py"), before);
+    assert.deepEqual(result.actions, []);
+    assert.ok(env.journal.listEvents().some((event) => event.entity === "agent_step" && (event.data as { detail?: string }).detail === "advisor profile is read-only"));
+  } finally {
+    await env.close();
+  }
+});

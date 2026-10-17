@@ -152,20 +152,34 @@ nuevas ejecuciones y no altera los snapshots ya registrados.
 El primer transporte de P19.5 es `stdio` con `@modelcontextprotocol/client` fijado en 2.3.1. El
 wrapper selecciona el handshake legacy `2025-11-25` y expone solo descubrimiento y llamada de
 herramientas; limita el buffer de lectura del SDK, número de tools/páginas, tiempos y esquemas
-soportados. En Linux verifica el PGID del proceso líder antes de conectar y al cerrar señaliza ese
-grupo y confirma su desaparición; en plataformas sin ese supervisor falla cerrado. El `HOME` debe
-ser una ruta absoluta existente proporcionada por el llamador: este wrapper no verifica que sea
-privado ni temporal. El SDK administra JSON-RPC y lifecycle del transporte, mientras
-Synapser mantiene validación adicional de política. El límite del SDK es del buffer de lectura, no una
-garantía de tamaño independiente por frame. El grupo de procesos ayuda a cerrar descendientes que lo
-heredan, pero no garantiza reap de descendientes y no contiene un proceso que use `setsid`/`detached`
-para desacoplarse; tampoco equivale a cgroup ni impone el límite agregado de 4 GiB. Por estos motivos
-no se habilitan aún llamadas MCP desde agentes. Las anotaciones del servidor no autorizan herramientas. El cliente por sí solo no es
-un sandbox ni un broker de efectos: hasta que el proxy, la allowlist efectiva y la frontera de
-proceso/red estén verificadas, no se inyectarán herramientas de efecto ni secretos a procesos MCP
-externos. Los comandos MCP son código ejecutable elegido por el operador y deben tratarse como
-confiables; `stdio` no restringe su acceso a archivos o red. El transporte HTTP queda fuera de este
-incremento.
+soportados. En Linux verifica el scope de systemd antes del handshake y aplica 4 GiB, 64 tareas,
+accounting y `KillMode=control-group`; al cerrar exige `ActiveState=inactive` y cgroup vacío. bwrap
+confina el proceso a raíz de solo lectura, workspace/HOME scratch explícitos, `/tmp` privado y
+namespaces de red, IPC y UTS separados. El `HOME` y `cwd` canónicos deben estar bajo `/tmp`; el comando
+se expone desde `/usr`, el workspace o como archivo único de solo lectura. En plataformas sin
+systemd/bwrap falla cerrado. Las pruebas con servidor MCP local real comprueban el límite efectivo,
+la inaccesibilidad de un archivo host vecino, el aislamiento de loopback y el cierre de un descendiente
+que llama a `setsid`. El SDK administra JSON-RPC y lifecycle del transporte, mientras Synapser mantiene
+validación adicional de política. El límite del SDK es del buffer de lectura, no una garantía de tamaño
+independiente por frame. La contención verificada reduce acceso accidental y persistencia de procesos,
+pero no es una frontera frente a exploits del kernel: no configura seccomp ni un namespace PID. Tampoco
+provee proxy de salida; el networking queda completamente aislado. Las anotaciones del servidor no
+autorizan herramientas. El cliente por sí solo no es un broker de efectos: hasta que pin de
+artefacto/origen, allowlist efectiva, identidad esperada, inyección por perfil y mediación de efectos
+estén conectados y verificados, no se habilitan llamadas MCP desde agentes ni se inyectan secretos o
+herramientas de efecto. El transporte HTTP queda fuera de este incremento.
+
+#### P19.5 — RCP6b: frontera local del proceso MCP
+
+Un proceso stdio conectado por Synapser solo se considera contenido cuando se verificaron antes del
+handshake el scope activo de systemd con `MemoryMax=4G`, `TasksMax=64`, accounting y `KillMode` de grupo,
+y la frontera bwrap configurada. El workspace y HOME son rutas canónicas bajo `/tmp`; el proceso no ve
+hermanos, root modificable, red de host ni archivos externos montados. Cierre/timeout no se considera
+exitoso hasta que el scope quede inactivo y su cgroup sin miembros. *Verificador:* proceso local MCP lee
+`/proc/self/cgroup` y los límites efectivos, intenta leer un sentinel hermano, conectar a loopback y deja
+un descendiente detached; las pruebas observan rechazo de los dos accesos y terminación completa.
+*Falsación:* límite ausente/distinto, acceso fuera de mounts, conexión a host o scope/descendiente vivo
+tras el cierre. Esto no afirma resistencia ante un exploit del kernel.
 
 El registro inicial en `mcpServers` es solo configuración declarativa operator-owned: exige un id,
 estado habilitado explícito, localizador HTTPS o `file:` sin credenciales, versión declarada,
@@ -266,11 +280,23 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   Falsación: servidor/tool desconocido, versión no aprobada, secreto filtrado o tool de efecto alcanza
   datos/escritura fuera de política, o un CLI arranca un servidor heredado sin autorización.
 - **RCP6a — Transporte acotado**: el cliente stdio acepta solo el ciclo de herramientas explícito,
-  aplica límites y valida el subconjunto de esquema que puede hacer cumplir; en POSIX confirma el
-  cierre del proceso y del grupo aislado que controla antes de devolver timeout/cierre exitoso. Esto
-  no contiene un ejecutable operador que se escape creando otra sesión. Falsación: RPC desconocido, esquema
-  con restricción no soportada, frame/paginación fuera de límites, argumento inválido que llega al
-  servidor o descendiente vivo tras cerrar el cliente.
+  aplica límites y valida el subconjunto de esquema que puede hacer cumplir; no ejecuta llamadas si no
+  verifica supervisor y sandbox. Falsación: RPC desconocido, esquema con restricción no soportada,
+  frame/paginación fuera de límites o argumento inválido que llega al servidor.
+- **RCP5a — Revisor independiente ligado al snapshot**: una revisión solo la ejecuta un perfil `advisor`
+  distinto de los perfiles que ya escribieron en la corrida. La ejecución recibe el digest de la ronda;
+  su copia debe ser consistente y tener ese mismo digest, no puede producir cambios aceptados, y el árbol
+  vivo debe conservar el digest al terminar. Los asesores nativos reciben solo `read_files`/`finish` y el
+  handler rechaza mutaciones aunque el modelo las solicite. Sigue siendo evidencia secundaria, nunca
+  aceptación determinista. *Verificador:* workflow con CLI de proceso real y pruebas del bucle nativo;
+  casos de auto-revisión, cambio en copia y mutación concurrente deben fallar cerrados. *Falsación:*
+  auto-revisión lanzada, digest diferente/inconsistente, cambios del reviewer, árbol vivo mutado o PASS
+  secundario sin aceptación atribuida que marque DONE.
+- **RCP6b — Frontera local del proceso MCP**: el scope verificado de systemd aplica memoria/tareas y
+  termina todos sus miembros; bwrap limita mounts y red. *Verificador:* proceso stdio MCP informa sus
+  límites cgroup, no lee sentinel host/no conecta a loopback y no deja un descendiente detached activo.
+  *Falsación:* límite ausente/distinto, acceso externo, conexión a host o scope/descendiente activo tras
+  cerrar. No implica resistencia a exploits del kernel.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

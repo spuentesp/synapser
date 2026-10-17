@@ -1,8 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, relative, sep } from "node:path";
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client, SdkErrorCode, type CallToolResult, type JSONRPCMessage, type Tool } from "@modelcontextprotocol/client";
 import { DEFAULT_INHERITED_ENV_VARS, StdioClientTransport, type StdioServerParameters } from "@modelcontextprotocol/client/stdio";
+import { AGENT_MEMORY_MAX_BYTES, AGENT_TASKS_MAX } from "../agents/limits.ts";
 
 /** JSON data that can safely cross the MCP stdio boundary. */
 export type McpJson = null | boolean | number | string | McpJson[] | { [key: string]: McpJson };
@@ -68,6 +71,9 @@ const MAX_PAGES = 100;
 const MAX_CURSOR_LENGTH = 2_048;
 const MAX_MESSAGE_BYTES = 1_048_576;
 const SETSID = "/usr/bin/setsid";
+const SYSTEMD_RUN = "/usr/bin/systemd-run";
+const SYSTEMCTL = "/usr/bin/systemctl";
+const BWRAP = "/usr/bin/bwrap";
 const VALID_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const SCHEMA_KEYS = new Set([
   "$schema", "$id", "$comment", "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly",
@@ -218,10 +224,14 @@ class BoundedStdioClientTransport extends StdioClientTransport {
   readonly #maxMessageBytes: number;
   #verifiedProcessGroup: number | null = null;
   #spawnedPid: number | null = null;
+  #scopeUnit: string | null = null;
+  #scopeVerified = false;
+  readonly #unit: string;
 
-  constructor(options: StdioServerParameters, maxMessageBytes: number) {
+  constructor(options: StdioServerParameters, maxMessageBytes: number, unit: string) {
     super(options);
     this.#maxMessageBytes = maxMessageBytes;
+    this.#unit = unit;
   }
 
   override send(message: JSONRPCMessage): Promise<void> {
@@ -233,14 +243,19 @@ class BoundedStdioClientTransport extends StdioClientTransport {
 
   get verifiedProcessGroup(): number | null { return this.#verifiedProcessGroup; }
   get spawnedPid(): number | null { return this.#spawnedPid; }
+  get scopeUnit(): string | null { return this.#scopeUnit; }
+  get scopeVerified(): boolean { return this.#scopeVerified; }
 
   override async start(): Promise<void> {
     await super.start();
     const pid = this.pid;
     if (pid === null) throw new Error("registered MCP process did not start");
     this.#spawnedPid = pid;
-    // Verify before Client.connect sends initialize. This prevents a fast-failing server from exiting
-    // before the supervisor has captured the dedicated process group needed to reap descendants.
+    this.#scopeUnit = this.#unit;
+    await verifyScope(this.#scopeUnit);
+    this.#scopeVerified = true;
+    // Capture the short-lived systemd-run process group as a secondary teardown handle. The cgroup is
+    // the authority: unlike a process group it also contains descendants that call setsid().
     for (let attempt = 0; attempt < 100; attempt++) {
       if (processGroupOf(pid) === pid) {
         this.#verifiedProcessGroup = pid;
@@ -253,34 +268,163 @@ class BoundedStdioClientTransport extends StdioClientTransport {
   }
 }
 
-function isolatedEnvironment(input: Readonly<Record<string, string>>, cwd?: string): Record<string, string> {
-  if (!Object.hasOwn(input, "HOME")) throw new Error("outbound MCP requires an explicit scratch HOME");
-  const home = input["HOME"];
-  if (typeof home !== "string" || !isAbsolute(home) || !existsSync(home)) throw new Error("outbound MCP scratch HOME must be an existing absolute directory");
-  const out: Record<string, string> = {};
-  // StdioClientTransport merges this environment with its safe defaults. Replace every inherited key so no host
-  // identity or path value leaks through that merge. Only explicit, non-secret caller variables survive below.
-  for (const key of DEFAULT_INHERITED_ENV_VARS) out[key] = "";
-  out["HOME"] = home;
-  if (process.platform === "win32") {
-    // Windows has no supported process-group teardown in this wrapper; this is only defensive if that changes.
-    out["PATH"] = "";
-  } else {
-    out["PATH"] = "/usr/bin:/bin";
-    out["USER"] = "synapser";
-    out["LOGNAME"] = "synapser";
-    out["SHELL"] = "/bin/sh";
-    out["TERM"] = "dumb";
+function within(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+function canonicalScratchPath(path: string, label: string): string {
+  if (!isAbsolute(path) || !existsSync(path)) throw new Error(`outbound MCP ${label} must be an existing absolute scratch path`);
+  const canonical = realpathSync(path);
+  const scratchRoot = realpathSync("/tmp");
+  if (!within(scratchRoot, canonical)) throw new Error(`outbound MCP ${label} must be confined to the system temporary directory`);
+  return canonical;
+}
+
+function addSandboxParents(args: string[], destination: string): void {
+  const parts = destination.split(sep).filter(Boolean);
+  let current = "";
+  for (const part of parts.slice(0, -1)) {
+    current += `${sep}${part}`;
+    if (current !== "/tmp") args.push("--dir", current);
   }
-  for (const [key, value] of Object.entries(input)) {
+}
+
+function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServerParameters; unit: string } {
+  for (const binary of [SYSTEMD_RUN, SYSTEMCTL, BWRAP]) {
+    if (!existsSync(binary)) throw new Error("registered MCP stdio requires systemd-run, systemctl, and bwrap");
+  }
+  const home = canonicalScratchPath(options.env["HOME"] ?? "", "HOME");
+  if (!statSync(home).isDirectory()) throw new Error("outbound MCP HOME must be a directory");
+  const workspace = canonicalScratchPath(options.cwd ?? "", "cwd");
+  if (!statSync(workspace).isDirectory()) throw new Error("outbound MCP cwd must be a directory");
+  if (workspace === realpathSync("/tmp")) throw new Error("outbound MCP cwd cannot be the temporary-directory root");
+  if (within(home, workspace)) throw new Error("outbound MCP HOME cannot contain the workspace");
+  const command = realpathSync(options.command);
+  const systemRoot = realpathSync("/usr");
+  const commandInSystem = within(systemRoot, command);
+  const commandInWorkspace = within(workspace, command);
+  const commandIsFile = statSync(command).isFile();
+  if (!commandInSystem && !commandInWorkspace && !commandIsFile) {
+    throw new Error("outbound MCP executable must be in /usr or the approved workspace");
+  }
+  const sandboxCommand = commandInSystem || commandInWorkspace ? command : "/opt/synapser-mcp-runtime";
+
+  const childEnv: Record<string, string> = {
+    HOME: home,
+    TMPDIR: "/tmp",
+    PATH: "/usr/bin:/bin",
+    USER: "synapser",
+    LOGNAME: "synapser",
+    SHELL: "/bin/sh",
+    TERM: "dumb",
+  };
+  for (const [key, value] of Object.entries(options.env)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== "string" || value.includes("\0")) throw new Error("outbound MCP environment must be explicit string values");
     if (/(?:TOKEN|API[-_]?KEY|SECRET|PASSWORD|CREDENTIAL)/i.test(key)) throw new Error("outbound MCP environment must not contain credential variables");
-    // These values are derived from Synapser's scratch boundary, never accepted from a caller.
-    if (DEFAULT_INHERITED_ENV_VARS.some((inherited) => inherited.toUpperCase() === key.toUpperCase())) continue;
-    out[key] = value;
+    if (key === "HOME" || DEFAULT_INHERITED_ENV_VARS.some((inherited) => inherited.toUpperCase() === key.toUpperCase())) continue;
+    childEnv[key] = value;
   }
-  if (cwd !== undefined && (!isAbsolute(cwd) || !existsSync(cwd))) throw new Error("outbound MCP cwd must be an existing absolute path");
-  return out;
+
+  const bwrapArgs = [
+    "--die-with-parent", "--new-session", "--unshare-net", "--unshare-ipc", "--unshare-uts",
+    "--dir", "/usr", "--ro-bind", "/usr", "/usr",
+    "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
+    "--proc", "/proc", "--dev", "/dev",
+    "--dir", "/sys", "--dir", "/sys/fs", "--dir", "/sys/fs/cgroup",
+    "--ro-bind", "/sys/fs/cgroup", "/sys/fs/cgroup",
+    "--tmpfs", "/tmp", "--tmpfs", "/home",
+  ];
+  // The caller's HOME and cwd are accepted only as explicit temporary scratch directories. Their parents and
+  // siblings stay hidden; the workspace is the sole writable project mount.
+  addSandboxParents(bwrapArgs, workspace);
+  bwrapArgs.push("--bind", workspace, workspace);
+  if (!commandInSystem && !commandInWorkspace) {
+    bwrapArgs.push("--dir", "/opt", "--ro-bind", command, sandboxCommand);
+  }
+  if (!within(workspace, home)) addSandboxParents(bwrapArgs, home);
+  bwrapArgs.push("--bind", home, home, "--chdir", workspace, "--clearenv");
+  bwrapArgs.push("--remount-ro", "/");
+  for (const [key, value] of Object.entries(childEnv)) bwrapArgs.push("--setenv", key, value);
+  bwrapArgs.push("--", sandboxCommand, ...(options.args ?? []));
+
+  const unit = `synapser-mcp-${process.pid}-${randomUUID()}.scope`;
+  const outerEnv: Record<string, string> = {};
+  for (const key of DEFAULT_INHERITED_ENV_VARS) outerEnv[key] = "";
+  // Only the trusted systemd-run wrapper receives access to the user's manager socket. bwrap clears this
+  // environment before starting the registered process.
+  for (const key of ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "HOME"]) {
+    const value = process.env[key];
+    if (value) outerEnv[key] = value;
+  }
+  const server: StdioServerParameters = {
+    command: SETSID,
+    args: [
+      SYSTEMD_RUN,
+      "--user", "--scope", "--quiet", `--unit=${unit}`,
+      `--property=TasksMax=${AGENT_TASKS_MAX}`,
+      "--property=MemoryAccounting=yes",
+      `--property=MemoryMax=${AGENT_MEMORY_MAX_BYTES}`,
+      "--property=KillMode=control-group",
+      "--", BWRAP, ...bwrapArgs,
+    ],
+    cwd: "/",
+    env: outerEnv,
+    stderr: "ignore",
+    maxBufferSize: options.maxMessageBytes ?? MAX_MESSAGE_BYTES,
+  };
+  return { server, unit };
+}
+
+function systemdShow(unit: string): Record<string, string> | null {
+  const result = spawnSync(SYSTEMCTL, ["--user", "show", unit, "--property=LoadState", "--property=ActiveState", "--property=ControlGroup", "--property=MemoryMax", "--property=TasksMax", "--property=MemoryAccounting", "--property=KillMode"], {
+    encoding: "utf8", timeout: 250, stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.error || result.status !== 0) return null;
+  return Object.fromEntries(result.stdout.trim().split("\n").map((line) => {
+    const index = line.indexOf("=");
+    return index < 0 ? [line, ""] : [line.slice(0, index), line.slice(index + 1)];
+  }));
+}
+
+async function verifyScope(unit: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const props = systemdShow(unit);
+    if (props?.["LoadState"] === "loaded" && props["ActiveState"] === "active" && props["ControlGroup"] &&
+      Number(props["MemoryMax"]) === AGENT_MEMORY_MAX_BYTES && Number(props["TasksMax"]) === AGENT_TASKS_MAX &&
+      props["MemoryAccounting"] === "yes" && props["KillMode"] === "control-group") return;
+    await delay(10);
+  }
+  throw new Error("registered MCP systemd cgroup limits could not be verified");
+}
+
+function stopScope(unit: string): boolean {
+  const result = spawnSync(SYSTEMCTL, ["--user", "stop", unit], {
+    encoding: "utf8", timeout: 5_000, stdio: ["ignore", "ignore", "ignore"],
+  });
+  return !result.error && result.status === 0;
+}
+
+function forceStopScope(unit: string): void {
+  spawnSync(SYSTEMCTL, ["--user", "kill", "--kill-whom=all", "--signal=SIGKILL", unit], {
+    encoding: "utf8", timeout: 2_000, stdio: ["ignore", "ignore", "ignore"],
+  });
+  spawnSync(SYSTEMCTL, ["--user", "stop", unit], {
+    encoding: "utf8", timeout: 5_000, stdio: ["ignore", "ignore", "ignore"],
+  });
+}
+
+async function waitForScopeStop(unit: string, timeoutMs: number, allowMissing: boolean): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const props = systemdShow(unit);
+    if ((props?.["LoadState"] === "not-found" && allowMissing) ||
+      (props?.["ActiveState"] === "inactive" && props["ControlGroup"] === "")) return true;
+    await delay(20);
+  }
+  const props = systemdShow(unit);
+  return (props?.["LoadState"] === "not-found" && allowMissing) ||
+    (props?.["ActiveState"] === "inactive" && props["ControlGroup"] === "");
 }
 
 function asMcpTool(raw: unknown): OutboundMcpTool | null {
@@ -360,18 +504,10 @@ class OutboundStdioMcpClient {
     if (!plainObject(options.env) || options.args?.some((arg) => typeof arg !== "string" || arg.includes("\0")) || options.cwd?.includes("\0")) {
       throw new Error("invalid outbound MCP process configuration");
     }
-    if (process.platform !== "linux" || !existsSync(SETSID)) throw new Error("registered MCP stdio is unavailable: verified Linux process-group supervision is required");
-    const env = isolatedEnvironment(options.env, options.cwd);
-    this.#options = { ...options, startupTimeoutMs, callTimeoutMs, killGraceMs, maxMessageBytes, env };
-    const server: StdioServerParameters = {
-      command: SETSID,
-      args: [options.command, ...(options.args ?? [])],
-      cwd: options.cwd,
-      env,
-      stderr: "ignore",
-      maxBufferSize: maxMessageBytes,
-    };
-    this.#transport = new BoundedStdioClientTransport(server, maxMessageBytes);
+    if (process.platform !== "linux" || !existsSync(SETSID)) throw new Error("registered MCP stdio is unavailable: verified Linux systemd/bwrap supervision is required");
+    const { server, unit } = sandboxLaunch({ ...options, maxMessageBytes });
+    this.#options = { ...options, startupTimeoutMs, callTimeoutMs, killGraceMs, maxMessageBytes };
+    this.#transport = new BoundedStdioClientTransport(server, maxMessageBytes, unit);
     // Do not enable modern discovery/elicitation negotiation for an untrusted child process. P19.5 pins the legacy
     // initialize path until those additional client capabilities have their own security and broker rules.
     this.#client = new Client(
@@ -527,24 +663,28 @@ class OutboundStdioMcpClient {
   }
 
   async #terminateOnce(): Promise<void> {
+    const unit = this.#transport.scopeUnit;
     const pgid = this.#processGroup;
+    if (unit !== null) stopScope(unit);
+    let scopeExited = unit === null || await waitForScopeStop(unit, this.#options.killGraceMs, !this.#transport.scopeVerified);
+    if (!scopeExited && unit !== null) {
+      forceStopScope(unit);
+      scopeExited = await waitForScopeStop(unit, this.#options.killGraceMs * 2, !this.#transport.scopeVerified);
+    }
+    // systemd's cgroup kill is authoritative for detached descendants. The process-group fallback handles only
+    // a wrapper that failed before systemd registered its unit; it does not substitute for scope verification.
     let groupExited = pgid === null ? this.#transport.spawnedPid === null : !groupExists(pgid);
-    if (pgid !== null && !groupExited) {
-      // This negative PID is safe only because setsid is the direct executable and /proc proved PGID == its PID.
-      try { process.kill(-pgid, "SIGTERM"); } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") groupExited = false;
-      }
+    if (!groupExited && pgid !== null) {
+      try { process.kill(-pgid, "SIGTERM"); } catch { /* checked by wait below */ }
       groupExited = await this.#waitForGroupExit(pgid, this.#options.killGraceMs);
       if (!groupExited) {
-        try { process.kill(-pgid, "SIGKILL"); } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") groupExited = false;
-        }
+        try { process.kill(-pgid, "SIGKILL"); } catch { /* checked by wait below */ }
         groupExited = await this.#waitForGroupExit(pgid, this.#options.killGraceMs * 2);
       }
     }
     try { await this.#client.close(); } catch { /* cleanup errors are reported by the verified process-group check */ }
-    this.#state = groupExited ? "closed" : "halted";
-    if (!groupExited) throw new Error("registered MCP server process-group exit could not be confirmed");
+    this.#state = scopeExited && groupExited ? "closed" : "halted";
+    if (!scopeExited || !groupExited) throw new Error("registered MCP server cgroup or wrapper exit could not be confirmed");
   }
 
   async #waitForGroupExit(pgid: number, timeoutMs: number): Promise<boolean> {

@@ -59,6 +59,17 @@ switch (mode) {
   case "skill-prompt":
     console.log(`${process.argv[3]}\nVERDICT: PASS`);
     break;
+  case "review-mutates-copy":
+    appendFileSync("app/schema.py", "\n# reviewer attempted a write\n");
+    ok("VERDICT: PASS");
+    break;
+  case "review-pass":
+    ok("VERDICT: PASS");
+    break;
+  case "review-races-workspace":
+    appendFileSync(`${process.argv[3]}/app/schema.py`, "\n# concurrent live-tree mutation\n");
+    ok("VERDICT: PASS");
+    break;
   case "error-exit0":
     console.log(JSON.stringify({ type: "error", sessionID: "s1", error: { name: "APIError", data: { message: "Insufficient account balance", statusCode: 402 } } }));
     break; // exit code 0 on purpose

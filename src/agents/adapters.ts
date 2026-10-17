@@ -110,7 +110,7 @@ export class NativeLoopRunner implements AgentRunner {
     const agentRunId = `ar-${randomUUID()}`;
     const before = new Set(journal.listModelCalls().map((c) => c.callId));
     const baseDigest = treeDigest(req.workspaceRoot);
-    const role = req.profile.nativeRole ?? "worker";
+    const role = req.profile.role === "advisor" ? "advisor" : req.profile.nativeRole ?? "worker";
 
     // plan 14 Q5.4: library skills reach the native loop by prompt-prepend; their provenance and digests are checked first (L1)
     const injected = req.injectedSkills ?? { skills: [] };
@@ -123,6 +123,7 @@ export class NativeLoopRunner implements AgentRunner {
         runId: req.runId,
         ...(req.budget ? { budget: req.budget } : {}),
         role,
+        ...(req.profile.role === "advisor" ? { readOnly: true } : {}),
         ...(req.deadlineMs !== undefined ? { deadlineMs: req.deadlineMs } : {}),
         ...(this.#limits ? { limits: this.#limits } : {}),
         ...(this.#research ? { research: this.#research } : {}),

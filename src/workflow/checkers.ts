@@ -45,7 +45,7 @@ export interface CheckerContext {
    */
   ensureEffect?: (kind: string, params: Record<string, unknown>) => Promise<{ state: string; reason: string | null; evidence: Record<string, unknown> | null; summary: string }>;
   /** Runs a reviewer; absent ⇒ review conditions are unsatisfied with that explanation. */
-  review?: (profileId: string, rubric: string) => Promise<{ verdict: "pass" | "fail"; text: string }>;
+  review?: (profileId: string, rubric: string, expectedSnapshot: string) => Promise<{ verdict: "pass" | "fail"; text: string }>;
 }
 
 /** Paths whose digest differs from the baseline: added, modified or deleted. */
@@ -126,7 +126,7 @@ async function run(checker: Checker, id: string, ctx: CheckerContext, snapshot: 
     }
     case "review": {
       if (!ctx.review) return { ok: false, detail: "no reviewer is configured", evidence: "secondary" };
-      const r = await ctx.review(checker.profile, checker.rubric);
+      const r = await ctx.review(checker.profile, checker.rubric, snapshot);
       return { ok: r.verdict === "pass", detail: `review by ${checker.profile}: ${r.verdict} — ${r.text.slice(0, 300)}`, evidence: "secondary" };
     }
   }

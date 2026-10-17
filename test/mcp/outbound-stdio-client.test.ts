@@ -10,9 +10,28 @@ import { connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
 const SERVER = String.raw`
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
+const net = require('node:net');
 const mode = process.env.TEST_MODE || 'normal';
 if (process.env.PID_FILE) fs.writeFileSync(process.env.PID_FILE, String(process.pid));
 if (process.env.OBSERVED_ENV_FILE) fs.writeFileSync(process.env.OBSERVED_ENV_FILE, JSON.stringify({ home: process.env.HOME || null, inheritedSecret: process.env.SYNAPSER_MCP_TEST_INHERITED_SECRET || null }));
+if (process.env.RESOURCE_LIMITS_FILE) {
+  const entry = fs.readFileSync('/proc/self/cgroup', 'utf8').split('\n').find(line => line.startsWith('0::'));
+  const relative = entry ? entry.slice(3) : null;
+  const root = relative === null ? null : '/sys/fs/cgroup' + relative;
+  const read = name => root === null ? null : fs.readFileSync(root + '/' + name, 'utf8').trim();
+  fs.writeFileSync(process.env.RESOURCE_LIMITS_FILE, JSON.stringify({ relative, memoryMax: read('memory.max'), pidsMax: read('pids.max') }));
+}
+if (process.env.HOST_PROBE_PATH) {
+  try { fs.writeFileSync('external-read.json', JSON.stringify({ content: fs.readFileSync(process.env.HOST_PROBE_PATH, 'utf8') })); }
+  catch (error) { fs.writeFileSync('external-read.json', JSON.stringify({ error: error.code || error.message })); }
+}
+if (process.env.NETWORK_PROBE_PORT) {
+  const socket = net.connect(Number(process.env.NETWORK_PROBE_PORT), '127.0.0.1');
+  socket.setTimeout(500);
+  socket.on('connect', () => { fs.writeFileSync('network-probe.json', JSON.stringify({ connected: true })); socket.destroy(); });
+  socket.on('error', error => fs.writeFileSync('network-probe.json', JSON.stringify({ connected: false, error: error.code || error.message })));
+  socket.on('timeout', () => { fs.writeFileSync('network-probe.json', JSON.stringify({ connected: false, error: 'timeout' })); socket.destroy(); });
+}
 let calls = 0;
 let initialized = false;
 function append(file, text) { if (file) fs.appendFileSync(file, text + '\n'); }
@@ -115,17 +134,18 @@ function fixture(mode = "normal") {
   const frameLengthsFile = join(dir, "frame-lengths");
   const observedEnvFile = join(dir, "observed-env");
   const initRequestFile = join(dir, "init-request");
+  const resourceLimitsFile = join(dir, "resource-limits.json");
   const options = {
     command: process.execPath,
     args: ["-e", SERVER],
     cwd: dir,
-    env: { TEST_MODE: mode, PID_FILE: pidFile, HOME: homeDir, GRANDCHILD_PID_FILE: grandchildPidFile, CALLS_FILE: callsFile, HANDSHAKE_FILE: handshakeFile, CURSOR_FILE: cursorFile, FRAME_LENGTHS_FILE: frameLengthsFile, OBSERVED_ENV_FILE: observedEnvFile, INIT_REQUEST_FILE: initRequestFile },
+    env: { TEST_MODE: mode, PID_FILE: pidFile, HOME: homeDir, GRANDCHILD_PID_FILE: grandchildPidFile, CALLS_FILE: callsFile, HANDSHAKE_FILE: handshakeFile, CURSOR_FILE: cursorFile, FRAME_LENGTHS_FILE: frameLengthsFile, OBSERVED_ENV_FILE: observedEnvFile, INIT_REQUEST_FILE: initRequestFile, RESOURCE_LIMITS_FILE: resourceLimitsFile } as Record<string, string>,
     timeoutMs: 250,
     callTimeoutMs: 250,
     killGraceMs: 500,
     maxMessageBytes: mode === "oversized" || mode === "coalesced-invalid" ? 256 : 1024,
   };
-  return { options, dir, pidFile, homeDir, grandchildPidFile, callsFile, handshakeFile, cursorFile, frameLengthsFile, observedEnvFile, initRequestFile };
+  return { options, dir, pidFile, homeDir, grandchildPidFile, callsFile, handshakeFile, cursorFile, frameLengthsFile, observedEnvFile, initRequestFile, resourceLimitsFile };
 }
 
 async function assertChildReaped(pidFile: string): Promise<void> {
@@ -359,7 +379,7 @@ test("timeout kills a descendant that ignores SIGTERM", { skip: process.platform
   await assertPidNotRunning(grandchildPidFile);
 });
 
-test("a detached descendant escapes PGID cleanup and is explicitly reaped by the test", { skip: process.platform !== "linux" }, async () => {
+test("close terminates a detached descendant, not only the verified process group", { skip: process.platform !== "linux" }, async () => {
   const { options, pidFile, grandchildPidFile } = fixture("detached-child-close");
   let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
   let detachedPid: number | undefined;
@@ -372,7 +392,7 @@ test("a detached descendant escapes PGID cleanup and is explicitly reaped by the
     await client.close();
     client = undefined;
     await assertChildReaped(pidFile);
-    assert.equal(await assertPidRunning(grandchildPidFile), detachedPid, "PGID cleanup is not expected to reach a detached session");
+    await assertPidNotRunning(grandchildPidFile);
   } finally {
     if (client) {
       try { await client.close(); } catch { /* cleanup below explicitly reaps the detached test process */ }
@@ -385,6 +405,63 @@ test("a detached descendant escapes PGID cleanup and is explicitly reaped by the
       await assertPidNotRunning(grandchildPidFile);
     }
   }
+});
+
+test("an outbound MCP process is placed under the 4 GiB and 64-task cgroup ceiling", { skip: process.platform !== "linux" }, async () => {
+  const { options, pidFile, resourceLimitsFile } = fixture();
+  const client = await connectStdioMcpServer(options);
+  try {
+    const limits = JSON.parse(readFileSync(resourceLimitsFile, "utf8")) as { memoryMax: string; pidsMax: string };
+    assert.equal(limits.memoryMax, String(4 * 1024 * 1024 * 1024), "effective cgroup memory.max must enforce the approved aggregate 4 GiB limit");
+    assert.equal(limits.pidsMax, "64", "effective cgroup pids.max must enforce the per-server 64-task limit");
+  } finally {
+    await client.close();
+  }
+  await assertChildReaped(pidFile);
+});
+
+test("an outbound MCP process cannot read a sibling host file outside its registered workspace", { skip: process.platform !== "linux" }, async () => {
+  const { options, dir, pidFile } = fixture();
+  const outside = mkdtempSync(join(tmpdir(), "synapser-mcp-outside-"));
+  dirs.push(outside);
+  const secret = join(outside, "host-only-sentinel.txt");
+  writeFileSync(secret, "HOST-FILESYSTEM-SENTINEL");
+  options.env.HOST_PROBE_PATH = secret;
+  const client = await connectStdioMcpServer(options);
+  try {
+    const probe = JSON.parse(readFileSync(join(dir, "external-read.json"), "utf8")) as { content?: string; error?: string };
+    assert.equal(probe.content, undefined, "host file contents must not cross the bwrap filesystem boundary");
+    assert.ok(probe.error, "the host-only path should be inaccessible from the server namespace");
+  } finally {
+    await client.close();
+  }
+  await assertChildReaped(pidFile);
+});
+
+test("an outbound MCP process cannot connect to a host-local listener", { skip: process.platform !== "linux" }, async () => {
+  const net = await import("node:net");
+  const listener = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    listener.once("error", reject);
+    listener.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = listener.address();
+  assert.ok(address && typeof address === "object");
+  const { options, dir, pidFile } = fixture();
+  options.env.NETWORK_PROBE_PORT = String(address.port);
+  let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
+  try {
+    client = await connectStdioMcpServer(options);
+    const probePath = join(dir, "network-probe.json");
+    for (let attempt = 0; attempt < 30 && !existsSync(probePath); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(existsSync(probePath), "fixture recorded the loopback probe result");
+    const probe = JSON.parse(readFileSync(probePath, "utf8")) as { connected: boolean };
+    assert.equal(probe.connected, false, "the server should have no route to host loopback");
+  } finally {
+    if (client) await client.close();
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+  }
+  await assertChildReaped(pidFile);
 });
 
 test("tool-level isError is preserved for the caller", async () => {
