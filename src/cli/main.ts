@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // `synapser`: the operator's console and the MCP entry point.
 //   synapser mcp                              serve MCP over stdio (agents connect here)
+//   synapser mcp artifact import <dir> <entrypoint>  pin a local MCP package tree
 //   synapser workflow create <file.json>      create a DRAFT
 //   synapser workflow list|status <id>|events <id> [--since N]|cancel <id>
 //   synapser workflow start <id>              run it in this process until it ends (operator: no start gate)
@@ -20,7 +21,8 @@
 //   synapser config put <providers|roles|agents> <id> <file.json>  write through the authenticated API
 // Global: --config FILE  --workspace DIR  --state DIR
 
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
 import { createRuntime } from "./runtime.ts";
 import { writeLiveConfig } from "../config/write.ts";
@@ -31,6 +33,7 @@ import { libraryPolicyOf } from "../library/validate.ts";
 import { McpServer, serveStdio } from "../mcp/server.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { Actor } from "../workflow/manager.ts";
+import { importMcpArtifact } from "../mcp/artifact-store.ts";
 
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -93,6 +96,25 @@ async function main(): Promise<void> {
   if (st) cfg = { ...cfg, stateDir: st };
   const [cmd, sub, a, b] = argv;
 
+  if (cmd === "mcp" && sub === "artifact" && a === "import") {
+    const entrypoint = argv[4];
+    if (!b || !entrypoint || entrypoint.startsWith("/") || entrypoint.includes("\\") ||
+      entrypoint.split("/").some((part) => part.length === 0 || part === "." || part === "..") || entrypoint.includes("\0")) {
+      return die("usage: synapser mcp artifact import <local-directory> <relative-entrypoint>", 2);
+    }
+    try {
+      const source = resolve(b);
+      const sourceEntrypoint = resolve(source, ...entrypoint.split("/"));
+      const entrypointRelative = relative(source, sourceEntrypoint);
+      const sourceStat = lstatSync(sourceEntrypoint);
+      if (entrypointRelative.startsWith("..") || !sourceStat.isFile() || sourceStat.isSymbolicLink()) return die("entrypoint must name a regular file in the imported artifact", 2);
+      const imported = importMcpArtifact(source, join(cfg.stateDir, "mcp-artifacts"));
+      return say({ digest: imported.digest, entrypoint, note: "Package tree is pinned; the configured host runtime and its system libraries are not included in this digest." });
+    } catch (error) {
+      return die(`MCP artifact import failed: ${String((error as Error).message ?? error).slice(0, 240)}`, 2);
+    }
+  }
+
   if (cmd === "config" && sub === "show") {
     // the library next to the file (plan 14 Q2.7): its index only; the documents are read through the API
     let library: unknown;
@@ -140,7 +162,7 @@ async function main(): Promise<void> {
           control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), mcpServers: () => cfg.mcpServers, mcpDiscover: async (serverId, profileId) => {
             const registration = cfg.mcpServers.find((server) => server.id === serverId);
             if (!registration) throw new Error("unknown registered MCP server");
-            return discoverRegisteredMcpServer(registration, profileId);
+            return discoverRegisteredMcpServer(registration, profileId, join(cfg.stateDir, "mcp-artifacts"));
           }, config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor, providers: cfg.providers, roles: cfg.roles }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);

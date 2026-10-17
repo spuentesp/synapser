@@ -11,7 +11,7 @@ export interface McpServerDiscovery {
 }
 
 /** Probe an enabled, operator-registered server without credentials and without invoking any tool. */
-export async function discoverRegisteredMcpServer(registration: McpServerRegistration, profileId: string): Promise<McpServerDiscovery> {
+export async function discoverRegisteredMcpServer(registration: McpServerRegistration, profileId: string, artifactStoreRoot: string): Promise<McpServerDiscovery> {
   const scratch = mkdtempSync(join(tmpdir(), "synapser-mcp-discovery-"));
   const home = join(scratch, "home");
   const cwd = join(scratch, "work");
@@ -22,6 +22,7 @@ export async function discoverRegisteredMcpServer(registration: McpServerRegistr
     client = await connectRegisteredMcpServer({
       registration,
       profileId,
+      artifactStoreRoot,
       env: { HOME: home },
       cwd,
       timeoutMs: 10_000,

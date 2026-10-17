@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { spawn } from "node:child_process";
 import { connectRegisteredMcpServer, connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
 import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
+import { importArtifact } from "../../src/mcp/artifact-store.ts";
 
 // This is an actual child process speaking MCP's newline-delimited JSON-RPC protocol. It is intentionally
 // small enough to make the adversarial wire cases explicit instead of relying on an in-process server double.
 const SERVER = String.raw`
 const fs = require('node:fs');
+const pinnedHelper = require('./mcp-helper.cjs');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 const mode = process.env.TEST_MODE || 'normal';
@@ -26,6 +28,10 @@ if (process.env.RESOURCE_LIMITS_FILE) {
   const root = relative === null ? null : '/sys/fs/cgroup' + relative;
   const read = name => root === null ? null : fs.readFileSync(root + '/' + name, 'utf8').trim();
   fs.writeFileSync(process.env.RESOURCE_LIMITS_FILE, JSON.stringify({ relative, memoryMax: read('memory.max'), pidsMax: read('pids.max') }));
+}
+if (process.env.ARTIFACT_WRITE_PROBE_FILE) {
+  try { fs.writeFileSync(__dirname + '/artifact-write-probe', 'must fail'); fs.writeFileSync(process.env.ARTIFACT_WRITE_PROBE_FILE, JSON.stringify({ writable: true })); }
+  catch (error) { fs.writeFileSync(process.env.ARTIFACT_WRITE_PROBE_FILE, JSON.stringify({ writable: false, error: error.code || error.message })); }
 }
 if (process.env.HOST_PROBE_PATH) {
   try { fs.writeFileSync('external-read.json', JSON.stringify({ content: fs.readFileSync(process.env.HOST_PROBE_PATH, 'utf8') })); }
@@ -85,6 +91,7 @@ function onLine(line) {
       : mode === 'wrong-name' ? { name: 'unexpected-fixture', version: '1' }
       : mode === 'wrong-version' ? { name: 'local-fixture', version: '2' }
       : { name: 'local-fixture', version: '1' };
+    if (serverInfo.version === '1') serverInfo.version = pinnedHelper.version;
     reply(request.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo });
     return;
   }
@@ -143,7 +150,15 @@ process.stdin.on('data', chunk => {
 
 const dirs: string[] = [];
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  const makeWritable = (path: string): void => {
+    if (!lstatSync(path).isDirectory()) return;
+    chmodSync(path, 0o700);
+    for (const name of readdirSync(path)) makeWritable(join(path, name));
+  };
+  for (const dir of dirs.splice(0)) {
+    makeWritable(dir);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 function fixture(mode = "normal") {
@@ -160,6 +175,7 @@ function fixture(mode = "normal") {
   const observedEnvFile = join(dir, "observed-env");
   const initRequestFile = join(dir, "init-request");
   const resourceLimitsFile = join(dir, "resource-limits.json");
+  writeFileSync(join(dir, "mcp-helper.cjs"), "module.exports = { version: '1' };\n");
   const options = {
     command: process.execPath,
     args: ["-e", SERVER],
@@ -174,15 +190,21 @@ function fixture(mode = "normal") {
 }
 
 function registrationFor(options: ReturnType<typeof fixture>["options"], profiles: Record<string, string[]> = { worker: ["echo"] }) {
-  const serverPath = join(options.cwd!, "local-mcp-server.cjs");
+  const packageRoot = join(options.cwd!, "mcp-package");
+  mkdirSync(packageRoot, { recursive: true });
+  const serverPath = join(packageRoot, "local-mcp-server.cjs");
   writeFileSync(serverPath, SERVER);
+  writeFileSync(join(packageRoot, "mcp-helper.cjs"), readFileSync(join(options.cwd!, "mcp-helper.cjs")));
+  const artifactStoreRoot = join(options.cwd!, "mcp-artifacts");
+  const artifact = importArtifact(packageRoot, artifactStoreRoot);
   const validation = validateMcpServerRegistry([{
     id: "local-fixture",
     enabled: true,
     origin: "file:///tmp/local-fixture",
     version: "1.0.0",
     command: options.command,
-    args: [serverPath],
+    args: [],
+    artifact: { digest: artifact.digest, entrypoint: "local-mcp-server.cjs" },
     expectedServer: { name: "local-fixture", version: "1" },
     profiles,
   }], ["worker"]);
@@ -191,10 +213,12 @@ function registrationFor(options: ReturnType<typeof fixture>["options"], profile
 }
 
 function registeredOptions(options: ReturnType<typeof fixture>["options"], profiles?: Record<string, string[]>) {
+  const artifactStoreRoot = join(options.cwd!, "mcp-artifacts");
   return {
     registration: registrationFor(options, profiles),
     profileId: "worker",
-    env: options.env,
+    artifactStoreRoot,
+    env: { ...options.env, ARTIFACT_WRITE_PROBE_FILE: join(options.cwd!, "artifact-write-probe.json") },
     cwd: options.cwd,
     timeoutMs: options.timeoutMs,
     callTimeoutMs: options.callTimeoutMs,
@@ -304,6 +328,14 @@ test("server identity must include both name and version", async () => {
   assertServerStarted(pidFile);
 });
 
+test("registered MCP connection rejects a legacy unpinned entry before spawning", async () => {
+  const { options, pidFile } = fixture("normal");
+  const registered = registeredOptions(options);
+  const { artifact: _artifact, ...legacyRegistration } = registered.registration;
+  await assert.rejects(connectRegisteredMcpServer({ ...registered, registration: legacyRegistration }), /MCP_ARTIFACT_UNPINNED/);
+  assert.equal(existsSync(pidFile), false, "an unpinned artifact must be rejected before process startup");
+});
+
 test("registered MCP connection requires the exact operator-pinned server name and version", async (t) => {
   for (const mode of ["wrong-name", "wrong-version"]) {
     await t.test(`rejects ${mode}`, async () => {
@@ -316,10 +348,13 @@ test("registered MCP connection requires the exact operator-pinned server name a
 
 test("registered MCP connection exposes only the profile allowlist and blocks direct calls outside it", async () => {
   const { options, pidFile, callsFile } = fixture();
-  const client = await connectRegisteredMcpServer(registeredOptions(options, { worker: ["echo"] }));
+  const registered = registeredOptions(options, { worker: ["echo"] });
+  writeFileSync(join(options.cwd!, "mcp-package", "local-mcp-server.cjs"), "process.exit(25);\n");
+  const client = await connectRegisteredMcpServer(registered);
   try {
     const tools = await client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name), ["echo"], "tools/list must contain only the effective profile allowlist");
+    assert.deepEqual(JSON.parse(readFileSync(join(options.cwd!, "artifact-write-probe.json"), "utf8")), { writable: false, error: "EROFS" }, "the process must see the pinned package snapshot as read-only");
 
     await assert.rejects(client.callTool("raw", { text: "bypass" }), /not allowed|allowlist|not registered/i,
       "calling the unexposed tool directly must still be denied locally");
@@ -332,6 +367,17 @@ test("registered MCP connection exposes only the profile allowlist and blocks di
     await client.close();
   }
   assertServerStarted(pidFile);
+});
+
+test("registered MCP verifies the stored tree digest before spawning", async () => {
+  const { options, pidFile } = fixture();
+  const registered = registeredOptions(options);
+  const artifact = registered.registration.artifact!;
+  const storedEntrypoint = join(registered.artifactStoreRoot, artifact.digest.slice("sha256:".length), artifact.entrypoint);
+  chmodSync(storedEntrypoint, 0o644);
+  writeFileSync(storedEntrypoint, "process.exit(26);\n");
+  await assert.rejects(connectRegisteredMcpServer(registered), /digest mismatch/);
+  assert.equal(existsSync(pidFile), false, "a modified content-addressed tree must fail before spawn");
 });
 
 test("a registered MCP process cannot start without an absolute scratch HOME", async () => {

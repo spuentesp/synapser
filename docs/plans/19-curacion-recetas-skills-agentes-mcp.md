@@ -185,12 +185,33 @@ tras el cierre. Esto no afirma resistencia ante un exploit del kernel.
 
 El registro inicial en `mcpServers` es solo configuración declarativa operator-owned: exige un id,
 estado habilitado explícito, localizador HTTPS o `file:` sin credenciales, versión declarada,
-ejecutable absoluto, argumentos separados, identidad de servidor esperada y allowlists por perfil
-conocido. No instala ni descarga el artefacto, no comprueba origen/digest ni inicia el proceso; esos
-campos son metadatos declarativos, no pins de reproducibilidad. No acepta variables de entorno. Un
+runtime absoluto, argumentos separados, identidad de servidor esperada y allowlists por perfil
+conocido. `synapser mcp artifact import <directorio-local> <entrypoint>` copia un paquete local
+al almacén `state/mcp-artifacts/<digest>`; el digest versionado cubre rutas POSIX ordenadas,
+bandera ejecutable y bytes. Se rechazan symlinks, archivos especiales, rutas no normalizadas y
+árboles que excedan los límites de importación. Cada descubrimiento requiere el pin, crea una copia
+efímera, vuelve a verificar el árbol y monta esa copia en solo lectura antes de iniciar el runtime.
+Una entrada legacy sin pin se puede leer y mostrar, pero el endpoint la rechaza antes del spawn.
+
+El pin acredita integridad de la copia local importada, no que el origen remoto declarado produzca
+esos bytes: no se descarga ni valida firma upstream. El runtime configurado y las bibliotecas del
+sistema tampoco forman parte del digest. `origin` y `version` siguen siendo procedencia declarativa,
+no prueba criptográfica. El importador no ejecuta el paquete y no acepta variables de entorno. Un
 filtro de marcadores comunes en `args` es solo higiene y no detecta todos los secretos; no se debe
-tratar como control de divulgación. Hasta verificar el broker, el ejecutable y sus argumentos se
-consideran código de confianza del operador y el registro no basta para habilitar una llamada.
+tratar como control de divulgación. No hay aún ciclo visual de registro/edición, llamada de prueba,
+revocación ni integración de las herramientas con agentes/recetas; hasta conectar el broker, los
+agentes no reciben herramientas MCP.
+
+**RCP6d — Integridad del paquete MCP ejecutado**: un proceso registrado solo puede arrancar desde
+una copia aislada cuyo árbol completo coincide con el digest SHA-256 fijado; la configuración legacy
+sin pin falla cerrada antes de crear el proceso. El digest cubre rutas relativas POSIX, bit ejecutable
+y bytes; symlinks, especiales, traversal y tamaños fuera de límites se rechazan. *Verificador:*
+importar el mismo árbol produce el mismo digest, cambiar bytes/modo altera el digest, la ejecución
+resuelve un import relativo desde el paquete copiado aunque cambie la fuente, y alterar el almacén
+detiene el spawn antes del handshake; un proceso real informa que el árbol está montado de solo
+lectura. *Falsación:* un pin ausente/alterado ejecuta el proceso, la copia difiere del digest, una
+dependencia relativa se resuelve desde la fuente mutable, un symlink escapa del árbol o se presenta
+el digest local como prueba del origen remoto o del runtime del host.
 
 El catálogo MCP de tareas vincula recetas publicadas con las integraciones necesarias. `task_request`
 explica qué servidor/herramientas asignará y por qué; el inicio falla cerrado si falta una integración,

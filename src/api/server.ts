@@ -228,7 +228,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       }
     }
     if (top === "mcp" && id === undefined && method === "GET") {
-      const servers = (c.mcpServers?.() ?? []).map(({ id, enabled, version, expectedServer, profiles }) => ({ id, enabled, version, expectedServer, profiles }));
+      const servers = (c.mcpServers?.() ?? []).map(({ id, enabled, version, expectedServer, profiles, artifact }) => ({ id, enabled, version, expectedServer, profiles, artifactPinned: artifact !== undefined }));
       return json(res, 200, { servers });
     }
     if (top === "mcp" && id && action === "discover" && method === "POST") {
@@ -240,6 +240,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
       if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
       if (!Object.hasOwn(registration.profiles, body.profileId)) return fail(res, 403, "MCP_PROFILE_NOT_CONFIGURED");
+      if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
       try {
         return json(res, 200, await c.mcpDiscover(id, body.profileId));
       } catch (error) {

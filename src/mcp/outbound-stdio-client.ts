@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
@@ -7,6 +8,7 @@ import { Client, SdkErrorCode, type CallToolResult, type JSONRPCMessage, type To
 import { DEFAULT_INHERITED_ENV_VARS, StdioClientTransport, type StdioServerParameters } from "@modelcontextprotocol/client/stdio";
 import { AGENT_MEMORY_MAX_BYTES, AGENT_TASKS_MAX } from "../agents/limits.ts";
 import type { McpServerRegistration } from "./registry.ts";
+import { materializePinnedArtifact, removeMaterializedArtifact } from "./artifact-store.ts";
 
 /** JSON data that can safely cross the MCP stdio boundary. */
 export type McpJson = null | boolean | number | string | McpJson[] | { [key: string]: McpJson };
@@ -32,6 +34,10 @@ export interface OutboundMcpClientOptions {
   killGraceMs?: number;
   maxMessageBytes?: number;
   signal?: AbortSignal;
+  /** Host path to a verified per-invocation package snapshot, mounted read-only by bwrap. */
+  artifactRoot?: string;
+  /** Normalized package-relative script path; used as the first runtime argument. */
+  artifactEntrypoint?: string;
 }
 
 export interface ConnectStdioMcpServerOptions {
@@ -52,6 +58,7 @@ export interface ConnectStdioMcpServerOptions {
 export interface ConnectRegisteredMcpServerOptions extends Omit<ConnectStdioMcpServerOptions, "command" | "args"> {
   registration: McpServerRegistration;
   profileId: string;
+  artifactStoreRoot: string;
 }
 
 export interface ConnectedStdioMcpServer {
@@ -70,6 +77,13 @@ export interface OutboundMcpToolResult {
 }
 
 export type OutboundMcpState = "new" | "starting" | "ready" | "stopping" | "closed" | "halted";
+
+class OutboundMcpStartError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("registered MCP server startup failed and scope teardown could not be confirmed; its artifact snapshot was retained", options);
+    this.name = "OutboundMcpStartError";
+  }
+}
 
 const MAX_DEPTH = 64;
 const MAX_KEYS = 20_000;
@@ -310,10 +324,20 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
   const command = realpathSync(options.command);
   const systemRoot = realpathSync("/usr");
   const commandInSystem = within(systemRoot, command);
+  const hasArtifact = options.artifactRoot !== undefined || options.artifactEntrypoint !== undefined;
+  if (hasArtifact && (!options.artifactRoot || !options.artifactEntrypoint)) {
+    throw new Error("pinned MCP artifacts require a complete artifact mount");
+  }
   const commandInWorkspace = within(workspace, command);
   const commandIsFile = statSync(command).isFile();
   if (!commandInSystem && !commandInWorkspace && !commandIsFile) {
     throw new Error("outbound MCP executable must be in /usr or the approved workspace");
+  }
+  const artifactRoot = options.artifactRoot ? realpathSync(options.artifactRoot) : undefined;
+  const artifactHostEntrypoint = artifactRoot && options.artifactEntrypoint
+    ? realpathSync(join(artifactRoot, ...options.artifactEntrypoint.split("/"))) : undefined;
+  if (artifactRoot && (!statSync(artifactRoot).isDirectory() || !artifactHostEntrypoint || !within(artifactRoot, artifactHostEntrypoint) || !statSync(artifactHostEntrypoint).isFile())) {
+    throw new Error("pinned MCP artifact entrypoint is not a regular file in the verified tree");
   }
   const sandboxCommand = commandInSystem || commandInWorkspace ? command : "/opt/synapser-mcp-runtime";
 
@@ -346,14 +370,17 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
   // siblings stay hidden; the workspace is the sole writable project mount.
   addSandboxParents(bwrapArgs, workspace);
   bwrapArgs.push("--bind", workspace, workspace);
-  if (!commandInSystem && !commandInWorkspace) {
-    bwrapArgs.push("--dir", "/opt", "--ro-bind", command, sandboxCommand);
-  }
+  if ((!commandInSystem && !commandInWorkspace) || artifactRoot) bwrapArgs.push("--dir", "/opt");
+  if (!commandInSystem && !commandInWorkspace) bwrapArgs.push("--ro-bind", command, sandboxCommand);
+  if (artifactRoot) bwrapArgs.push("--ro-bind", artifactRoot, "/opt/synapser-mcp-artifact");
   if (!within(workspace, home)) addSandboxParents(bwrapArgs, home);
   bwrapArgs.push("--bind", home, home, "--chdir", workspace, "--clearenv");
   bwrapArgs.push("--remount-ro", "/");
   for (const [key, value] of Object.entries(childEnv)) bwrapArgs.push("--setenv", key, value);
-  bwrapArgs.push("--", sandboxCommand, ...(options.args ?? []));
+  const runtimeArgs = artifactRoot && options.artifactEntrypoint
+    ? [`/opt/synapser-mcp-artifact/${options.artifactEntrypoint}`, ...(options.args ?? [])]
+    : [...(options.args ?? [])];
+  bwrapArgs.push("--", sandboxCommand, ...runtimeArgs);
 
   const unit = `synapser-mcp-${process.pid}-${randomUUID()}.scope`;
   const outerEnv: Record<string, string> = {};
@@ -705,9 +732,26 @@ class OutboundStdioMcpClient {
 }
 
 /** Connect to one operator-registered MCP stdio process using only the supported lifecycle and tool methods. */
+async function startOutboundMcpClient(options: OutboundMcpClientOptions): Promise<ConnectedStdioMcpServer> {
+  const client = new OutboundStdioMcpClient(options);
+  try {
+    await client.start();
+  } catch (error) {
+    if (client.state === "halted") throw new OutboundMcpStartError({ cause: error });
+    throw error;
+  }
+  return {
+    serverInfo: client.serverInfo,
+    capabilities: client.capabilities,
+    listTools: (requestOptions) => client.listTools(requestOptions),
+    callTool: (name, arguments_, requestOptions) => client.callTool(name, arguments_, requestOptions),
+    close: () => client.close(),
+  };
+}
+
 export async function connectStdioMcpServer(options: ConnectStdioMcpServerOptions): Promise<ConnectedStdioMcpServer> {
   const commonTimeout = options.timeoutMs ?? 10_000;
-  const client = new OutboundStdioMcpClient({
+  return startOutboundMcpClient({
     command: options.command,
     args: options.args,
     env: options.env,
@@ -718,14 +762,6 @@ export async function connectStdioMcpServer(options: ConnectStdioMcpServerOption
     maxMessageBytes: options.maxMessageBytes,
     signal: options.signal,
   });
-  await client.start();
-  return {
-    serverInfo: client.serverInfo,
-    capabilities: client.capabilities,
-    listTools: (requestOptions) => client.listTools(requestOptions),
-    callTool: (name, arguments_, requestOptions) => client.callTool(name, arguments_, requestOptions),
-    close: () => client.close(),
-  };
 }
 
 /**
@@ -754,28 +790,70 @@ export async function connectRegisteredMcpServer(options: ConnectRegisteredMcpSe
     throw new Error("registered MCP profile has no explicit valid tool allowlist");
   }
 
+  const artifact = registration["artifact"];
+  if (!plainObject(artifact) || typeof artifact["digest"] !== "string" || typeof artifact["entrypoint"] !== "string") {
+    throw new Error("MCP_ARTIFACT_UNPINNED: registered MCP server has no pinned artifact");
+  }
+  const entrypoint = artifact["entrypoint"];
+  if (!/^sha256:[a-f0-9]{64}$/.test(artifact["digest"]) || entrypoint.length === 0 || entrypoint.startsWith("/") ||
+    entrypoint.includes("\\") || entrypoint.split("/").some((part) => part.length === 0 || part === "." || part === "..")) {
+    throw new Error("registered MCP artifact pin is invalid");
+  }
+
   const allowed = new Set(rawAllowlist as string[]);
   const expected = { name: expectedName, version: expectedVersion };
   const command = registration["command"];
   const args = [...registration["args"]] as string[];
-  const client = await connectStdioMcpServer({ ...options, command, args });
-  if (client.serverInfo.name !== expected.name || client.serverInfo.version !== expected.version) {
-    try {
-      await client.close();
-    } catch {
-      throw new Error("registered MCP server identity mismatched and process cleanup could not be confirmed");
-    }
-    throw new Error("registered MCP server identity did not match the operator-pinned server");
-  }
-
-  return {
-    serverInfo: client.serverInfo,
-    capabilities: client.capabilities,
-    listTools: async (requestOptions) => (await client.listTools(requestOptions)).filter((tool) => allowed.has(tool.name)),
-    callTool: (name, arguments_, requestOptions) => {
-      if (!allowed.has(name)) return Promise.reject(new Error("MCP tool is not allowlisted for this profile"));
-      return client.callTool(name, arguments_, requestOptions);
-    },
-    close: () => client.close(),
+  const materializationRoot = mkdtempSync(join(tmpdir(), "synapser-mcp-invocation-"));
+  const materializedArtifact = join(materializationRoot, "artifact");
+  let client: ConnectedStdioMcpServer | undefined;
+  const cleanup = (): void => {
+    if (existsSync(materializedArtifact)) removeMaterializedArtifact(materializedArtifact, materializationRoot);
+    rmSync(materializationRoot, { recursive: true, force: true });
   };
+  try {
+    materializePinnedArtifact(options.artifactStoreRoot, artifact["digest"], materializedArtifact);
+    client = await startOutboundMcpClient({
+      command,
+      args,
+      env: options.env,
+      cwd: options.cwd,
+      startupTimeoutMs: options.startupTimeoutMs ?? options.timeoutMs ?? 10_000,
+      callTimeoutMs: options.callTimeoutMs ?? options.timeoutMs ?? 10_000,
+      killGraceMs: options.killGraceMs,
+      maxMessageBytes: options.maxMessageBytes,
+      signal: options.signal,
+      artifactRoot: materializedArtifact,
+      artifactEntrypoint: entrypoint,
+    });
+    if (client.serverInfo.name !== expected.name || client.serverInfo.version !== expected.version) {
+      try {
+        await client.close();
+      } catch {
+        throw new Error("registered MCP server identity mismatched and process cleanup could not be confirmed");
+      }
+      client = undefined;
+      throw new Error("registered MCP server identity did not match the operator-pinned server");
+    }
+
+    const connected = client;
+    return {
+      serverInfo: connected.serverInfo,
+      capabilities: connected.capabilities,
+      listTools: async (requestOptions) => (await connected.listTools(requestOptions)).filter((tool) => allowed.has(tool.name)),
+      callTool: (name, arguments_, requestOptions) => {
+        if (!allowed.has(name)) return Promise.reject(new Error("MCP tool is not allowlisted for this profile"));
+        return connected.callTool(name, arguments_, requestOptions);
+      },
+      close: async () => {
+        await connected.close();
+        cleanup();
+      },
+    };
+  } catch (error) {
+    if (error instanceof OutboundMcpStartError) throw error;
+    if (client) await client.close();
+    cleanup();
+    throw error;
+  }
 }

@@ -7,9 +7,11 @@ export interface McpServerRegistration {
   /** Provenance locator only; registering an origin does not download or verify the executable. */
   origin: string;
   version: string;
-  /** Absolute executable path plus individual argv values; never interpreted by a shell. */
+  /** Absolute host runtime; pinned entrypoint is prepended, and argv values stay separate. */
   command: string;
   args: string[];
+  /** Operator-imported package tree. Legacy entries can still be read but cannot be spawned without this pin. */
+  artifact?: { digest: string; entrypoint: string };
   expectedServer: { name: string; version: string };
   /** Per-profile allowlist of tool names. A profile absent from this map has no tools enabled. */
   profiles: Record<string, string[]>;
@@ -20,6 +22,7 @@ const PROFILE_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const TOOL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const SECRET_MARKER = /(?:api[-_]?key|access[-_]?token|token|authorization|bearer|password|secret|credential)/i;
 const FLOATING_VERSION = /^(?:latest|current|stable|main|master|\*)$/i;
+const SHA256 = /^sha256:[a-f0-9]{64}$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,7 +60,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
       errors.push(`${at} must be an object`);
       return;
     }
-    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "expectedServer", "profiles"], at, errors);
+    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "artifact", "expectedServer", "profiles"], at, errors);
 
     const id = entry["id"];
     if (typeof id !== "string" || !ID.test(id)) errors.push(`${at}.id must match [a-z0-9][a-z0-9_-]*`);
@@ -79,6 +82,26 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
     const args = entry["args"];
     if (!Array.isArray(args) || args.some((arg) => typeof arg !== "string" || arg.includes("\0"))) errors.push(`${at}.args must be an array of individual strings`);
     else if (args.some((arg) => SECRET_MARKER.test(arg))) errors.push(`${at}.args contains a common credential marker; credential references are not supported`);
+
+    const artifact = entry["artifact"];
+    let pinnedArtifact: McpServerRegistration["artifact"];
+    if (artifact !== undefined) {
+      if (!isObject(artifact)) errors.push(`${at}.artifact must contain a SHA-256 tree digest and relative entrypoint`);
+      else {
+        exactKeys(artifact, ["digest", "entrypoint"], `${at}.artifact`, errors);
+        if (typeof artifact["digest"] !== "string" || !SHA256.test(artifact["digest"])) errors.push(`${at}.artifact.digest must be a sha256:<lowercase-hex> tree digest`);
+        const entrypoint = artifact["entrypoint"];
+        if (typeof entrypoint !== "string" || entrypoint.length === 0 || entrypoint.startsWith("/") || entrypoint.includes("\\") ||
+          entrypoint.split("/").some((part) => part.length === 0 || part === "." || part === "..") || entrypoint.includes("\0")) {
+          errors.push(`${at}.artifact.entrypoint must be a normalized relative POSIX path`);
+        }
+        if (typeof artifact["digest"] === "string" && SHA256.test(artifact["digest"]) && typeof entrypoint === "string" &&
+          entrypoint.length > 0 && !entrypoint.startsWith("/") && !entrypoint.includes("\\") &&
+          !entrypoint.split("/").some((part) => part.length === 0 || part === "." || part === "..") && !entrypoint.includes("\0")) {
+          pinnedArtifact = { digest: artifact["digest"], entrypoint };
+        }
+      }
+    }
 
     const expected = entry["expectedServer"];
     let expectedServer: { name: string; version: string } | undefined;
@@ -108,7 +131,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
     }
 
     if (typeof id === "string" && ID.test(id) && typeof enabled === "boolean" && validOrigin(origin) && typeof version === "string" && version.trim() === version && version.length > 0 && version.length <= 128 && typeof command === "string" && isAbsolute(command) && !command.includes("\0") && Array.isArray(args) && args.every((arg) => typeof arg === "string" && !arg.includes("\0") && !SECRET_MARKER.test(arg)) && expectedServer && isObject(profiles)) {
-      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], expectedServer, profiles: allowlists });
+      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], ...(pinnedArtifact ? { artifact: pinnedArtifact } : {}), expectedServer, profiles: allowlists });
     }
   });
 

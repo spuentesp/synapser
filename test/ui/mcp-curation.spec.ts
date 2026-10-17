@@ -14,6 +14,7 @@ test("MCP curation discovers only the profile allowlist without exposing process
 
   const server = page.getByTestId("mcp-server-ui-review-tools");
   await expect(server).toContainText("ui-review-tools");
+  await expect(server).toContainText("artifact pinned");
   await page.getByRole("button", { name: "Discover tools" }).click();
   const discovery = page.getByTestId("mcp-discovery-ui-review-tools");
   await expect(discovery).toContainText("ui-review-tools-fixture 1");

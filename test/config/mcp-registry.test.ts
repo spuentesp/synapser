@@ -12,6 +12,7 @@ const entry = (patch: Record<string, unknown> = {}) => ({
   version: "1.4.2",
   command: "/opt/synapser/mcp/review-tools",
   args: ["--stdio", "--mode", "review"],
+  artifact: { digest: `sha256:${"a".repeat(64)}`, entrypoint: "bin/review-tools" },
   expectedServer: { name: "review-tools", version: "1.4.2" },
   profiles: { "codex-writer": ["inspect_diff", "read_file"] },
   ...patch,
@@ -38,6 +39,15 @@ describe("operator MCP process registry", () => {
   test("accepts absolute file origins and explicit disabled entries", () => {
     const server = entry({ enabled: false, origin: "file:///opt/synapser/mcp/review-tools/manifest.json" });
     assert.deepEqual(load({ mcpServers: [server] }).mcpServers, [server]);
+  });
+
+  test("accepts a normalized content-addressed artifact entrypoint and rejects malformed pins", () => {
+    assert.deepEqual(load({ mcpServers: [entry()] }).mcpServers[0]?.artifact, {
+      digest: `sha256:${"a".repeat(64)}`, entrypoint: "bin/review-tools",
+    });
+    rejects({ mcpServers: [entry({ artifact: { digest: "not-a-digest", entrypoint: "bin/tool" } })] }, /sha256:<lowercase-hex>/);
+    rejects({ mcpServers: [entry({ artifact: { digest: `sha256:${"a".repeat(64)}`, entrypoint: "../tool" } })] }, /normalized relative POSIX path/);
+    rejects({ mcpServers: [entry({ artifact: { digest: `sha256:${"a".repeat(64)}`, entrypoint: "/tool" } })] }, /normalized relative POSIX path/);
   });
 
   test("requires enabled to be explicit, an absolute command, and an argv array", () => {

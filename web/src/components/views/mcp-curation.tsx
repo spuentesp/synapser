@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/i18n'
 type McpServer = {
   id: string
   enabled: boolean
+  artifactPinned: boolean
   version: string
   expectedServer: { name: string; version: string }
   profiles: Record<string, string[]>
@@ -63,7 +64,7 @@ export function McpCuration({ session }: { session: boolean }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="font-medium">{server.id}</h3>
-                  <p className="text-xs text-muted-foreground">{server.enabled ? t('mcpEnabled') : t('mcpDisabled')} · {t('mcpExpectedIdentity')}: {server.expectedServer.name} {server.expectedServer.version} · {t('mcpConfiguredVersion')}: {server.version}</p>
+                  <p className="text-xs text-muted-foreground">{server.enabled ? t('mcpEnabled') : t('mcpDisabled')} · {server.artifactPinned ? t('mcpArtifactPinned') : t('mcpArtifactUnpinned')} · {t('mcpExpectedIdentity')}: {server.expectedServer.name} {server.expectedServer.version} · {t('mcpConfiguredVersion')}: {server.version}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {profiles.length > 0 ? <select
@@ -72,7 +73,7 @@ export function McpCuration({ session }: { session: boolean }) {
                     value={profileIds[server.id] ?? ''}
                     onChange={(event) => setProfileIds((current) => ({ ...current, [server.id]: event.target.value }))}
                   >{profiles.map((profile) => <option key={profile} value={profile}>{profile}</option>)}</select> : <span className="text-sm text-muted-foreground">{t('mcpNoProfiles')}</span>}
-                  <Button size="sm" variant="outline" disabled={!session || !server.enabled || profiles.length === 0 || busy !== null} onClick={() => void discover(server)}>
+                  <Button size="sm" variant="outline" disabled={!session || !server.enabled || !server.artifactPinned || profiles.length === 0 || busy !== null} onClick={() => void discover(server)}>
                     {busy === server.id ? t('mcpDiscovering') : t('mcpDiscover')}
                   </Button>
                 </div>

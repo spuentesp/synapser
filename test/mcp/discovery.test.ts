@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -7,6 +7,7 @@ import { createApi, type ApiServer } from "../../src/api/server.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
 import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
 import { discoverRegisteredMcpServer } from "../../src/mcp/discovery.ts";
+import { importArtifact } from "../../src/mcp/artifact-store.ts";
 
 const temporary: string[] = [];
 let api: ApiServer | undefined;
@@ -17,7 +18,15 @@ afterEach(async () => {
   await manager?.close();
   api = undefined;
   manager = undefined;
-  for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
+  const makeWritable = (path: string): void => {
+    if (!lstatSync(path).isDirectory()) return;
+    chmodSync(path, 0o700);
+    for (const name of readdirSync(path)) makeWritable(join(path, name));
+  };
+  for (const path of temporary.splice(0)) {
+    makeWritable(path);
+    rmSync(path, { recursive: true, force: true });
+  }
 });
 
 test("operator MCP discovery crosses HTTP and a real process, filters tools, and never calls one", async () => {
@@ -32,13 +41,20 @@ test("operator MCP discovery crosses HTTP and a real process, filters tools, and
     "process.stdin.setEncoding('utf8');",
     "process.stdin.on('data', chunk => { input += chunk; for (;;) { const i = input.indexOf('\\n'); if (i < 0) return; const line = input.slice(0, i); input = input.slice(i + 1); const request = JSON.parse(line); if (request.method === 'initialize') reply(request.id, { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'local-discovery-fixture', version: '1' } }); else if (request.method === 'tools/list') reply(request.id, { tools: [{ name: 'inspect', inputSchema: { type: 'object' } }, { name: 'write', inputSchema: { type: 'object' } }] }); else if (request.method === 'tools/call') process.exit(24); else if (request.id !== undefined) reply(request.id, {}); } });",
   ].join("\n");
+  const packageRoot = join(fixtureDir, "package");
+  mkdirSync(packageRoot);
+  const serverPath = join(packageRoot, "server.cjs");
+  writeFileSync(serverPath, serverSource);
+  const artifactStoreRoot = join(fixtureDir, "artifact-store");
+  const artifact = importArtifact(packageRoot, artifactStoreRoot);
   const parsed = validateMcpServerRegistry([{
     id: "local-discovery",
     enabled: true,
     origin: "file:///tmp/local-discovery-fixture",
     version: "1.0.0",
     command: process.execPath,
-    args: ["-e", serverSource],
+    args: [],
+    artifact: { digest: artifact.digest, entrypoint: "server.cjs" },
     expectedServer: { name: "local-discovery-fixture", version: "1" },
     profiles: { worker: ["inspect"] },
   }], ["worker"]);
@@ -48,7 +64,7 @@ test("operator MCP discovery crosses HTTP and a real process, filters tools, and
   const connect = (id: string, profileId: string) => {
     assert.equal(id, registration.id);
     discoveryCalls++;
-    return discoverRegisteredMcpServer(registration, profileId);
+    return discoverRegisteredMcpServer(registration, profileId, artifactStoreRoot);
   };
   manager = new WorkflowManager({ stateDir, workspaceRoot: workspace, commandIds: new Set(), profileIds: new Set(["worker"]), pollMs: 10, engine: { run: async () => ({ status: "DONE", reason: null }) } });
   api = createApi({
@@ -61,7 +77,7 @@ test("operator MCP discovery crosses HTTP and a real process, filters tools, and
   const summary = await listed.json() as { servers: Record<string, unknown>[] };
   assert.deepEqual(summary.servers[0], {
     id: "local-discovery", enabled: true, version: "1.0.0",
-    expectedServer: { name: "local-discovery-fixture", version: "1" }, profiles: { worker: ["inspect"] },
+    expectedServer: { name: "local-discovery-fixture", version: "1" }, profiles: { worker: ["inspect"] }, artifactPinned: true,
   });
   assert.equal(JSON.stringify(summary).includes(registration.command), false, "the UI summary must not reveal executable paths");
   assert.equal(JSON.stringify(summary).includes(serverSource), false, "the UI summary must not reveal command arguments");
@@ -86,4 +102,34 @@ test("operator MCP discovery crosses HTTP and a real process, filters tools, and
   assert.equal("capabilities" in result, true);
   assert.equal(discoveryCalls, 1);
   // The fixture exits on tools/call, so a successful discovery also proves no tool was invoked.
+});
+
+test("HTTP discovery rejects an unpinned legacy server before invoking its connector", async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "synapser-mcp-unpinned-state-"));
+  const fixtureDir = mkdtempSync(join(tmpdir(), "synapser-mcp-unpinned-fixture-"));
+  temporary.push(stateDir, fixtureDir);
+  const workspace = join(fixtureDir, "workspace");
+  mkdirSync(workspace);
+  const parsed = validateMcpServerRegistry([{
+    id: "legacy-server", enabled: true, origin: "file:///tmp/legacy", version: "1",
+    command: "/usr/bin/node", args: [], expectedServer: { name: "legacy", version: "1" }, profiles: { worker: ["inspect"] },
+  }], ["worker"]);
+  if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+  let attemptedSpawn = false;
+  manager = new WorkflowManager({ stateDir, workspaceRoot: workspace, commandIds: new Set(), profileIds: new Set(["worker"]), pollMs: 10, engine: { run: async () => ({ status: "DONE", reason: null }) } });
+  api = createApi({
+    stateDir,
+    control: { manager, mcpServers: () => parsed.servers, mcpDiscover: async () => { attemptedSpawn = true; throw new Error("must not be reached"); } },
+  });
+  const base = `http://127.0.0.1:${await api.listen(0)}`;
+  const listed = await (await fetch(`${base}/api/mcp`)).json() as { servers: { artifactPinned: boolean }[] };
+  assert.equal(listed.servers[0]?.artifactPinned, false);
+  const response = await fetch(`${base}/api/mcp/legacy-server/discover`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: base, "x-synapser-token": api.token },
+    body: JSON.stringify({ profileId: "worker" }),
+  });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { error: "MCP_ARTIFACT_UNPINNED" });
+  assert.equal(attemptedSpawn, false);
 });
