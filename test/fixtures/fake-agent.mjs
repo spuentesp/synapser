@@ -94,7 +94,11 @@ switch (mode) {
     ok();
     break;
   case "inspect-home-skills":
-    writeFileSync("home-skills.json", JSON.stringify({ privateVisible: existsSync(`${process.env.HOME}/.claude/skills/private-skill`) }));
+    writeFileSync("home-skills.json", JSON.stringify({
+      privateVisible: existsSync(`${process.env.HOME}/.claude/skills/private-skill`),
+      settings: readFileSync(`${process.env.HOME}/.claude/settings.json`, "utf8"),
+      operatorLinkVisible: existsSync(`${process.env.HOME}/.claude/operator-link.json`),
+    }));
     ok();
     break;
   case "resource-limits": {

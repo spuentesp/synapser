@@ -5,9 +5,9 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { type Digest, MAX_ACTION_FILE_BYTES, observeFile } from "../digest/file.ts";
 import type { Journal } from "../journal/journal.ts";
 import { procStartTicks } from "../recovery/children.ts";
@@ -15,7 +15,8 @@ import { listTree, takeSnapshot, treeEntries } from "../validation/snapshot.ts";
 import { NO_INJECTED_SKILLS, PROFILE_CLI_ADAPTER, type AgentAdapter, type InjectedSkills } from "./adapter.ts";
 import type { AgentProfile } from "./profile.ts";
 import { type InjectedProvider, planInjection } from "./inject.ts";
-import { boundedAgentArgv } from "./limits.ts";
+import { boundedAgentArgv, stopAgentScope } from "./limits.ts";
+import { sandboxAgentArgv } from "./sandbox.ts";
 import { assertSkillPolicyUnchanged, materializeAdapterFiles, type RecordedSkill, validateInjectedSkills } from "./skills.ts";
 import { type KimiOptions, type Outcome, type ParsedRun, type UsageRecord } from "./usage.ts";
 
@@ -68,24 +69,32 @@ export function makeScratchHome(scratch: string, profile: AgentProfile, realHome
   for (const rel of profile.homeOverlay ?? []) {
     if (!realHome || rel.startsWith("/") || rel.includes("..")) continue;
     const src = join(realHome, rel);
-    if (!existsSync(src)) continue;
+    let sourceStat;
+    try { sourceStat = lstatSync(src); } catch { continue; }
+    if (sourceStat.isSymbolicLink()) continue;
     const dst = join(home, rel);
-    // Claude discovers user skills below ~/.claude/skills. Mirror its state one entry at a time so
-    // that directory can be replaced inside scratch without exposing or mutating the real one.
-    if (rel === ".claude" && statSync(src).isDirectory()) {
-      mkdirSync(dst, { recursive: true });
-      for (const name of readdirSync(src)) {
-        if (name === "skills") continue;
-        symlinkSync(join(src, name), join(dst, name));
+    const copyTree = (source: string, target: string): void => {
+      let stat;
+      try { stat = lstatSync(source); } catch { return; }
+      if (stat.isSymbolicLink()) return;
+      if (stat.isDirectory()) {
+        mkdirSync(target, { recursive: true, mode: stat.mode & 0o777 });
+        for (const name of readdirSync(source)) {
+          copyTree(join(source, name), join(target, name));
+        }
+      } else if (stat.isFile()) {
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(source, target);
       }
+    };
+    // Keep the approved Claude login overlay, but copy only regular files/directories. Symlinks
+    // could otherwise lead from scratch HOME back into arbitrary operator-owned paths.
+    if (rel === ".claude" && sourceStat.isDirectory()) {
+      mkdirSync(dst, { recursive: true });
+      for (const name of readdirSync(src)) if (name !== "skills") copyTree(join(src, name), join(dst, name));
       continue;
     }
-    mkdirSync(join(dst, ".."), { recursive: true });
-    try {
-      symlinkSync(src, dst);
-    } catch {
-      /* already linked */
-    }
+    copyTree(src, dst);
   }
   return home;
 }
@@ -147,8 +156,16 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       let stderr = "";
       let timedOut = false;
       let child;
+      const scopeUnit = `synapser-agent-${randomUUID()}.scope`;
+      const scopeTransport: Record<string, string> = { PATH: process.env["PATH"] ?? "/usr/bin:/bin" };
+      for (const key of ["HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"]) {
+        const value = process.env[key];
+        if (value) scopeTransport[key] = value;
+      }
+      let scopeStarted = false;
       try {
-        const bounded = boundedAgentArgv(argv);
+        const sandboxed = sandboxAgentArgv(argv, { workspaceRoot: o.workspaceRoot, work, home, scratch, env: invocation.env });
+        const bounded = boundedAgentArgv(sandboxed, scopeUnit);
         // systemd-run needs the user's session bus to create its transient scope. Pass only the
         // two transport variables to that launcher; the wrapper unsets them before exec'ing the CLI.
         const scopeEnv = {
@@ -157,6 +174,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
           ...(process.env["XDG_RUNTIME_DIR"] ? { XDG_RUNTIME_DIR: process.env["XDG_RUNTIME_DIR"] } : {}),
         };
         child = spawn(bounded[0] as string, bounded.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: scopeEnv });
+        scopeStarted = true;
       } catch (e) {
         return resolve({ code: null, signal: null, timedOut: false, stdout, stderr, spawnError: String((e as Error).message) });
       }
@@ -179,16 +197,21 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
         } catch {
           /* gone */
         }
+        void stopAgentScope(scopeUnit, scopeTransport);
       }, profile.timeoutMs);
-      const finish = (code: number | null, signal: string | null, spawnError: string | null) => {
+      let finished = false;
+      const finish = async (code: number | null, signal: string | null, spawnError: string | null) => {
+        if (finished) return;
+        finished = true;
         clearTimeout(timer);
         try {
           if (pid !== undefined) process.kill(-pid, "SIGKILL"); // nothing from the group outlives the run
         } catch {
           /* none left */
         }
-        if (registered && pid !== undefined) journal.tx((t) => t.removeChild(pid));
-        resolve({ code, signal, timedOut, stdout, stderr, spawnError });
+        const scopeStopped = !scopeStarted || await stopAgentScope(scopeUnit, scopeTransport);
+        if (registered && pid !== undefined && scopeStopped) journal.tx((t) => t.removeChild(pid));
+        resolve({ code, signal, timedOut, stdout, stderr, spawnError: scopeStopped ? spawnError : "agent systemd scope cleanup could not be verified" });
       };
       child.on("error", (e) => finish(null, null, e.message));
       child.on("close", (code, signal) => finish(code, signal, null));

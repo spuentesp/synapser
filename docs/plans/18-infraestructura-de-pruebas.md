@@ -93,9 +93,9 @@ Opcionales con decisión propia: E10 verificación formal (TLA+), E11 simulació
 
 ### E6 — Sandbox de ejecución
 
-**Objetivo:** que las tareas de agente corran aislados, con red limitada, y que el aislamiento se pruebe.
+**Objetivo:** que las tareas de agente corran con límites comprobables de filesystem y recursos. La red de los CLIs permanece abierta por decisión K7 del operador; no se afirma aislamiento de red en producción.
 
-- **H6.1** Arnés de sandbox con `bwrap`: sistema de archivos de solo lectura salvo el espacio de trabajo, sin acceso a la red salvo loopback hacia el endpoint falso. *Criterio:* una prueba intenta leer `~/.ssh`, escribir fuera del espacio y conectarse a un endpoint falso de loopback; las tres acciones deben fallar desde el sandbox.
+- **H6.1** El runner productivo ejecuta cada CLI con `bwrap`: raíz de solo lectura, HOME/checkout del operador y temporales del host ocultos, `/proc` privado y solo la copia de trabajo y HOME efímero escribibles. *Criterio:* una prueba del `runAgent` real intenta leer por ruta absoluta centinelas del HOME y de `/run`, y escribir fuera de `work`; todo acceso debe fallar. La red no se aísla en producción por K7; H6.3 solo comprueba localmente la alternativa de proxy autorizada.
 - **H6.2** Pruebas de fuga de credenciales con centinelas, generalizando la puerta K8: un valor centinela en cada archivo de credenciales que el sandbox pueda ver nunca llega a un endpoint. *Corpus acordado por seguridad:* `.ssh/**`, `.netrc`, `.gitconfig`, `.git-credentials`, `.config/gh/**`, `.aws/**`, `.azure/**`, `.config/gcloud/**`, `.kube/**`, `.docker/config.json`, `.npmrc`, `.pypirc` y directorios/configuración propios de codex, kimi, mimo, OpenCode, Cursor y Gemini. Claude conserva solamente el overlay de autenticación que usan sus perfiles de suscripción aprobados (`.claude/**`, `.claude.json`); una ejecución con proveedor inyectado siempre lo excluye. *Criterio:* aplica a los CLIs y protocolos admitidos; el endpoint local captura las peticiones y rechaza el test si aparece cualquier centinela.
 - **H6.3** Prueba de red con destino permitido para escenarios que necesitan red del modelo. Se descarta `pasta` como barrera porque el mapeo de loopback no separa servicios del host. La alternativa B es `bwrap --unshare-net` y un proxy host expuesto por socket Unix, con puente local al proxy. *Invariante:* sin proxy no existe salida; el proxy solo establece `CONNECT` a la autoridad exacta configurada. *Criterio:* DNS, IP directa y loopback directo no alcanzan destinos; el fixture HTTPS autorizado sí, y otra autoridad recibe rechazo. *Verificador:* `test/live/p159-network-proxy.test.ts`. *Falsación:* quitar el namespace, permitir otra autoridad o evitar el proxy debe hacer fallar el test. Esta alternativa fue autorizada por el usuario el 15 oct.
 - **H6.4** Límites de recursos: tiempo, memoria y número de procesos. *Criterio:* un agente que entra en bucle se detiene y deja el estado registrado. El tiempo se limita al timeout del perfil; cada scope transitorio de systemd por ejecución tiene `MemoryMax=4G` y `TasksMax=64`, y cada proceso recibe `RLIMIT_AS=2G`. El límite de procesos no usa `RLIMIT_NPROC`, que es compartido por UID. El límite agregado solo se habilita si `memory.max` queda delegado y verificable en el cgroup de la ejecución.
@@ -236,7 +236,7 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (17 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6 (reabierta tras comprobar que el runner de producción no aplica bwrap), E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
+Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
 
 ### Hecho en esta pasada
 
@@ -249,12 +249,12 @@ Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6 (reabierta t
 - **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
 - **E13 cerrada:** H13.1 tiene lista vacía y regresiones para `kimi --help` y S13; H13.2 tiene un presupuesto definido. H13.5 se revisó en `docs/contracts/README.md`; los diez contratos tienen una prueba trazable y `GET /api/config` cuenta con regresión contra la API. `scripts/verify.ts` separa cada corrida de mutación en un temporal absoluto y un reporte únicos, excluye `.env*` de la copia de Stryker y, junto con `scripts/duplication-report.ts`, permite guardar evidencia en una ruta absoluta externa autorizada mediante `SYNAPSER_EVIDENCE_DIR`. H13.3–H13.4 se verificaron con `npm run verify`; la evidencia cruda quedó fuera de archivos versionados.
 
-### E6 parcial, reabierta el 17 oct 2026
+### E6 cerrada, runner productivo integrado el 17 oct 2026
 
-- **H6.1**: los tests `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts` verifican bwrap en su harness, pero no prueban todavía que `runAgent` invoque el CLI dentro de esa frontera. La integración al runner queda pendiente.
-- **H6.2**: `test/agents/runner-credential-redaction.test.ts` ejercita `runAgent` con cuatro adaptadores y un ejecutable sonda, pero solo demuestra el HOME/entorno que observa el proceso; no evita lecturas absolutas del HOME real ni de `/run`. Falta que el proceso productivo corra bajo mounts aislados y que esta prueba falsifique acceso por ruta absoluta.
-- **H6.3**: `test/live/p159-network-proxy.test.ts` prueba localmente la alternativa B con un CLI instalado y un fixture, pero no está conectada al runner. La decisión K7 de P17 mantiene la red de CLIs sin aislar; no se reclama este control para la aplicación.
-- **H6.4**: el runner aplica `RLIMIT_AS`, `TasksMax`, `MemoryMax` y timeout, verificados por `test/agents/runner-broker.test.ts`. Aún falta detener y comprobar vacío el scope completo, incluidos descendientes detached, al timeout/cierre; la prueba de límites de `test/sandbox/isolation.test.ts` es un harness aparte. El host delega `cpu memory pids`; si el controlador de memoria no está disponible, el scope falla cerrado.
+- **H6.1**: `runAgent` aplica `bwrap` al CLI real. `test/agents/runner-bwrap-boundary.test.ts` demuestra aislamiento de HOME, `/run`, escritura externa y namespace PID.
+- **H6.2**: `test/agents/runner-credential-redaction.test.ts` ejecuta sondas con los adaptadores CLI admitidos y un endpoint local; los secretos host no están disponibles en HOME/config y una ejecución con proveedor excluye siempre el overlay Claude. El overlay de suscripción aprobado se copia como archivos regulares, excluye skills y no sigue symlinks.
+- **H6.3**: `test/live/p159-network-proxy.test.ts` prueba localmente la alternativa B con un CLI instalado y un fixture. Sigue sin conectarse al runner productivo, de acuerdo con la decisión K7 de mantener la red CLI abierta; esto no se contabiliza como aislamiento de red de Synapser.
+- **H6.4**: `test/agents/runner-broker.test.ts` comprueba timeout, `RLIMIT_AS`, `MemoryMax`, `TasksMax` y `KillMode=control-group`; `test/agents/runner-bwrap-boundary.test.ts` confirma que un descendiente detached desaparece del host antes de retornar. En el cierre se verifica que el scope ya no está cargado/activo ni conserva cgroup; si no puede confirmarse, la corrida falla y el registro del proceso no se elimina. El host delega `cpu memory pids`; si el controlador de memoria no está disponible, el scope falla cerrado.
 
 ### Pruebas opt-in y límites fuera de `verify`
 

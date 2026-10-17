@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -162,10 +162,13 @@ describe("runner (isolation + observation)", () => {
     mkdirSync(join(realHome, ".claude", "skills", "private-skill"), { recursive: true });
     writeFileSync(join(realHome, ".claude", "settings.json"), "{}");
     writeFileSync(join(realHome, ".claude", "skills", "private-skill", "SKILL.md"), "private\n");
+    writeFileSync(join(realHome, "outside-operator-secret.json"), "must not follow symlink\n");
+    symlinkSync(join(realHome, "outside-operator-secret.json"), join(realHome, ".claude", "operator-link.json"));
     const r = await run("inspect-home-skills", { homeOverlay: [".claude"] }, { envSource: { PATH: process.env["PATH"], HOME: realHome } });
-    const observed = JSON.parse(journal.artifacts.get(r.changes.find((c) => c.path === "home-skills.json")!.afterBlob!).toString()) as { privateVisible: boolean };
-    assert.equal(observed.privateVisible, false);
+    const observed = JSON.parse(journal.artifacts.get(r.changes.find((c) => c.path === "home-skills.json")!.afterBlob!).toString()) as { privateVisible: boolean; settings: string; operatorLinkVisible: boolean };
+    assert.deepEqual(observed, { privateVisible: false, settings: "{}", operatorLinkVisible: false });
     assert.equal(readFileSync(join(realHome, ".claude", "skills", "private-skill", "SKILL.md"), "utf8"), "private\n");
+    assert.equal(readFileSync(join(realHome, "outside-operator-secret.json"), "utf8"), "must not follow symlink\n");
   });
 
   test("PLAN 13 §5.2: an agent that tries to publish from its copy cannot — no repository, no credentials, no config", async () => {
