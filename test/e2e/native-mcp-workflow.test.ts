@@ -29,6 +29,7 @@ const PLAN: Plan = {
     serves: ["mcp-report"],
     profile: PROFILE.id,
     kind: "write",
+    skills: [],
   }],
 };
 
@@ -51,7 +52,7 @@ beforeEach(() => {
     "let input = '';",
     "function reply(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n'); }",
     "process.stdin.setEncoding('utf8');",
-    "process.stdin.on('data', chunk => { input += chunk; for (;;) { const i = input.indexOf('\\n'); if (i < 0) return; const line = input.slice(0, i); input = input.slice(i + 1); const request = JSON.parse(line); if (request.method === 'initialize') reply(request.id, { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'workflow-inspector', version: '1' } }); else if (request.method === 'tools/list') reply(request.id, { tools: [{ name: 'inspect', description: 'Returns a local fixture value.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, outputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] } }] }); else if (request.method === 'tools/call') reply(request.id, { structuredContent: { value: 'composed-local-result' }, content: [{ type: 'text', text: 'composed-local-result' }] }); else if (request.id !== undefined) reply(request.id, {}); } });",
+    "process.stdin.on('data', chunk => { input += chunk; for (;;) { const i = input.indexOf('\\n'); if (i < 0) return; const line = input.slice(0, i); input = input.slice(i + 1); const request = JSON.parse(line); if (request.method === 'initialize') reply(request.id, { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'workflow-inspector', version: '1' } }); else if (request.method === 'tools/list') reply(request.id, { tools: [{ name: 'inspect', description: 'Returns a local fixture value.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, outputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] } }, { name: 'status', inputSchema: { type: 'object' } }] }); else if (request.method === 'tools/call') { if (request.params.name !== 'inspect') process.exit(24); reply(request.id, { structuredContent: { value: 'composed-local-result' }, content: [{ type: 'text', text: 'composed-local-result' }] }); } else if (request.id !== undefined) reply(request.id, {}); } });",
   ].join("\n"));
 });
 
@@ -81,8 +82,8 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     args: [],
     artifact: { digest: artifact.digest, entrypoint: "server.cjs" },
     expectedServer: { name: "workflow-inspector", version: "1" },
-    profiles: { [PROFILE.id]: ["inspect"] },
-    nativeReadOnlyProfiles: { [PROFILE.id]: ["inspect"] },
+    profiles: { [PROFILE.id]: ["inspect", "status"] },
+    nativeReadOnlyProfiles: { [PROFILE.id]: ["inspect", "status"] },
   }], [PROFILE.id], nativeWorkerProfileIds([PROFILE]));
   if (!checkedRegistry.ok) throw new Error(checkedRegistry.errors.join("; "));
 
@@ -130,7 +131,8 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     parameters: [],
     requiredCapabilities: [],
     requiredSkills: [],
-    requiredMcpServers: [],
+    requiredMcpServers: ["workflow-inspector"],
+    requiredMcpTools: [{ serverId: "workflow-inspector", toolName: "inspect" }],
     workflow: {
       title: "Inspect the approved local MCP",
       description: "Record the value returned by the approved local MCP inspection tool.",
@@ -141,7 +143,7 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     startPolicy: "draft",
   }, "operator").entry;
   library.publishRecipe(recipe.id, recipe.digest, "operator");
-  const mcp = new McpServer({ manager, library, serverJournal, catalog: () => buildCatalog([PROFILE], []) });
+  const mcp = new McpServer({ manager, library, serverJournal, catalog: () => buildCatalog([PROFILE], []), mcpServers: () => checkedRegistry.servers });
   await mcp.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", clientInfo: { name: INITIATOR.id }, capabilities: {} } });
   const callTool = async (id: number, name: string, args: Record<string, unknown>) => {
     const response = await mcp.handle({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
@@ -172,7 +174,11 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
   const journal = manager.journalOf(workflowId)!;
   const requestEvent = journal.listEvents().find((event) => event.entity === "recipe_request");
   assert.equal((requestEvent?.data as { recipe_digest?: string } | undefined)?.recipe_digest, recipe.digest);
+  assert.deepEqual((requestEvent?.data as { required_mcp_tools?: { server_id: string; tool_name: string; registration_digest: string }[] } | undefined)?.required_mcp_tools?.map(({ server_id, tool_name }) => [server_id, tool_name]), [["workflow-inspector", "inspect"]]);
+  assert.match((requestEvent?.data as { required_mcp_tools: { registration_digest: string }[] }).required_mcp_tools[0]!.registration_digest, /^sha256:[a-f0-9]{64}$/);
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_snapshot").length, 1);
+  const snapshot = journal.listEvents().find((event) => event.entity === "mcp_tool_snapshot")?.data as { tools: { tool: string }[] };
+  assert.deepEqual(snapshot.tools.map((tool) => tool.tool), ["inspect"], "recipe binding must not inherit the broader operator grant");
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_call").length, 1);
   assert.equal(journal.listAgentRuns().some((run) => run.profileId === PROFILE.id && run.outcome === "SUCCEEDED"), true);
 });

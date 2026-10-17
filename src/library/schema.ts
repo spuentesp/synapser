@@ -60,6 +60,7 @@ export const skillSchema = z.object({
 
 const recipeName = z.string().regex(/^[a-z][a-z0-9_-]{0,62}$/);
 const recipeText = z.string().refine(nonBlank);
+const recipeMcpTool = z.strictObject({ serverId: recipeName, toolName: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/) });
 
 const recipeConditionChecker = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("command"), commandId: z.string().min(1).max(80) }),
@@ -107,6 +108,7 @@ export const taskRecipeSchema = z.strictObject({
   requiredCapabilities: z.array(z.string().regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/)).max(16),
   requiredSkills: z.array(z.strictObject({ id: recipeName, required: z.boolean() })).max(8),
   requiredMcpServers: z.array(recipeName).max(16),
+  requiredMcpTools: z.array(recipeMcpTool).max(64).optional(),
   workflow: z.strictObject({
     title: z.string().min(3).max(160).refine(nonBlank),
     description: z.string().min(10).max(4000).refine(nonBlank),
@@ -145,6 +147,18 @@ export const taskRecipeSchema = z.strictObject({
   });
   if (new Set(recipe.requiredMcpServers).size !== recipe.requiredMcpServers.length) {
     ctx.addIssue({ code: "custom", path: ["requiredMcpServers"], message: "MCP server ids must be unique" });
+  }
+  const requiredServers = new Set(recipe.requiredMcpServers);
+  const requiredTools = recipe.requiredMcpTools ?? [];
+  const toolKeys = new Set<string>();
+  requiredTools.forEach((tool, index) => {
+    const key = `${tool.serverId}\0${tool.toolName}`;
+    if (toolKeys.has(key)) ctx.addIssue({ code: "custom", path: ["requiredMcpTools", index], message: "MCP tool selections must be unique" });
+    toolKeys.add(key);
+    if (!requiredServers.has(tool.serverId)) ctx.addIssue({ code: "custom", path: ["requiredMcpTools", index, "serverId"], message: "selected tool server must also be listed in requiredMcpServers" });
+  });
+  if (requiredServers.size > 0 && requiredServers.size !== new Set(requiredTools.map((tool) => tool.serverId)).size) {
+    ctx.addIssue({ code: "custom", path: ["requiredMcpTools"], message: "every required MCP server needs an explicit tool selection" });
   }
   if (recipe.workflow.budget && recipe.workflow.budget.usd === undefined && recipe.workflow.budget.minutes === undefined) {
     ctx.addIssue({ code: "custom", path: ["workflow", "budget"], message: "budget must set usd or minutes" });

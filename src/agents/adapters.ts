@@ -18,6 +18,7 @@ import { type InjectedProvider, providerForRun } from "./inject.ts";
 import type { ProviderConfig } from "../model/config.ts";
 import type { NativeMcpToolSet } from "../mcp/native-tool-registry.ts";
 import type { RunMemoryScope } from "./run-memory-scope.ts";
+import type { McpToolBinding } from "../mcp/registry.ts";
 
 /** Worker and repair are system roles, so their configured assignments take precedence over native profile providers. */
 export function nativeRoleUsesSystemModel(role: ModelRole): boolean {
@@ -96,13 +97,13 @@ export class NativeLoopRunner implements AgentRunner {
   readonly #limits: Partial<LoopLimits> | undefined;
   readonly #research: ResearchSession | undefined;
   readonly #modelFor: ((p: AgentProfile, role: ModelRole) => ModelPort | null) | undefined;
-  readonly #mcpToolsForRun: ((profile: AgentProfile, runId: string, taskId: string, journal: import("../journal/journal.ts").Journal, runMemoryScope?: RunMemoryScope) => Promise<NativeMcpToolSet | undefined>) | undefined;
+  readonly #mcpToolsForRun: ((profile: AgentProfile, runId: string, taskId: string, journal: import("../journal/journal.ts").Journal, runMemoryScope?: RunMemoryScope, selection?: readonly McpToolBinding[]) => Promise<NativeMcpToolSet | undefined>) | undefined;
   /**
    * `modelFor` lets a profile carry its OWN endpoint (any OpenAI-compatible server): the same loop, the
    * same executor, a different brain. It receives the effective role so callers can defer system-routed
    * calls to the role-aware shared model. Returning null falls back to the shared model.
    */
-  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession, modelFor?: (p: AgentProfile, role: ModelRole) => ModelPort | null, mcpToolsForRun?: (profile: AgentProfile, runId: string, taskId: string, journal: import("../journal/journal.ts").Journal, runMemoryScope?: RunMemoryScope) => Promise<NativeMcpToolSet | undefined>) {
+  constructor(model: ModelPort, limits?: Partial<LoopLimits>, research?: ResearchSession, modelFor?: (p: AgentProfile, role: ModelRole) => ModelPort | null, mcpToolsForRun?: (profile: AgentProfile, runId: string, taskId: string, journal: import("../journal/journal.ts").Journal, runMemoryScope?: RunMemoryScope, selection?: readonly McpToolBinding[]) => Promise<NativeMcpToolSet | undefined>) {
     this.#model = model;
     this.#limits = limits;
     this.#research = research;
@@ -122,7 +123,7 @@ export class NativeLoopRunner implements AgentRunner {
     const injected = req.injectedSkills ?? { skills: [] };
     const skills = validateInjectedSkills(injected, "prompt-prepend");
     const mcpTools = adapterOf(req.profile) === "native" && role === "worker" && req.profile.role === "writer"
-      ? await this.#mcpToolsForRun?.(req.profile, req.runId, req.task.taskId, journal, req.runMemoryScope)
+      ? await this.#mcpToolsForRun?.(req.profile, req.runId, req.task.taskId, journal, req.runMemoryScope, req.task.mcpToolSelection)
       : undefined;
     let r;
     try {

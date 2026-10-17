@@ -15,6 +15,8 @@ import type { Journal } from "../journal/journal.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
 import type { LibraryStore } from "../library/store.ts";
 import { taskRecipeSchema, type TaskRecipe } from "../library/schema.ts";
+import { digestOfJson } from "../digest/canonical.ts";
+import type { McpServerRegistration, McpToolBinding } from "./registry.ts";
 
 export type McpRole = "initiator" | "worker";
 
@@ -86,6 +88,8 @@ export interface McpOptions {
   catalog?: () => ProfileCard[];
   policy?: () => unknown;
   library?: LibraryStore;
+  /** Operator-owned registrations; recipes can select tools but never grant them. */
+  mcpServers?: () => readonly McpServerRegistration[];
   /** Journal for calls that belong to no workflow (list, catalog). */
   serverJournal: Journal;
   version?: string;
@@ -352,7 +356,7 @@ export class McpServer {
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         run: () => ({ recipes: (this.#o.library?.publishedRecipes() ?? []).flatMap((entry) => {
           const recipe = taskRecipeSchema.safeParse(entry.document);
-          return recipe.success ? [{ id: entry.id, digest: entry.digest, title: recipe.data.title, description: recipe.data.description, category: recipe.data.category, parameters: recipe.data.parameters, requiredCapabilities: recipe.data.requiredCapabilities, requiredSkills: recipe.data.requiredSkills, requiredMcpServers: recipe.data.requiredMcpServers, startPolicy: recipe.data.startPolicy }] : [];
+          return recipe.success ? [{ id: entry.id, digest: entry.digest, title: recipe.data.title, description: recipe.data.description, category: recipe.data.category, parameters: recipe.data.parameters, requiredCapabilities: recipe.data.requiredCapabilities, requiredSkills: recipe.data.requiredSkills, requiredMcpServers: recipe.data.requiredMcpServers, requiredMcpTools: recipe.data.requiredMcpTools ?? [], startPolicy: recipe.data.startPolicy }] : [];
         }) }),
       },
       {
@@ -377,23 +381,44 @@ export class McpServer {
     if (!resolved.ok) return { error: "INVALID_PARAMETERS", errors: resolved.errors };
     const requiredSkills = recipe.requiredSkills.filter((skill) => skill.required);
     const absentSkills = requiredSkills.filter((skill) => !this.#o.library?.get("skills", skill.id)).map((skill) => skill.id);
-    const missingMcps = recipe.requiredMcpServers;
+    const mcpTools = recipe.requiredMcpTools ?? [];
+    const registrations = this.#o.mcpServers?.() ?? [];
+    const mcpBindings: McpToolBinding[] = mcpTools.flatMap((selection) => {
+      const server = registrations.find((candidate) => candidate.id === selection.serverId);
+      return server ? [{ ...selection, registrationDigest: digestOfJson(JSON.parse(JSON.stringify(server))) }] : [];
+    });
     const profileKind = recipe.category === "implementation" ? "write" : recipe.category === "research" ? "research" : recipe.category === "alternatives" ? "advise" : "review";
     const cards = this.#o.catalog?.() ?? [];
     const compatible = cards.filter((card) => card.enabled && card.kinds.includes(profileKind) && recipe.requiredCapabilities.every((capability) => card.capabilities.capabilityIds.includes(capability))
       && requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id) && card.capabilities.skills !== "none"));
+    const mcpCompatible = mcpTools.length === 0 ? compatible : compatible.filter((card) => {
+      const profile = card.id;
+      return card.integration === "direct" && card.kinds.includes("write")
+        && mcpBindings.length === mcpTools.length && mcpBindings.every((selection) => {
+          const server = registrations.find((candidate) => candidate.id === selection.serverId);
+          return !!server?.enabled && !!server.artifact
+            && digestOfJson(JSON.parse(JSON.stringify(server))) === selection.registrationDigest
+            && (server.profiles[profile] ?? []).includes(selection.toolName)
+            && (server.nativeReadOnlyProfiles?.[profile] ?? []).includes(selection.toolName);
+        });
+    });
+    const missingMcps = recipe.requiredMcpServers.filter((serverId) => !mcpTools.some((tool) => tool.serverId === serverId)
+      || !registrations.some((server) => server.id === serverId && server.enabled && !!server.artifact));
+    const availableTools = mcpBindings.filter((selection) => registrations.some((server) => server.id === selection.serverId && server.enabled && !!server.artifact
+      && digestOfJson(JSON.parse(JSON.stringify(server))) === selection.registrationDigest
+      && mcpCompatible.some((card) => (server.profiles[card.id] ?? []).includes(selection.toolName) && (server.nativeReadOnlyProfiles?.[card.id] ?? []).includes(selection.toolName))));
     const resolution = {
-      profiles: compatible.map((card) => ({ id: card.id, cost: card.cost, integration: card.integration })),
-      profileAssignment: "candidate profiles only; no profile is bound until workflow execution",
+      profiles: mcpCompatible.map((card) => ({ id: card.id, cost: card.cost, integration: card.integration })),
+      profileAssignment: mcpTools.length ? "MCP recipes route only to eligible native worker profiles with every selected tool granted" : "candidate profiles only; no profile is bound until workflow execution",
       category: { recipe: recipe.category, profileKind, enforced: false },
-      capabilities: { required: recipe.requiredCapabilities, candidateProfiles: compatible.map((card) => card.id), enforced: false },
-      skills: { required: requiredSkills.map((skill) => skill.id), optionalNotSelected: recipe.requiredSkills.filter((skill) => !skill.required).map((skill) => skill.id), missing: absentSkills, compatibleProfiles: compatible.filter((card) => requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id))).map((card) => card.id), assignment: "workflow execution does not yet bind recipe skills to a selected profile" },
-      mcpServers: { required: missingMcps, available: [], missing: missingMcps },
-      cost: compatible.map((card) => ({ profile: card.id, estimate: card.cost })),
+      capabilities: { required: recipe.requiredCapabilities, candidateProfiles: mcpCompatible.map((card) => card.id), enforced: false },
+      skills: { required: requiredSkills.map((skill) => skill.id), optionalNotSelected: recipe.requiredSkills.filter((skill) => !skill.required).map((skill) => skill.id), missing: absentSkills, compatibleProfiles: mcpCompatible.filter((card) => requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id))).map((card) => card.id), assignment: "workflow execution does not yet bind recipe skills to a selected profile" },
+      mcpServers: { required: recipe.requiredMcpServers, requiredTools: mcpTools, availableTools, missing: missingMcps, enforced: mcpTools.length > 0 },
+      cost: mcpCompatible.map((card) => ({ profile: card.id, estimate: card.cost })),
       costLimit: "profile costs are estimates; recipe-level USD is not enforced by the workflow runtime",
       disclosure: "not configured",
     };
-    if (absentSkills.length || missingMcps.length || compatible.length === 0 || requiredSkills.length > 0 || recipe.requiredCapabilities.length > 0) return { error: "RECIPE_UNRESOLVED", resolution };
+    if (absentSkills.length || missingMcps.length || availableTools.length !== mcpTools.length || mcpCompatible.length === 0 || requiredSkills.length > 0 || recipe.requiredCapabilities.length > 0) return { error: "RECIPE_UNRESOLVED", resolution };
     if (recipe.startPolicy !== "draft") return { error: "START_POLICY_UNSUPPORTED", policy: recipe.startPolicy, detail: "recipe-specific start gates and enforced execution bounds are not available; only draft recipes can be requested", resolution };
     if (recipe.workflow.budget?.usd !== undefined) return { error: "RECIPE_BUDGET_UNSUPPORTED", detail: "recipe-level USD budgets are not enforced by the workflow runtime; remove the USD budget or use an enforced time limit", resolution };
     let workflow: TaskRecipe["workflow"];
@@ -408,6 +433,7 @@ export class McpServer {
       recipeDigest: entry.digest,
       paramsDigest,
       parameterNames: Object.keys(resolved.values).sort(),
+      mcpTools: mcpBindings,
     });
     if (!created.ok) return { error: created.code, errors: created.errors };
     return { workflow_id: created.id, state: "DRAFT", recipe: { id: recipeId, digest: entry.digest }, parameter_names: Object.keys(resolved.values).sort(), resolution };

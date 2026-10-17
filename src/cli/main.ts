@@ -175,7 +175,7 @@ async function main(): Promise<void> {
         return await new Promise<void>(() => {});
     }
       case "mcp": {
-        const srv = new McpServer({ manager: m, serverJournal: rt.serverJournal, catalog: rt.catalog, library: rt.library });
+        const srv = new McpServer({ manager: m, serverJournal: rt.serverJournal, catalog: rt.catalog, library: rt.library, mcpServers: () => cfg.mcpServers });
         process.stderr.write(`synapser mcp: workspace=${cfg.workspace} state=${cfg.stateDir}\n`);
         await serveStdio(srv, process.stdin, process.stdout);
         return;

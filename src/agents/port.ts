@@ -20,6 +20,7 @@ import { type AdapterId, type AgentProfile, adapterOf } from "./profile.ts";
 import type { AgentRunResult, FileChange } from "./runner.ts";
 import type { Outcome, UsageRecord } from "./usage.ts";
 import type { RunMemoryScope } from "./run-memory-scope.ts";
+import type { McpToolBinding } from "../mcp/registry.ts";
 
 export interface AgentTaskSpec {
   taskId: string;
@@ -28,6 +29,8 @@ export interface AgentTaskSpec {
   criteria: readonly string[];
   context?: readonly string[];
   skillSelection?: readonly SkillSelection[];
+  /** Exact operator-approved MCP tools selected by the originating task recipe. */
+  mcpToolSelection?: readonly McpToolBinding[];
   planRevision: number;
 }
 

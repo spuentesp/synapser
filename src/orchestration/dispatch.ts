@@ -10,6 +10,7 @@ import type { Journal } from "../journal/journal.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ProfileCard, StepKind } from "./catalog.ts";
 import type { DelegationPort } from "./delegation.ts";
+import type { McpToolBinding } from "../mcp/registry.ts";
 import { recordDispatch } from "./invariants.ts";
 import { route } from "./router.ts";
 
@@ -38,7 +39,7 @@ export interface OrchestrationDeps {
 export interface StepRow {
   taskId: string;
   scope: string[];
-  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; requires?: string[]; skillSelection?: SkillSelection[]; gates?: string[]; kind?: string; tier?: Tier };
+  spec: { objective: string; criteria: string[]; context?: string[]; step?: StepKind; profile?: string; tags?: string[]; requires?: string[]; skillSelection?: SkillSelection[]; mcpToolSelection?: readonly McpToolBinding[]; gates?: string[]; kind?: string; tier?: Tier };
 }
 
 export interface StepOutcome {
@@ -97,6 +98,7 @@ export async function dispatchStep(
       criteria: row.spec.criteria,
       context: row.spec.context ?? [],
       ...(row.spec.skillSelection ? { skillSelection: row.spec.skillSelection } : {}),
+      ...(row.spec.mcpToolSelection !== undefined ? { mcpToolSelection: row.spec.mcpToolSelection } : {}),
       planRevision: 1,
     },
     workspaceRoot: o.workspaceRoot,

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { Journal } from "../../src/journal/journal.ts";
 import { LibraryStore } from "../../src/library/store.ts";
+import { taskRecipeSchema } from "../../src/library/schema.ts";
 import { McpServer } from "../../src/mcp/server.ts";
 import type { ProfileCard } from "../../src/orchestration/catalog.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
@@ -79,6 +80,15 @@ describe("P19.6 task recipes over MCP", () => {
     serverJournal.close();
     rmSync(state, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
+  });
+
+  test("recipe MCP requirements are exact selections, never server-wide grants", () => {
+    assert.equal(taskRecipeSchema.safeParse(recipe({ requiredMcpServers: ["source-reader"] })).success, false,
+      "a required server without a named tool is ambiguous and cannot be published");
+    assert.equal(taskRecipeSchema.safeParse(recipe({ requiredMcpServers: ["source-reader"], requiredMcpTools: [{ serverId: "other", toolName: "read" }] })).success, false,
+      "a selected tool must belong to one of the declared required servers");
+    assert.equal(taskRecipeSchema.safeParse(recipe({ requiredMcpServers: ["source-reader"], requiredMcpTools: [{ serverId: "source-reader", toolName: "read" }, { serverId: "source-reader", toolName: "read" }] })).success, false,
+      "duplicate tool selections are rejected");
   });
 
   test("catalog exposes only manually published current recipe digests; edits and deletes withdraw it", async () => {
@@ -169,6 +179,7 @@ describe("P19.6 task recipes over MCP", () => {
       recipe_digest: current.digest,
       params_digest: createHash("sha256").update(JSON.stringify({ scope: submitted.scope, focus: submitted.focus })).digest("hex"),
       parameter_names: ["focus", "scope"],
+      required_mcp_tools: [],
     });
     for (const event of [callEvent, provenance]) {
       const audit = JSON.stringify(event.data);
@@ -217,7 +228,7 @@ describe("P19.6 task recipes over MCP", () => {
     assert.equal(noSkill.body.error, "RECIPE_UNRESOLVED");
     assert.deepEqual(noSkill.body.resolution.skills.missing, ["missing-review-skill"]);
 
-    addRecipe("needs-mcp", recipe({ requiredMcpServers: ["source-reader"] }));
+    addRecipe("needs-mcp", recipe({ requiredMcpServers: ["source-reader"], requiredMcpTools: [{ serverId: "source-reader", toolName: "read" }] }));
     publish("needs-mcp");
     const noMcp = await tool("task_request", { recipe_id: "needs-mcp", params: { scope: ["src"] } });
     assert.equal(noMcp.body.error, "RECIPE_UNRESOLVED");

@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import type { Journal } from "../journal/journal.ts";
 import type { ToolSpec } from "../model/types.ts";
 import { connectRegisteredMcpServer, McpProcessCleanupUnconfirmedError, type ConnectedStdioMcpServer, type McpJson, type McpJsonObject, type OutboundMcpTool } from "./outbound-stdio-client.ts";
-import type { McpServerRegistration } from "./registry.ts";
+import type { McpServerRegistration, McpToolBinding } from "./registry.ts";
 import type { RunMemoryScope } from "../agents/run-memory-scope.ts";
+import { digestOfJson } from "../digest/canonical.ts";
 
 export interface NativeMcpToolSet {
   readonly tools: readonly ToolSpec[];
@@ -52,13 +53,37 @@ export async function openNativeMcpToolSet(options: {
   runId: string;
   taskId: string;
   runMemoryScope?: RunMemoryScope;
+  /** Undefined means the legacy operator-granted set; [] means explicitly no MCP tools. */
+  selection?: readonly McpToolBinding[];
   assertRunSnapshot?: (profileId: string, snapshotDigest: string) => void;
 }): Promise<NativeMcpToolSet | undefined> {
   const selected = JSON.parse(JSON.stringify(options.servers)) as McpServerRegistration[];
-  const configured = selected.flatMap((registration) => {
-    const names = registration.nativeReadOnlyProfiles?.[options.profileId] ?? [];
-    return names.length ? [{ registration, names: [...names] }] : [];
-  });
+  const configured = options.selection === undefined
+    ? selected.flatMap((registration) => {
+        const names = registration.nativeReadOnlyProfiles?.[options.profileId] ?? [];
+        return names.length ? [{ registration, names: [...names] }] : [];
+      })
+    : (() => {
+        const keys = new Set<string>();
+        const byServer = new Map<string, string[]>();
+        for (const item of options.selection!) {
+          if (!/^[a-z][a-z0-9_-]{0,62}$/.test(item.serverId) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(item.toolName) || !/^sha256:[a-f0-9]{64}$/.test(item.registrationDigest)) throw new Error("recipe MCP selection is invalid");
+          const key = `${item.serverId}\0${item.toolName}`;
+          if (keys.has(key)) throw new Error("recipe MCP selection contains duplicates");
+          keys.add(key);
+          const registration = selected.find((candidate) => candidate.id === item.serverId);
+          if (!registration || !registration.enabled || !registration.artifact) throw new Error(`required MCP server ${item.serverId} is unavailable, disabled, or unpinned`);
+          if (digestOfJson(JSON.parse(JSON.stringify(registration))) !== item.registrationDigest) throw new Error(`required MCP server ${item.serverId} configuration changed after recipe request`);
+          if (!(registration.profiles[options.profileId] ?? []).includes(item.toolName)
+            || !(registration.nativeReadOnlyProfiles?.[options.profileId] ?? []).includes(item.toolName)) {
+            throw new Error(`required MCP tool ${item.serverId}/${item.toolName} is not granted to native profile ${options.profileId}`);
+          }
+          const names = byServer.get(item.serverId) ?? [];
+          names.push(item.toolName);
+          byServer.set(item.serverId, names);
+        }
+        return [...byServer].map(([serverId, names]) => ({ registration: selected.find((candidate) => candidate.id === serverId)!, names }));
+      })();
   if (configured.length === 0) return undefined;
   const parentSlice = options.runMemoryScope ? await options.runMemoryScope.ensure() : undefined;
 
@@ -215,7 +240,7 @@ export class NativeMcpRunRegistry {
     this.#runId = runId;
   }
 
-  open(profileId: string, taskId: string, runMemoryScope?: RunMemoryScope): Promise<NativeMcpToolSet | undefined> {
+  open(profileId: string, taskId: string, runMemoryScope?: RunMemoryScope, selection?: readonly McpToolBinding[]): Promise<NativeMcpToolSet | undefined> {
     return openNativeMcpToolSet({
       servers: this.#servers,
       profileId,
@@ -223,6 +248,7 @@ export class NativeMcpRunRegistry {
       journal: this.#journal,
       runId: this.#runId,
       taskId,
+      ...(selection !== undefined ? { selection } : {}),
       ...(runMemoryScope ? { runMemoryScope } : {}),
       assertRunSnapshot: (id, current) => {
         const expected = this.#snapshotDigests.get(id);

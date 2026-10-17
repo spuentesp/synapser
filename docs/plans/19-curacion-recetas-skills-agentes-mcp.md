@@ -375,6 +375,24 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   permiso para perfil no nativo o no worker, tool fuera de allowlist, escritura sin autenticación,
   pérdida/modificación del permiso por PUT general o un perfil no elegible mostrado como candidato.
   “Read-only” es una declaración del operador y no acredita semántica ni neutraliza efectos.
+- **RCP6g — Selección MCP de receta sin ampliación de permisos**: cada receta declara pares exactos
+  servidor/herramienta, y cada servidor requerido debe tener al menos una herramienta nombrada. La
+  solicitud resuelve solo perfiles `native` writer/worker con servidor habilitado y artefacto pinneado,
+  y la ejecución intersecta la selección inmutable de la receta con la allowlist general y la concesión
+  `nativeReadOnlyProfiles` del operador. La selección y el digest de configuración/pin observado al
+  solicitar la receta se persisten como procedencia; cambiar esa configuración antes del inicio bloquea
+  la corrida. La selección viaja fuera del plan del modelo y se hereda sin cambios en tareas delegadas y
+  de reparación; el registro de corrida expone únicamente las herramientas exactas. Selecciones ausentes en
+  workflows manuales conservan el comportamiento anterior; una lista vacía de receta significa cero
+  herramientas. *Verificador:* e2e con MCP stdio local pinneado recorre `task_catalog → task_request →
+  workflow_start → ProductionEngine → checker`, concediendo al operador `inspect` y `status` mientras
+  la receta solo selecciona `inspect`; prueba unitaria rechaza la llamada directa a `status`, y el
+  esquema rechaza servidores sin tool, pares inconsistentes y duplicados. El binding liga al digest
+  del registro/configuración observado al solicitar; se prueba que un cambio posterior de configuración
+  se rechaza antes de spawn. El broker de delegación hereda ese binding del requester sin aceptarlo en
+  la solicitud del agente. *Falsación:* el agente ve o
+  llama una tool no seleccionada, una propuesta del planner amplía la selección, una revocación llega
+  tarde, un workflow manual pierde compatibilidad o una subtarea delegada obtiene un grant más amplio.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

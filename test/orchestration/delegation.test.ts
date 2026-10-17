@@ -24,12 +24,12 @@ describe("DelegationBroker", () => {
   afterEach(async () => env.close());
 
   /** A mission with one RUNNING task `api` (scope app/ + tests/), a PENDING acceptance node. */
-  const seed = (over: { running?: boolean; gates?: string[] } = {}) => {
+  const seed = (over: { running?: boolean; gates?: string[]; mcpToolSelection?: { serverId: string; toolName: string }[] } = {}) => {
     const plan = { tasks: [{ id: "api", objective: "Implement the API", scope: ["app/", "tests/"], criteria: ["done"], context: [], deps: [], priority: 5 }] };
     env.journal.tx((t) => {
       t.insertMission({ runId: RUN, objective: "o", repo: "w", baseSha: "n/a", planRevision: 1, limits: {} });
       t.insertPlanRevision(RUN, 1, plan, true);
-      t.insertTask({ runId: RUN, taskId: "api", actorOwner: `${RUN}:api`, priority: 5, scope: ["app/", "tests/"], spec: { kind: "agent", objective: "Implement the API", criteria: ["done"], context: [], depth: 0, ...(over.gates ? { gates: over.gates } : {}) }, planRevision: 1, deps: [] });
+      t.insertTask({ runId: RUN, taskId: "api", actorOwner: `${RUN}:api`, priority: 5, scope: ["app/", "tests/"], spec: { kind: "agent", objective: "Implement the API", criteria: ["done"], context: [], depth: 0, ...(over.gates ? { gates: over.gates } : {}), ...(over.mcpToolSelection ? { mcpToolSelection: over.mcpToolSelection } : {}) }, planRevision: 1, deps: [] });
       t.insertTask({ runId: RUN, taskId: "validate", actorOwner: `${RUN}:validate`, priority: -1, scope: [], spec: { kind: "validation", acceptance: [] }, planRevision: 1, deps: ["api"] });
       t.setMissionState(RUN, "DRAFT", "RUNNING");
     });
@@ -68,6 +68,15 @@ describe("DelegationBroker", () => {
     assert.equal(ev.toState, "ACCEPTED");
     assert.equal((ev.data as { asserted_why: string }).asserted_why, "tests are separate work");
     assert.deepEqual(checkDelegation(env.journal), []);
+  });
+
+  test("delegated tasks inherit recipe MCP selection verbatim", () => {
+    const selection = [{ serverId: "review-data", toolName: "read_change", registrationDigest: `sha256:${"a".repeat(64)}` }];
+    seed({ mcpToolSelection: selection });
+    const result = broker().request("api", ask());
+    assert.ok(result.ok);
+    const child = env.journal.listTasks().find((task) => task.taskId === result.taskId)!;
+    assert.deepEqual(child.spec.mcpToolSelection, selection);
   });
 
   test("every refusal has a code, is on the ledger, and leaves the plan exactly as it was", () => {

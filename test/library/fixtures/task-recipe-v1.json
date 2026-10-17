@@ -15,6 +15,7 @@
   "requiredCapabilities": ["workspace.read"],
   "requiredSkills": [{ "id": "red-team", "required": true }],
   "requiredMcpServers": ["source-reader"],
+  "requiredMcpTools": [{ "serverId": "source-reader", "toolName": "read" }],
   "workflow": {
     "title": "Review the change",
     "description": "Inspect the fixed change without editing the workspace.",

@@ -10,6 +10,7 @@ import type { WorkflowManager } from "../workflow/manager.ts";
 import { fail, json, OPERATOR, readBody } from "./http.ts";
 import { evaluateSkillCases, type SkillCase, type SkillCandidate } from "../library/curation.ts";
 import { isDigest } from "../digest/file.ts";
+import type { McpServerRegistration } from "../mcp/registry.ts";
 
 export const entryJson = (e: LibraryEntry) => ({ kind: e.kind, id: e.id, digest: e.digest, document: e.document, seq: e.seq, actor: e.actor });
 
@@ -65,7 +66,7 @@ function libraryBases(policy: LibraryPolicy) {
  * The operator library (plan 14 Q2.6). Reads are open like the other GETs (no secrets live in a document:
  * provider keys are environment NAMES, which validateProviderConfig enforces). Writes come through control().
  */
-export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy, reviewers: (agentId: string) => string[]): Promise<void> {
+export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res: ServerResponse, rest: string[], method: string, policy: LibraryPolicy, reviewers: (agentId: string) => string[], mcpServers: () => readonly McpServerRegistration[] = () => []): Promise<void> {
   const [kind, key, sub] = rest;
   if (rest.length > 3) return fail(res, 404, "NOT_FOUND");
   if (kind === "bases" && rest.length === 1) return method === "GET" ? json(res, 200, libraryBases(policy)) : fail(res, 405, "METHOD_NOT_ALLOWED");
@@ -92,11 +93,19 @@ export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res:
     const current = lib.get("recipes", key);
     if (!current || current.digest !== body.digest) return fail(res, 409, "RECIPE_DIGEST_NOT_CURRENT");
     const errors = validateLibraryDocument("recipes", key, current.document, policy);
-    const recipe = current.document as { requiredSkills?: { id: string }[]; requiredMcpServers?: string[] };
+    const recipe = current.document as { requiredSkills?: { id: string }[]; requiredMcpServers?: string[]; requiredMcpTools?: { serverId: string; toolName: string }[] };
     for (const skill of recipe.requiredSkills ?? []) if (!lib.get("skills", skill.id)) errors.push(`recipes/${key}: required skill ${skill.id} is not in the operator library`);
-    // Outbound MCP servers are not yet an execution capability of workflows. Publishing a recipe that needs one
-    // would suggest a capability the runtime cannot inject, so publication fails closed.
-    if ((recipe.requiredMcpServers ?? []).length) errors.push(`recipes/${key}: required MCP servers are not integrated with workflow execution`);
+    const registrations = mcpServers();
+    for (const serverId of recipe.requiredMcpServers ?? []) {
+      const server = registrations.find((candidate) => candidate.id === serverId);
+      if (!server?.enabled || !server.artifact) errors.push(`recipes/${key}: required MCP server ${serverId} must be enabled and pinned`);
+    }
+    for (const tool of recipe.requiredMcpTools ?? []) {
+      const server = registrations.find((candidate) => candidate.id === tool.serverId);
+      const granted = !!server && Object.entries(server.nativeReadOnlyProfiles ?? {}).some(([profileId, names]) =>
+        (server.profiles[profileId] ?? []).includes(tool.toolName) && names.includes(tool.toolName));
+      if (!server?.enabled || !server.artifact || !granted) errors.push(`recipes/${key}: MCP tool ${tool.serverId}/${tool.toolName} must be pinned and granted to an eligible native worker`);
+    }
     if (errors.length) return json(res, 409, { error: "RECIPE_NOT_PUBLISHABLE", errors });
     try {
       return json(res, 200, lib.publishRecipe(key, body.digest, OPERATOR.id));

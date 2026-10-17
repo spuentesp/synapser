@@ -366,7 +366,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         runs: runs.length,
       });
     }
-    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, withLibraryProviders(c.libraryPolicy?.() ?? NO_LIBRARY_POLICY, c.library), (agentId) => reviewingWorkflows(c.manager, agentId));
+    if (top === "library" && c.library) return libraryRoute(c.library, req, res, parts.slice(1), method, withLibraryProviders(c.libraryPolicy?.() ?? NO_LIBRARY_POLICY, c.library), (agentId) => reviewingWorkflows(c.manager, agentId), c.mcpServers ?? (() => []));
     if (top === "workflows") {
       if (!id && method === "GET") return json(res, 200, { workflows: m.list().map((v) => ({ id: v.id, title: v.workflow.title, state: v.state, revision: v.revision, reason: v.reason })) });
       if (!id && method === "POST") {

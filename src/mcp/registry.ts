@@ -21,6 +21,17 @@ export interface McpServerRegistration {
   nativeReadOnlyProfiles?: Record<string, string[]>;
 }
 
+/** Exact tool-level subset selected by a published recipe. This never grants access by itself. */
+export interface McpToolSelection {
+  serverId: string;
+  toolName: string;
+}
+
+/** Runtime binding captured when a recipe request resolves against operator configuration. */
+export interface McpToolBinding extends McpToolSelection {
+  registrationDigest: string;
+}
+
 const ID = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 const PROFILE_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const TOOL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;

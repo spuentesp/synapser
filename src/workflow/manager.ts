@@ -18,6 +18,7 @@ import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
 import { discloseConditionDetail, type ReviewAudience } from "./disclosure.ts";
 import { isDigest } from "../digest/file.ts";
+import type { McpToolBinding } from "../mcp/registry.ts";
 
 export interface Actor {
   id: string;
@@ -29,6 +30,7 @@ export interface RecipeRequestProvenance {
   recipeDigest: string;
   paramsDigest: string;
   parameterNames: readonly string[];
+  mcpTools: readonly McpToolBinding[];
 }
 
 export interface EngineRun {
@@ -43,6 +45,8 @@ export interface EngineRun {
   mark: (state: WorkflowState, data?: Record<string, unknown>) => void;
   /** The library as this run started (L3): the only library content a run may read. Absent without a library. */
   library?: FrozenLibrary;
+  /** Explicit recipe-origin MCP selection; undefined means an ordinary workflow, [] means no tools. */
+  recipeMcpTools?: readonly McpToolBinding[];
 }
 export interface EngineResult {
   status: "DONE" | "FAILED" | "CANCELLED" | "TIMED_OUT";
@@ -192,6 +196,7 @@ export class WorkflowManager {
         recipe_digest: recipe.recipeDigest,
         params_digest: recipe.paramsDigest,
         parameter_names: [...recipe.parameterNames].sort(),
+        required_mcp_tools: [...recipe.mcpTools].map((tool) => ({ server_id: tool.serverId, tool_name: tool.toolName, registration_digest: tool.registrationDigest })).sort((a, b) => a.server_id.localeCompare(b.server_id) || a.tool_name.localeCompare(b.tool_name)),
       });
     });
   }
@@ -236,7 +241,10 @@ export class WorkflowManager {
     if (!/^[a-z][a-z0-9_-]{0,62}$/.test(recipe.recipeId) || !isDigest(recipe.recipeDigest)
       || !/^[a-f0-9]{64}$/.test(recipe.paramsDigest)
       || new Set(recipe.parameterNames).size !== recipe.parameterNames.length
-      || recipe.parameterNames.some((name) => !/^[a-z][a-z0-9_-]{0,62}$/.test(name))) {
+      || recipe.parameterNames.some((name) => !/^[a-z][a-z0-9_-]{0,62}$/.test(name))
+      || !Array.isArray(recipe.mcpTools)
+      || recipe.mcpTools.some((tool) => !/^[a-z][a-z0-9_-]{0,62}$/.test(tool.serverId) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(tool.toolName) || !isDigest(tool.registrationDigest))
+      || new Set(recipe.mcpTools.map((tool) => `${tool.serverId}\0${tool.toolName}`)).size !== recipe.mcpTools.length) {
       return { ok: false, code: "INVALID_RECIPE_PROVENANCE" };
     }
     return this.#create(input, actor, recipe);
@@ -334,6 +342,18 @@ export class WorkflowManager {
       try {
         // L3: the library is frozen when the run starts; edits made after this point do not reach the run
         const library = this.#o.library?.freeze(j);
+        const recipeRequest = j.listEvents().find((event) => event.entity === "recipe_request");
+        const recipeData = recipeRequest?.data as { required_mcp_tools?: unknown } | undefined;
+        const recipeMcpTools: McpToolBinding[] | undefined = recipeRequest
+          ? Array.isArray(recipeData?.required_mcp_tools)
+            ? (recipeData.required_mcp_tools as unknown[]).map((item) => {
+                if (typeof item !== "object" || item === null || Array.isArray(item)) throw new Error("recipe MCP binding is invalid");
+                const row = item as Record<string, unknown>;
+                if (typeof row["server_id"] !== "string" || typeof row["tool_name"] !== "string" || typeof row["registration_digest"] !== "string" || !isDigest(row["registration_digest"])) throw new Error("recipe MCP binding is invalid");
+                return { serverId: row["server_id"], toolName: row["tool_name"], registrationDigest: row["registration_digest"] };
+              })
+            : []
+          : undefined;
         res = await this.#o.engine.run({
           workflow: () => this.#doc(j)!.workflow,
           revision: () => this.#doc(j)!.revision,
@@ -345,6 +365,7 @@ export class WorkflowManager {
             this.#transition(j, state, "engine", data ?? {});
           },
           ...(library ? { library } : {}),
+          ...(recipeMcpTools !== undefined ? { recipeMcpTools } : {}),
         });
       } catch (e) {
         res = { status: "FAILED", reason: `engine error: ${String((e as Error).message ?? e).slice(0, 300)}` };

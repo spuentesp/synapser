@@ -13,7 +13,8 @@ import { selectAuthorizedSkills } from "../agents/skills.ts";
 import { GENERIC_CLI_ADAPTER } from "../agents/generic-cli.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
-import type { McpServerRegistration } from "../mcp/registry.ts";
+import { digestOfJson } from "../digest/canonical.ts";
+import type { McpServerRegistration, McpToolBinding } from "../mcp/registry.ts";
 import { NativeMcpRunRegistry } from "../mcp/native-tool-registry.ts";
 import { RunMemoryScope } from "../agents/run-memory-scope.ts";
 import { Executor } from "../executor/executor.ts";
@@ -108,13 +109,35 @@ export class ProductionEngine implements WorkflowEngine {
       const budget = new BudgetManager({ maxTokens: c.limits?.maxTokens ?? 800_000, maxCalls: 200 });
       const research = c.research?.(journal, runId);
       const nativeMcp = new NativeMcpRunRegistry(c.mcpServers ?? [], join(c.stateDir, "mcp-artifacts"), journal, runId);
-      const catalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}), allowedSkillsByProfile: new Map([...library.skillsFor].map(([id, skills]) => [id, skills.map((skill) => skill.id)])) });
+      const fullCatalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}), allowedSkillsByProfile: new Map([...library.skillsFor].map(([id, skills]) => [id, skills.map((skill) => skill.id)])) });
+      const recipeMcpTools = r.recipeMcpTools;
+      const mcpEligibleIds = new Set<string>();
+      if (recipeMcpTools && recipeMcpTools.length > 0) {
+        for (const profile of library.profiles) {
+          if (!profile.enabled || profile.role !== "writer" || profile.adapter !== "native" || profile.nativeRole !== "worker") continue;
+          const allowed = recipeMcpTools.every((selection) => {
+            const server = c.mcpServers?.find((candidate) => candidate.id === selection.serverId);
+            return !!server?.enabled && !!server.artifact && digestOfJson(JSON.parse(JSON.stringify(server))) === selection.registrationDigest
+              && (server.profiles[profile.id] ?? []).includes(selection.toolName)
+              && (server.nativeReadOnlyProfiles?.[profile.id] ?? []).includes(selection.toolName);
+          });
+          if (allowed) mcpEligibleIds.add(profile.id);
+        }
+        if (mcpEligibleIds.size === 0) return { status: "FAILED", reason: "recipe MCP tool selection is no longer available to an enabled native worker profile" };
+      }
+      const catalog = recipeMcpTools && recipeMcpTools.length > 0
+        ? fullCatalog.filter((card) => mcpEligibleIds.has(card.id))
+        : fullCatalog;
       const w0 = r.workflow();
 
       // ---- decompose -------------------------------------------------------------------------
       const plan: Plan = c.planner
         ? await c.planner(w0, catalog, journal)
         : (await planMission(model, { runId, objective: w0.description, contract: w0.goals, workspaceRoot: c.workspaceRoot, maxTasks: 8, catalog, workflow: w0 }, { budget })).plan;
+      if (recipeMcpTools && recipeMcpTools.length > 0) {
+        const invalid = plan.tasks.some((task) => (task.kind ?? "write") !== "write" || (task.skills !== undefined && task.skills.length > 0));
+        if (invalid) return { status: "FAILED", reason: "recipe MCP selection supports write tasks only and cannot be combined with unbound recipe skills" };
+      }
       journal.tx((t) => t.event(runId, "decomposition", runId, null, "ACCEPTED", { tasks: plan.tasks.length, serves: plan.tasks.map((x) => ({ id: x.id, serves: x.serves ?? [] })), uncovered: [...conditionCoverage(w0).mustServe].filter((id) => !plan.tasks.some((x) => x.serves?.includes(id))) }));
       if (r.signal.aborted) return { status: "CANCELLED", reason: "cancelled while planning" };
 
@@ -154,7 +177,7 @@ export class ProductionEngine implements WorkflowEngine {
       };
       // plan 17 P17.6: CLI runners resolve an injectProvider against the operator's providers, never the library's.
       const operatorProviders = () => c.providers ?? defaultModelConfig().providers;
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor, (profile, _runId, taskId, _journal, scope) => nativeMcp.open(profile.id, taskId, scope)), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection), runMemoryScope });
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor, (profile, _runId, taskId, _journal, scope, selection) => nativeMcp.open(profile.id, taskId, scope, selection)), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection), runMemoryScope });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;
@@ -273,6 +296,7 @@ export class ProductionEngine implements WorkflowEngine {
         },
         {
           runId, objective: w0.description, plan, acceptance: [],
+          ...(recipeMcpTools !== undefined ? { mcpToolSelection: recipeMcpTools as readonly McpToolBinding[] } : {}),
           limits: {
             concurrency: c.limits?.concurrency ?? 3, maxRepairRounds: c.limits?.maxRepairRounds ?? 2, missionMs,
             ...(c.limits?.maxTaskAttempts ? { maxTaskAttempts: c.limits.maxTaskAttempts } : {}),

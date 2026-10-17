@@ -17,6 +17,7 @@ import { DelegationBroker, type DelegationConfig } from "../orchestration/delega
 import { approvalStatus, currentPlanDigest, decideApproval, requestApproval } from "../orchestration/gates.ts";
 import { dispatchStep, type OrchestrationDeps, type StepRow } from "../orchestration/dispatch.ts";
 import type { Plan, PlanTask } from "./plan.ts";
+import type { McpToolBinding } from "../mcp/registry.ts";
 
 export interface MissionSpec {
   runId: string;
@@ -24,6 +25,8 @@ export interface MissionSpec {
   plan: Plan;
   /** Ids of allowlisted commands; ALL must pass on the same consistent snapshot. */
   acceptance: string[];
+  /** Immutable recipe selection; planner output cannot widen this set. Undefined preserves manual workflows. */
+  mcpToolSelection?: readonly McpToolBinding[];
   limits?: { concurrency?: number; maxRepairRounds?: number; missionMs?: number; maxTaskAttempts?: number; loop?: Partial<LoopLimits> };
 }
 
@@ -140,6 +143,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
           ...(pt.profile ? { profile: pt.profile } : {}),
           ...(pt.tags ? { tags: pt.tags } : {}),
           ...(pt.skills ? { skillSelection: pt.skills } : {}),
+          ...(spec.mcpToolSelection !== undefined ? { mcpToolSelection: spec.mcpToolSelection } : {}),
           ...(pt.gates ? { gates: pt.gates } : {}),
           ...(pt.tier ? { tier: pt.tier } : {}),
           ...(pt.serves ? { serves: pt.serves } : {}),
@@ -453,6 +457,7 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
             scope: union,
             spec: {
               kind: "repair",
+              ...(spec.mcpToolSelection !== undefined ? { mcpToolSelection: spec.mcpToolSelection } : {}),
               objective: `The acceptance checks failed on the combined result. Fix the code so they pass, changing only what is needed.`,
               criteria: [
                 "All acceptance checks pass on the final files.",

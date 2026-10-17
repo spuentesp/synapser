@@ -186,6 +186,9 @@ export class DelegationBroker implements DelegationPort {
           ...(ask.profile ? { profile: ask.profile } : {}),
           ...(ask.tags ? { tags: ask.tags } : {}),
           ...(gates.length ? { gates } : {}),
+          // Recipe MCP selection is system-injected into the requester. Delegation inherits it verbatim;
+          // the agent's request schema has no field that can widen or replace this capability boundary.
+          ...(Array.isArray(requester.spec.mcpToolSelection) ? { mcpToolSelection: requester.spec.mcpToolSelection } : {}),
           depth,
           requested_by: requesterId,
         },
