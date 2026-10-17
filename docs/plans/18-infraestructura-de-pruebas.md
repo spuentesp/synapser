@@ -236,7 +236,7 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 
 ## 8. Estado y pendientes (16 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6, E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
+Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
 
 ### Hecho en esta pasada
 
@@ -249,7 +249,7 @@ Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6, E7 y E9 (H9
 - **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
 - **E13 cerrada:** H13.1 tiene lista vacía y regresiones para `kimi --help` y S13; H13.2 tiene un presupuesto definido. H13.5 se revisó en `docs/contracts/README.md`; los diez contratos tienen una prueba trazable y `GET /api/config` cuenta con regresión contra la API. `scripts/verify.ts` separa cada corrida de mutación en un temporal absoluto y un reporte únicos, excluye `.env*` de la copia de Stryker y, junto con `scripts/duplication-report.ts`, permite guardar evidencia en una ruta absoluta externa autorizada mediante `SYNAPSER_EVIDENCE_DIR`. H13.3–H13.4 se verificaron con `npm run verify`; la evidencia cruda quedó fuera de archivos versionados.
 
-### E6 en curso
+### E6 cerrada
 
 - **H6.1**: cubierto por `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts`.
 - **H6.2**: `test/agents/runner-credential-redaction.test.ts` ejecuta el runner con los cuatro adaptadores CLI que admiten inyección (Claude, Codex, Kimi y MiMo), usando sus configuraciones de proveedor y un ejecutable sonda que recorre el HOME efímero y el entorno del proceso; envía esa superficie a un endpoint HTTP local, que rechaza cualquier centinela del corpus. También se comprueba que la inyección excluye el overlay de inicio de sesión Claude. Es una prueba de frontera/adaptadores sin invocar modelos ni proveedores externos; no afirma validar el comportamiento interno de los binarios comerciales.
