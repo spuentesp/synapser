@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     switch (cmd) {
       case "serve": {
         const { createApi } = await import("../api/server.ts");
-        const { discoverRegisteredMcpServer } = await import("../mcp/discovery.ts");
+        const { discoverRegisteredMcpServer, testRegisteredMcpTool } = await import("../mcp/discovery.ts");
         const pi = argv.indexOf("--port");
         // plan 17 P17.8: a fixed operator token, from the environment, so writes survive a restart and clients can hold it.
         const operatorToken = process.env["SYNAPSER_OPERATOR_TOKEN"];
@@ -163,6 +163,10 @@ async function main(): Promise<void> {
             const registration = cfg.mcpServers.find((server) => server.id === serverId);
             if (!registration) throw new Error("unknown registered MCP server");
             return discoverRegisteredMcpServer(registration, profileId, join(cfg.stateDir, "mcp-artifacts"));
+          }, mcpTestCall: async (serverId, profileId, toolName, arguments_) => {
+            const registration = cfg.mcpServers.find((server) => server.id === serverId);
+            if (!registration) throw new Error("unknown registered MCP server");
+            return testRegisteredMcpTool(registration, profileId, toolName, arguments_, join(cfg.stateDir, "mcp-artifacts"));
           }, config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor, providers: cfg.providers, roles: cfg.roles }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);

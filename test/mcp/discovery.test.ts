@@ -6,7 +6,7 @@ import { afterEach, test } from "node:test";
 import { createApi, type ApiServer } from "../../src/api/server.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
 import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
-import { discoverRegisteredMcpServer } from "../../src/mcp/discovery.ts";
+import { discoverRegisteredMcpServer, testRegisteredMcpTool } from "../../src/mcp/discovery.ts";
 import { importArtifact } from "../../src/mcp/artifact-store.ts";
 
 const temporary: string[] = [];
@@ -132,4 +132,73 @@ test("HTTP discovery rejects an unpinned legacy server before invoking its conne
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { error: "MCP_ARTIFACT_UNPINNED" });
   assert.equal(attemptedSpawn, false);
+});
+
+test("operator test-call invokes only a selected allowlisted tool through the real sandboxed MCP process", async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "synapser-mcp-test-call-state-"));
+  const fixtureDir = mkdtempSync(join(tmpdir(), "synapser-mcp-test-call-fixture-"));
+  temporary.push(stateDir, fixtureDir);
+  const workspace = join(fixtureDir, "workspace");
+  mkdirSync(workspace);
+  const packageRoot = join(fixtureDir, "package");
+  mkdirSync(packageRoot);
+  writeFileSync(join(packageRoot, "server.cjs"), [
+    "let input = '';",
+    "function reply(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n'); }",
+    "process.stdin.setEncoding('utf8');",
+    "process.stdin.on('data', chunk => { input += chunk; for (;;) { const i = input.indexOf('\\n'); if (i < 0) return; const line = input.slice(0, i); input = input.slice(i + 1); const request = JSON.parse(line); if (request.method === 'initialize') reply(request.id, { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'local-call-fixture', version: '1' } }); else if (request.method === 'tools/list') reply(request.id, { tools: [{ name: 'inspect', inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false } }, { name: 'mutate', inputSchema: { type: 'object' } }] }); else if (request.method === 'tools/call') { if (request.params.name !== 'inspect') process.exit(24); reply(request.id, { content: [{ type: 'text', text: 'observed:' + request.params.arguments.value }] }); } else if (request.id !== undefined) reply(request.id, {}); } });",
+  ].join("\n"));
+  const artifactStoreRoot = join(fixtureDir, "artifact-store");
+  const artifact = importArtifact(packageRoot, artifactStoreRoot);
+  const parsed = validateMcpServerRegistry([{
+    id: "local-call", enabled: true, origin: "file:///tmp/local-call-fixture", version: "1.0.0",
+    command: process.execPath, args: [], artifact: { digest: artifact.digest, entrypoint: "server.cjs" },
+    expectedServer: { name: "local-call-fixture", version: "1" }, profiles: { worker: ["inspect"] },
+  }], ["worker"]);
+  if (!parsed.ok) throw new Error(parsed.errors.join("; "));
+  const registration = parsed.servers[0]!;
+  let invocationCalls = 0;
+  manager = new WorkflowManager({ stateDir, workspaceRoot: workspace, commandIds: new Set(), profileIds: new Set(["worker"]), pollMs: 10, engine: { run: async () => ({ status: "DONE", reason: null }) } });
+  api = createApi({
+    stateDir,
+    control: {
+      manager,
+      mcpServers: () => [registration],
+      mcpTestCall: async (id, profileId, toolName, arguments_) => {
+        invocationCalls++;
+        assert.equal(id, registration.id);
+        return testRegisteredMcpTool(registration, profileId, toolName, arguments_, artifactStoreRoot);
+      },
+    },
+  });
+  const base = `http://127.0.0.1:${await api.listen(0)}`;
+  const headers = { "content-type": "application/json", origin: base, "x-synapser-token": api.token };
+  const unauthenticated = await fetch(`${base}/api/mcp/local-call/test-call`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ profileId: "worker", toolName: "inspect", arguments: { value: "hello" } }),
+  });
+  assert.equal(unauthenticated.status, 401);
+  const disallowed = await fetch(`${base}/api/mcp/local-call/test-call`, {
+    method: "POST", headers,
+    body: JSON.stringify({ profileId: "worker", toolName: "mutate", arguments: {} }),
+  });
+  assert.equal(disallowed.status, 403);
+  assert.deepEqual(await disallowed.json(), { error: "MCP_TOOL_NOT_ALLOWLISTED" });
+  assert.equal(invocationCalls, 0, "unauthenticated and unallowlisted requests must not spawn a server");
+  registration.enabled = false;
+  const disabled = await fetch(`${base}/api/mcp/local-call/test-call`, {
+    method: "POST", headers,
+    body: JSON.stringify({ profileId: "worker", toolName: "inspect", arguments: { value: "hello" } }),
+  });
+  assert.equal(disabled.status, 409);
+  assert.deepEqual(await disabled.json(), { error: "MCP_SERVER_DISABLED" });
+  registration.enabled = true;
+  assert.equal(invocationCalls, 0, "a disabled server must not spawn for a test call");
+  const response = await fetch(`${base}/api/mcp/local-call/test-call`, {
+    method: "POST", headers,
+    body: JSON.stringify({ profileId: "worker", toolName: "inspect", arguments: { value: "hello" } }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { toolName: "inspect", result: { content: [{ type: "text", text: "observed:hello" }] } });
+  assert.equal(invocationCalls, 1);
 });

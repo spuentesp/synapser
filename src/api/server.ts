@@ -32,6 +32,7 @@ import type { WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { McpServerRegistration } from "../mcp/registry.ts";
 import type { McpServerDiscovery } from "../mcp/discovery.ts";
+import type { McpJsonObject, OutboundMcpToolResult } from "../mcp/outbound-stdio-client.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const APPROVAL_KEY = /^(?:[A-Za-z0-9._-]{1,80}|(?:cond|effect|iv):[A-Za-z0-9._-]{1,80})$/;
@@ -62,6 +63,8 @@ export interface ApiControl {
   /** MCP discovery is an operator-only probe: it lists allowlisted tools and never calls them (plan 19 P19.5). */
   mcpServers?: () => readonly McpServerRegistration[];
   mcpDiscover?: (serverId: string, profileId: string) => Promise<McpServerDiscovery>;
+  /** Explicit operator test call. This is never passed to agent runtimes. */
+  mcpTestCall?: (serverId: string, profileId: string, toolName: string, arguments_: McpJsonObject) => Promise<OutboundMcpToolResult>;
 }
 
 import { type ConfigChange, ConfigWriteError } from "../config/write.ts";
@@ -249,6 +252,26 @@ export function createApi(opts: ApiOptions): ApiServer {
         return json(res, 200, await c.mcpDiscover(id, body.profileId));
       } catch (error) {
         return fail(res, 502, "MCP_DISCOVERY_FAILED", String((error as Error).message ?? error).slice(0, 300));
+      }
+    }
+    if (top === "mcp" && id && action === "test-call" && method === "POST") {
+      if (!c.mcpTestCall) return fail(res, 404, "MCP_TEST_CALL_UNAVAILABLE");
+      const body = await readBody(req, res) as { profileId?: unknown; toolName?: unknown; arguments?: unknown } | undefined;
+      if (body === undefined) return;
+      if (typeof body.profileId !== "string" || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(body.profileId)) return fail(res, 400, "INVALID_PROFILE_ID");
+      if (typeof body.toolName !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(body.toolName)) return fail(res, 400, "INVALID_MCP_TOOL_NAME");
+      if (!body.arguments || typeof body.arguments !== "object" || Array.isArray(body.arguments) || Object.getPrototypeOf(body.arguments) !== Object.prototype) return fail(res, 400, "INVALID_MCP_TOOL_ARGUMENTS");
+      const registration = c.mcpServers?.().find((server) => server.id === id);
+      if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
+      if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
+      if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
+      const allowlist = registration.profiles[body.profileId];
+      if (!allowlist) return fail(res, 403, "MCP_PROFILE_NOT_CONFIGURED");
+      if (!allowlist.includes(body.toolName)) return fail(res, 403, "MCP_TOOL_NOT_ALLOWLISTED");
+      try {
+        return json(res, 200, { toolName: body.toolName, result: await c.mcpTestCall(id, body.profileId, body.toolName, body.arguments as McpJsonObject) });
+      } catch (error) {
+        return fail(res, 502, "MCP_TEST_CALL_FAILED", String((error as Error).message ?? error).slice(0, 300));
       }
     }
     const asResult = <T>(r: { ok: true } & T | { ok: false; code: string; errors?: string[] }) =>
