@@ -11,6 +11,7 @@ import { LibraryStore } from "../../src/library/store.ts";
 import { NO_LIBRARY_POLICY } from "../../src/library/validate.ts";
 import type { Role } from "../../src/model/types.ts";
 import { WorkflowManager } from "../../src/workflow/manager.ts";
+import type { McpServerRegistration } from "../../src/mcp/registry.ts";
 
 // Plan 17 P17.8 step 2: a provider or role change is validated, written to the operator's file, and applied in place
 // (hot reload). A holder of the live objects sees the change without a restart; an invalid change changes nothing.
@@ -21,7 +22,7 @@ function setup(withFile: boolean) {
   const path = join(dir, "synapser.config.json");
   if (withFile) writeFileSync(path, JSON.stringify({ workspace: dir }));
   const defaults = defaultModelConfig();
-  const live: LiveConfig = { configPath: withFile ? path : null, providers: { ...defaults.providers }, roles: { ...defaults.roles } as Record<Role, RoleConfig> };
+  const live: LiveConfig = { configPath: withFile ? path : null, providers: { ...defaults.providers }, roles: { ...defaults.roles } as Record<Role, RoleConfig>, mcpServers: [] };
   return { dir, path, live };
 }
 
@@ -83,6 +84,49 @@ describe("plan 17 P17.8: hot reload of providers and roles", () => {
   });
 });
 
+describe("plan 19 P19.5: operator MCP registry writes", () => {
+  const server: McpServerRegistration = {
+    id: "review-tools",
+    enabled: true,
+    origin: "file:///opt/synapser/review-tools",
+    version: "1.0.0",
+    command: "/usr/bin/node",
+    args: [],
+    expectedServer: { name: "review-tools", version: "1.0.0" },
+    profiles: { "codex-writer": ["inspect"] },
+  };
+
+  test("writes a validated complete registration and revokes it in place", () => {
+    const { dir, path } = setup(true);
+    const defaults = defaultModelConfig();
+    const live: LiveConfig = { configPath: path, providers: { ...defaults.providers }, roles: { ...defaults.roles } as Record<Role, RoleConfig>, mcpServers: [] };
+    const holder = live.mcpServers;
+    try {
+      writeLiveConfig(live, { kind: "mcpServers", id: server.id, value: server });
+      assert.equal(holder?.[0]?.enabled, true);
+      assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).mcpServers, [server]);
+      writeLiveConfig(live, { kind: "mcpServers", id: server.id, value: { ...server, enabled: false } });
+      assert.equal(holder?.[0]?.enabled, false, "the runtime-held registry sees revocation without restart");
+      assert.equal(JSON.parse(readFileSync(path, "utf8")).mcpServers[0].enabled, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a refused MCP update leaves both file and live registry unchanged", () => {
+    const { dir, path } = setup(true);
+    const defaults = defaultModelConfig();
+    const live: LiveConfig = { configPath: path, providers: { ...defaults.providers }, roles: { ...defaults.roles } as Record<Role, RoleConfig>, mcpServers: [] };
+    try {
+      assert.throws(() => writeLiveConfig(live, { kind: "mcpServers", id: server.id, value: { ...server, env: { TOKEN: "secret" } } }), ConfigWriteError);
+      assert.deepEqual(live.mcpServers, []);
+      assert.equal(readFileSync(path, "utf8").includes("mcpServers"), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("plan 17 P17.8: the API route for provider and role changes", () => {
   const OPERATOR = "operator-token-0123456789abcdef0123";
   let state: string;
@@ -133,6 +177,23 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
     const body = (await r.json()) as { error: string; errors: string[] };
     assert.equal(body.error, "INVALID_CONFIG");
     assert.match(body.errors.join(" "), /metadata/);
+  });
+
+  test("MCP registration replacement is operator-authenticated and an untrusted write is refused", async () => {
+    const server: McpServerRegistration = {
+      id: "review-tools", enabled: true, origin: "file:///opt/synapser/review-tools", version: "1.0.0",
+      command: "/usr/bin/node", args: [], expectedServer: { name: "review-tools", version: "1.0.0" },
+      profiles: { "codex-writer": ["inspect"] },
+    };
+    const refused = await put("/api/config/mcpServers/review-tools", server, { origin: base });
+    assert.equal(refused.status, 401);
+    assert.deepEqual(live.mcpServers, []);
+    const accepted = await put("/api/config/mcpServers/review-tools", server, ok());
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(live.mcpServers, [server]);
+    const revoked = await put("/api/config/mcpServers/review-tools", { ...server, enabled: false }, ok());
+    assert.equal(revoked.status, 200);
+    assert.equal(JSON.parse(readFileSync(join(dir, "synapser.config.json"), "utf8")).mcpServers[0].enabled, false);
   });
 });
 

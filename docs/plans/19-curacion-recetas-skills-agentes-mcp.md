@@ -327,6 +327,14 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   tools permitidas y ajenas, y se prueba filtrado más rechazo de la llamada no permitida sin que llegue
   al proceso. *Falsación:* identidad parcialmente distinta aceptada, tool ajena visible o llamada directa
   no autorizada alcanza al servidor.
+- **RCP6e — Registro MCP operator-owned**: el alta/edición reemplaza el registro completo bajo la
+  misma sesión de operador y la validación del archivo entero; el cambio se aplica al registro live
+  solo después de validar y persistir. La revocación inicial es reversible (`enabled: false`) y solo
+  bloquea nuevos discoveries; no borra artefactos ni afirma cancelar uno ya iniciado. *Verificador:*
+  API local acepta reemplazo autenticado, rechaza escritura sin sesión y registro con campos no
+  autorizados, persiste la desactivación y la lista live la observa sin reiniciar. *Falsación:*
+  escritura no autenticada, configuración parcial o inválida aplicada, pérdida entre archivo y live,
+  o revocación que elimina un pin compartido.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

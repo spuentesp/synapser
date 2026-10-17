@@ -11,6 +11,7 @@ import type { AgentProfile } from "../agents/profile.ts";
 import { type ProviderConfig, type RoleConfig, SYSTEM_ROLES } from "../model/config.ts";
 import type { Role } from "../model/types.ts";
 import { ConfigError, loadConfig } from "./load.ts";
+import type { McpServerRegistration } from "../mcp/registry.ts";
 
 export class ConfigWriteError extends Error {
   readonly errors: string[];
@@ -23,7 +24,8 @@ export class ConfigWriteError extends Error {
 export type ConfigChange =
   | { kind: "providers"; id: string; value: unknown }
   | { kind: "roles"; id: string; value: unknown }
-  | { kind: "agents"; id: string; value: unknown };
+  | { kind: "agents"; id: string; value: unknown }
+  | { kind: "mcpServers"; id: string; value: unknown };
 
 export interface LiveConfig {
   configPath?: string | null;
@@ -33,6 +35,8 @@ export interface LiveConfig {
   roles: Record<Role, RoleConfig>;
   /** The live agent list. Replaced in place, so the runtime's holders see new and changed agents. */
   profiles?: AgentProfile[];
+  /** Operator-owned MCP registration list, replaced in place after full config validation. */
+  mcpServers?: McpServerRegistration[];
 }
 
 /** Makes `target` equal to `next` without replacing the object, so every holder of `target` sees the change. */
@@ -43,7 +47,7 @@ export function replaceInPlace(target: object, next: object): void {
 }
 
 const digest = (live: LiveConfig): string =>
-  createHash("sha256").update(JSON.stringify({ providers: live.providers, roles: live.roles, profiles: live.profiles?.map((p) => p.id) ?? [] })).digest("hex").slice(0, 16);
+  createHash("sha256").update(JSON.stringify({ providers: live.providers, roles: live.roles, profiles: live.profiles?.map((p) => p.id) ?? [], mcpServers: live.mcpServers ?? [] })).digest("hex").slice(0, 16);
 
 /** One line per change. Problems are validator messages, which name variables and never carry a key value. */
 function audit(live: LiveConfig, change: ConfigChange, outcome: "applied" | "refused", before: string, problems: string[], after: string | null): void {
@@ -72,6 +76,7 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
   const path = live.configPath;
   if (!path) throw new ConfigWriteError(["there is no operator file to write: create synapser.config.json first"]);
   if (change.kind === "agents" && !live.profiles) throw new ConfigWriteError(["agents cannot change: this process holds no live agent list"]);
+  if (change.kind === "mcpServers" && !live.mcpServers) throw new ConfigWriteError(["MCP servers cannot change: this process holds no live registry"]);
   const raw = readRaw(path);
   if (change.kind === "agents") {
     if (!change.value || typeof change.value !== "object" || Array.isArray(change.value)) throw new ConfigWriteError(["an agent is an object"]);
@@ -83,11 +88,20 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
     raw["agents"] = agents;
   } else if (change.kind === "providers") {
     raw["providers"] = { ...live.providers, [change.id]: change.value };
-  } else {
+  } else if (change.kind === "roles") {
     if (!(SYSTEM_ROLES as readonly string[]).includes(change.id)) throw new ConfigWriteError([`unknown role ${change.id}`]);
     raw["roles"] = { ...live.roles, [change.id]: change.value };
+  } else {
+    if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(change.id)) throw new ConfigWriteError(["MCP server id is invalid"]);
+    if (!change.value || typeof change.value !== "object" || Array.isArray(change.value)) throw new ConfigWriteError(["an MCP server registration is an object"]);
+    const servers = Array.isArray(raw["mcpServers"]) ? [...(raw["mcpServers"] as unknown[])] : [];
+    const entry = { ...(change.value as Record<string, unknown>), id: change.id };
+    const at = servers.findIndex((server) => (server as { id?: unknown })?.id === change.id);
+    if (at >= 0) servers[at] = entry;
+    else servers.push(entry);
+    raw["mcpServers"] = servers;
   }
-  commit(live, path, raw, change.kind === "agents");
+  commit(live, path, raw, change.kind === "agents", change.kind === "mcpServers");
 }
 
 /**
@@ -95,7 +109,7 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
  * problem, as the loader reads the operator's file at start. Only then does it replace the operator's file, and the live
  * tables change in place. An injected CLI agent must also name a provider the loaded file declares, with the model it declares.
  */
-function commit(live: LiveConfig, path: string, raw: Record<string, unknown>, replaceAgents: boolean): void {
+function commit(live: LiveConfig, path: string, raw: Record<string, unknown>, replaceAgents: boolean, replaceMcpServers: boolean): void {
   const candidate = `${path}.candidate.${process.pid}`;
   writeFileSync(candidate, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   let loaded: ReturnType<typeof loadConfig>;
@@ -121,4 +135,5 @@ function commit(live: LiveConfig, path: string, raw: Record<string, unknown>, re
   replaceInPlace(live.roles, loaded.roles);
   // Only an agent change replaces the live agent list; a provider or role change leaves it as it is.
   if (replaceAgents && live.profiles) live.profiles.splice(0, live.profiles.length, ...loaded.profiles);
+  if (replaceMcpServers && live.mcpServers) live.mcpServers.splice(0, live.mcpServers.length, ...loaded.mcpServers);
 }
