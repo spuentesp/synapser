@@ -1,7 +1,6 @@
 // Canonical adapter capability declarations. The adapters, profile validator and orchestration
 // catalog consume this same table so a permission mode cannot drift from the flags we emit.
-import type { AdapterId } from "./profile.ts";
-import type { AgentProfile } from "./profile.ts";
+import type { AdapterId, AgentProfile } from "./profile-types.ts";
 
 export type SkillSupport = "native" | "prompt-prepend" | "none";
 export type SkillMechanism = "native-dir" | "skills-dir-flag" | "prompt-prepend" | "none";

@@ -334,7 +334,7 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
   }
 
   const bwrapArgs = [
-    "--die-with-parent", "--new-session", "--unshare-net", "--unshare-ipc", "--unshare-uts",
+    "--die-with-parent", "--new-session", "--unshare-pid", "--unshare-net", "--unshare-ipc", "--unshare-uts",
     "--dir", "/usr", "--ro-bind", "/usr", "/usr",
     "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
     "--proc", "/proc", "--dev", "/dev",

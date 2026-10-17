@@ -174,10 +174,11 @@ herramientas de efecto. El transporte HTTP queda fuera de este incremento.
 Un proceso stdio conectado por Synapser solo se considera contenido cuando se verificaron antes del
 handshake el scope activo de systemd con `MemoryMax=4G`, `TasksMax=64`, accounting y `KillMode` de grupo,
 y la frontera bwrap configurada. El workspace y HOME son rutas canónicas bajo `/tmp`; el proceso no ve
-hermanos, root modificable, red de host ni archivos externos montados. Cierre/timeout no se considera
-exitoso hasta que el scope quede inactivo y su cgroup sin miembros. *Verificador:* proceso local MCP lee
-`/proc/self/cgroup` y los límites efectivos, intenta leer un sentinel hermano, conectar a loopback y deja
-un descendiente detached; las pruebas observan rechazo de los dos accesos y terminación completa.
+hermanos, root modificable, red de host ni archivos externos montados; un namespace PID impide enumerar
+procesos del host o leer sus entornos. Cierre/timeout no se considera exitoso hasta que el scope quede
+inactivo y su cgroup sin miembros. *Verificador:* proceso local MCP lee `/proc/self/cgroup` y los límites
+efectivos, intenta leer un sentinel hermano y un proceso host de mismo UID, conectar a loopback y deja un
+descendiente detached; las pruebas observan rechazo de los accesos y terminación completa.
 *Falsación:* límite ausente/distinto, acceso fuera de mounts, conexión a host o scope/descendiente vivo
 tras el cierre. Esto no afirma resistencia ante un exploit del kernel.
 

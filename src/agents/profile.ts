@@ -1,70 +1,14 @@
 // Agent profiles: a declarative description of HOW to invoke one agent CLI (design: "toolbox").
 // A profile is data, validated by control; a model may choose among profiles but cannot edit them.
 
-import type { ParserId } from "./usage.ts";
 import { capabilitiesForAdapter, isAdapterId } from "./capabilities.ts";
+import type { AdapterId, AgentProfile, AgentRole, Tier } from "./profile-types.ts";
+export type { AdapterId, AgentProfile, AgentRole, AgentPermissions, Tier } from "./profile-types.ts";
 
-export type AgentRole = "writer" | "advisor";
 /** What the agent is for: cheap = one-shot chores, standard = building, advanced = research/review/hard calls. */
-export type Tier = "cheap" | "standard" | "advanced";
 export const TIERS: readonly Tier[] = ["cheap", "standard", "advanced"];
 export const tierRank = (t: Tier): number => TIERS.indexOf(t);
 /** How a profile is executed. New implementations (e.g. "orca") plug in behind the AgentRunner port. */
-export type AdapterId = "native" | "cli-oneshot" | "claude-code" | "codex" | "kimi" | "mimo" | "generic-cli" | "orca";
-
-export interface AgentPermissions {
-  /** Adapter-specific named mode. The adapter validates and translates it to its CLI flag. */
-  mode?: string;
-  allowedTools?: readonly string[];
-  disallowedTools?: readonly string[];
-}
-
-export interface AgentProfile {
-  id: string;
-  description: string;
-  role: AgentRole;
-  /** Defaults to "cli-oneshot". */
-  adapter?: AdapterId;
-  /** cli-oneshot only. `{prompt}`, `{cwd}` and `{model}` are substituted. argv[0] is a program, never a shell string. */
-  argv: readonly string[];
-  /** native: a model declared by `provider`; CLI: the CLI's own model selector. */
-  model?: string;
-  /** Native agents select a library provider and one of its declared models. */
-  provider?: string;
-  /**
-   * CLI agents (plan 17 P17.6): the operator's provider this run is injected with, using `model` as the model
-   * that provider declares. Only the operator's file may set it; a library document is refused by its schema.
-   */
-  injectProvider?: string;
-  temperature?: number;
-  nativeRole?: "worker" | "repair";
-  /** cli-oneshot only: how to read the tool's own events. */
-  parser: ParserId;
-  timeoutMs: number;
-  /** Capability tags the orchestrator may match against a task. */
-  tags: readonly string[];
-  /** Extra environment entries. Our own credentials are NEVER inherited (see runner). */
-  env?: Readonly<Record<string, string>>;
-  /** Permission policy translated by the selected adapter, never interpolated as a shell string. */
-  permissions?: AgentPermissions;
-  /** Hard per-invocation CLI budget when the adapter supports one. */
-  maxBudgetUsd?: number;
-  /**
-   * What the CLI needs from the real HOME to authenticate and keep its own settings (relative paths,
-   * e.g. ".claude"). Everything else in HOME — ~/.ssh, ~/.gitconfig, ~/.config/gh, ~/.netrc — is NOT
-   * visible to the agent: it runs with a scratch HOME (plan 13 §5.2).
-   */
-  homeOverlay?: readonly string[];
-  /** Capability tier (plan 13 §7). Default `standard`. */
-  tier?: Tier;
-  /** How guidance can reach a running agent: between turns (`turn`) or only at its next attempt (`attempt`). */
-  steerable?: "turn" | "attempt";
-  /** Pool this agent belongs to (limits concurrency across its members). */
-  pool?: string;
-  /** Disabled profiles stay in the catalog (so the audit can name them) but are never scheduled. */
-  enabled: boolean;
-  disabledReason?: string;
-}
 
 /** Profiles for the CLIs found and probed on this host (13 oct 2026). */
 export const BUILTIN_PROFILES: readonly AgentProfile[] = [

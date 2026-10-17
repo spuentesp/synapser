@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { spawn } from "node:child_process";
 import { connectRegisteredMcpServer, connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
 import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
 
@@ -13,7 +14,11 @@ const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 const mode = process.env.TEST_MODE || 'normal';
-if (process.env.PID_FILE) fs.writeFileSync(process.env.PID_FILE, String(process.pid));
+function processGroup() {
+  const stat = fs.readFileSync('/proc/self/stat', 'utf8');
+  return Number(stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[2]);
+}
+if (process.env.PID_FILE) fs.writeFileSync(process.env.PID_FILE, JSON.stringify({ pid: process.pid, pgid: processGroup() }));
 if (process.env.OBSERVED_ENV_FILE) fs.writeFileSync(process.env.OBSERVED_ENV_FILE, JSON.stringify({ home: process.env.HOME || null, inheritedSecret: process.env.SYNAPSER_MCP_TEST_INHERITED_SECRET || null }));
 if (process.env.RESOURCE_LIMITS_FILE) {
   const entry = fs.readFileSync('/proc/self/cgroup', 'utf8').split('\n').find(line => line.startsWith('0::'));
@@ -25,6 +30,21 @@ if (process.env.RESOURCE_LIMITS_FILE) {
 if (process.env.HOST_PROBE_PATH) {
   try { fs.writeFileSync('external-read.json', JSON.stringify({ content: fs.readFileSync(process.env.HOST_PROBE_PATH, 'utf8') })); }
   catch (error) { fs.writeFileSync('external-read.json', JSON.stringify({ error: error.code || error.message })); }
+}
+if (process.env.HOST_PROBE_PID && process.env.HOST_PROBE_SENTINEL && process.env.PID_PROBE_FILE) {
+  const target = '/proc/' + process.env.HOST_PROBE_PID;
+  try {
+    const visible = fs.existsSync(target);
+    if (!visible) fs.writeFileSync(process.env.PID_PROBE_FILE, JSON.stringify({ visible: false }));
+    else {
+      const bytes = fs.readFileSync(target + '/environ');
+      const expected = Buffer.from('SYNAPSER_FIXTURE_SENTINEL=' + process.env.HOST_PROBE_SENTINEL);
+      const sentinelPresent = bytes.includes(Buffer.concat([expected, Buffer.from([0])]));
+      fs.writeFileSync(process.env.PID_PROBE_FILE, JSON.stringify({ visible: true, sentinelPresent }));
+    }
+  } catch (error) {
+    fs.writeFileSync(process.env.PID_PROBE_FILE, JSON.stringify({ visible: fs.existsSync(target), error: error.code || error.message }));
+  }
 }
 if (process.env.NETWORK_PROBE_PORT) {
   const socket = net.connect(Number(process.env.NETWORK_PROBE_PORT), '127.0.0.1');
@@ -48,11 +68,11 @@ function onLine(line) {
     if (mode === 'exit-init') process.exit(23);
     if (mode === 'child-timeout-list' || mode === 'child-close') {
       const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: 'ignore' });
-      if (process.env.GRANDCHILD_PID_FILE) fs.writeFileSync(process.env.GRANDCHILD_PID_FILE, String(child.pid));
+      if (process.env.GRANDCHILD_PID_FILE) fs.writeFileSync(process.env.GRANDCHILD_PID_FILE, JSON.stringify({ spawned: true, namespacePid: child.pid }));
     }
     if (mode === 'detached-child-close') {
-      const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: 'ignore', detached: true });
-      if (process.env.GRANDCHILD_PID_FILE) fs.writeFileSync(process.env.GRANDCHILD_PID_FILE, String(child.pid));
+      const childScript = "const fs=require('node:fs');const stat=fs.readFileSync('/proc/self/stat','utf8');const pgid=Number(stat.slice(stat.lastIndexOf(')')+1).trim().split(/\\s+/)[2]);fs.writeFileSync(process.env.GRANDCHILD_PID_FILE,JSON.stringify({spawned:true,namespacePid:process.pid,pgid}));process.on('SIGTERM',()=>{});setInterval(()=>{},1000)";
+      spawn(process.execPath, ['-e', childScript], { stdio: 'ignore', detached: true, env: process.env });
     }
     if (mode === 'coalesced-invalid') {
       const init = JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'x'.repeat(120), version: '1' } } });
@@ -183,68 +203,18 @@ function registeredOptions(options: ReturnType<typeof fixture>["options"], profi
   };
 }
 
-async function assertChildReaped(pidFile: string): Promise<void> {
-  assert.ok(existsSync(pidFile), "fixture recorded its child PID");
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  assert.ok(Number.isSafeInteger(pid) && pid > 1);
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try { process.kill(pid, 0); } catch (error) {
-      assert.equal((error as NodeJS.ErrnoException).code, "ESRCH");
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.fail(`MCP child ${pid} remained alive after client cleanup`);
+function assertServerStarted(markerFile: string): void {
+  // The test awaits client.close(), a timeout teardown, or a failed startup; those operations do not settle until
+  // systemd confirms the scope is inactive with an empty cgroup. This marker only proves this fixture was launched.
+  assert.ok(existsSync(markerFile), "the MCP fixture wrote its startup marker");
 }
 
-async function assertPidNotRunning(pidFile: string): Promise<void> {
-  assert.ok(existsSync(pidFile), "fixture recorded the process PID");
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  assert.ok(Number.isSafeInteger(pid) && pid > 1);
-  for (let attempt = 0; attempt < 50; attempt++) {
-    try {
-      process.kill(pid, 0);
-      // A killed descendant can briefly remain as a zombie until the host init reaps it; it is no longer running.
-      if (process.platform === "linux") {
-        try {
-          const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-          const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
-          if (state === "Z") return;
-        } catch { return; }
-      }
-    } catch (error) {
-      assert.equal((error as NodeJS.ErrnoException).code, "ESRCH");
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.fail(`process ${pid} remained running after client cleanup`);
-}
-
-function linuxProcessGroup(pid: number): number {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-  const fields = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/);
-  const pgid = Number(fields[2]);
-  assert.ok(Number.isSafeInteger(pgid) && pgid > 1, `could not read process group for PID ${pid}`);
-  return pgid;
-}
-
-async function assertPidRunning(pidFile: string): Promise<number> {
-  assert.ok(existsSync(pidFile), "fixture recorded the process PID");
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  assert.ok(Number.isSafeInteger(pid) && pid > 1);
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      process.kill(pid, 0);
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
-      if (state !== "Z") return pid;
-    } catch {
-      // The child may not have finished spawning yet; retry briefly before failing.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.fail(`process ${pid} did not remain running after process-group cleanup`);
+async function assertDescendantSpawned(markerFile: string): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < 30 && !existsSync(markerFile); attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.ok(existsSync(markerFile), "the MCP fixture launched the test descendant");
+  const record = JSON.parse(readFileSync(markerFile, "utf8")) as Record<string, unknown>;
+  assert.equal(record["spawned"], true);
+  return record;
 }
 
 test("outbound stdio client initializes, discovers tools, validates inputs, and calls a local server", async () => {
@@ -283,19 +253,19 @@ test("outbound stdio client initializes, discovers tools, validates inputs, and 
   assert.equal(readFileSync(callsFile, "utf8"), "1");
 
   await client.close();
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
-test("malformed response frames fail closed and reap the child", async () => {
+test("malformed response frames fail closed and confirm scope teardown", async () => {
   const { options, pidFile } = fixture("malformed");
   await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
-test("oversized response frames fail closed and reap the child", async () => {
+test("oversized response frames fail closed and confirm scope teardown", async () => {
   const { options, pidFile } = fixture("oversized");
   await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("coalesced frames are subject to the SDK's accumulated-buffer limit", async () => {
@@ -305,33 +275,33 @@ test("coalesced frames are subject to the SDK's accumulated-buffer limit", async
   assert.ok(first! < 256);
   assert.ok(second! < 256);
   assert.ok(combined! > 256);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
-test("a timed-out request poisons the session and reaps the child", async () => {
+test("a timed-out request poisons the session and confirms scope teardown", async () => {
   const { options, pidFile } = fixture("timeout-list");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.listTools(), /timed out during tools\/list/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("a server exit during an outstanding request rejects and closes the session", async () => {
   const { options, pidFile } = fixture("exit-list");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.listTools(), /failed during tools\/list/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
-test("a server exit during initialization is reported without leaking its process", async () => {
+test("a server exit during initialization is reported after scope teardown", async () => {
   const { options, pidFile } = fixture("exit-init");
   await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("server identity must include both name and version", async () => {
   const { options, pidFile } = fixture("bad-identity");
   await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("registered MCP connection requires the exact operator-pinned server name and version", async (t) => {
@@ -339,7 +309,7 @@ test("registered MCP connection requires the exact operator-pinned server name a
     await t.test(`rejects ${mode}`, async () => {
       const { options, pidFile } = fixture(mode);
       await assert.rejects(connectRegisteredMcpServer(registeredOptions(options)), /identity|server.*(?:name|version)|expected/i);
-      await assertChildReaped(pidFile);
+      assertServerStarted(pidFile);
     });
   }
 });
@@ -361,7 +331,7 @@ test("registered MCP connection exposes only the profile allowlist and blocks di
   } finally {
     await client.close();
   }
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("a registered MCP process cannot start without an absolute scratch HOME", async () => {
@@ -386,7 +356,7 @@ test("the process does not inherit a parent secret variable", async () => {
   }
   assert.deepEqual(JSON.parse(readFileSync(observedEnvFile, "utf8")), { home: homeDir, inheritedSecret: null });
   await client!.close();
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("initialization notification is sent before tool discovery", async () => {
@@ -407,7 +377,7 @@ test("tool discovery follows pagination and aggregates unique tools", async () =
   assert.deepEqual(tools.map((tool) => tool.name), ["page-one", "page-two"]);
   assert.deepEqual(readFileSync(cursorFile, "utf8").trim().split("\n"), ["<first>", "page-2"]);
   await client.close();
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("tool discovery fails closed at its page bound", async () => {
@@ -418,57 +388,49 @@ test("tool discovery fails closed at its page bound", async () => {
   await assert.rejects(client.listTools(), /pagination limit|failed during tools\/list/);
   const pages = readFileSync(cursorFile, "utf8").trim().split("\n");
   assert.ok(pages.length > 0 && pages.length <= 100, `pagination must stop within 100 pages; saw ${pages.length}`);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("a schema keyword outside the supported subset rejects discovery and terminates the server", async () => {
   const { options, pidFile } = fixture("unsupported-schema");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.listTools(), /invalid advertised tool/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("close kills a descendant that ignores SIGTERM", { skip: process.platform === "win32" }, async () => {
   const { options, pidFile, grandchildPidFile } = fixture("child-close");
   const client = await connectStdioMcpServer(options);
+  await assertDescendantSpawned(grandchildPidFile);
   await client.close();
-  await assertChildReaped(pidFile);
-  await assertPidNotRunning(grandchildPidFile);
+  assertServerStarted(pidFile);
+  // close() returns only after systemd confirms the whole scope cgroup is empty, including the SIGTERM-resistant child.
 });
 
 test("timeout kills a descendant that ignores SIGTERM", { skip: process.platform === "win32" }, async () => {
   const { options, pidFile, grandchildPidFile } = fixture("child-timeout-list");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.listTools(), /timed out during tools\/list/);
-  await assertChildReaped(pidFile);
-  await assertPidNotRunning(grandchildPidFile);
+  assertServerStarted(pidFile);
+  await assertDescendantSpawned(grandchildPidFile);
+  // The timed-out request does not reject until teardown has confirmed that the entire systemd scope is empty.
 });
 
 test("close terminates a detached descendant, not only the verified process group", { skip: process.platform !== "linux" }, async () => {
   const { options, pidFile, grandchildPidFile } = fixture("detached-child-close");
   let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
-  let detachedPid: number | undefined;
   try {
     client = await connectStdioMcpServer(options);
-    detachedPid = await assertPidRunning(grandchildPidFile);
-    const serverPid = Number(readFileSync(pidFile, "utf8"));
-    assert.notEqual(linuxProcessGroup(detachedPid), linuxProcessGroup(serverPid), "detached child must escape the server's verified process group");
+    const detached = await assertDescendantSpawned(grandchildPidFile);
+    const server = JSON.parse(readFileSync(pidFile, "utf8")) as { pgid: number };
+    assert.notEqual(detached["pgid"], server.pgid, "the detached child must escape the server's process group");
 
     await client.close();
     client = undefined;
-    await assertChildReaped(pidFile);
-    await assertPidNotRunning(grandchildPidFile);
+    assertServerStarted(pidFile);
+    // The child PID is namespace-local; the verified empty cgroup is the authority that it has terminated.
   } finally {
-    if (client) {
-      try { await client.close(); } catch { /* cleanup below explicitly reaps the detached test process */ }
-    }
-    if (detachedPid === undefined && existsSync(grandchildPidFile)) detachedPid = Number(readFileSync(grandchildPidFile, "utf8"));
-    if (detachedPid !== undefined && Number.isSafeInteger(detachedPid) && detachedPid > 1) {
-      try { process.kill(detachedPid, "SIGKILL"); } catch (error) {
-        assert.equal((error as NodeJS.ErrnoException).code, "ESRCH");
-      }
-      await assertPidNotRunning(grandchildPidFile);
-    }
+    if (client) await client.close();
   }
 });
 
@@ -482,7 +444,7 @@ test("an outbound MCP process is placed under the 4 GiB and 64-task cgroup ceili
   } finally {
     await client.close();
   }
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("an outbound MCP process cannot read a sibling host file outside its registered workspace", { skip: process.platform !== "linux" }, async () => {
@@ -500,7 +462,47 @@ test("an outbound MCP process cannot read a sibling host file outside its regist
   } finally {
     await client.close();
   }
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
+});
+
+test("an outbound MCP process cannot see a same-UID host process through /proc", { skip: process.platform !== "linux" }, async () => {
+  const sentinel = `controlled-fixture-${process.pid}-${Date.now()}`;
+  const hostProcess = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    env: { PATH: process.env["PATH"] ?? "", SYNAPSER_FIXTURE_SENTINEL: sentinel },
+    stdio: "ignore",
+  });
+  assert.ok(hostProcess.pid, "the host sentinel process has a PID");
+  const hostPid = hostProcess.pid!;
+  let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
+  try {
+    // Establish the fixture is real and readable from its host parent before testing the sandbox boundary.
+    const hostEnvironment = readFileSync(`/proc/${hostPid}/environ`, "utf8").split("\0");
+    assert.ok(hostEnvironment.includes(`SYNAPSER_FIXTURE_SENTINEL=${sentinel}`), "the selected host process exposes only this test-controlled sentinel");
+
+    const { options, dir } = fixture();
+    const probeFile = join(dir, "pid-probe.json");
+    options.env.HOST_PROBE_PID = String(hostPid);
+    options.env.HOST_PROBE_SENTINEL = sentinel;
+    options.env.PID_PROBE_FILE = probeFile;
+    client = await connectStdioMcpServer(options);
+    const probe = JSON.parse(readFileSync(probeFile, "utf8")) as { visible: boolean; sentinelPresent?: boolean; error?: string };
+    assert.equal(probe.visible, false, "the host PID must be absent in the outbound process's private PID namespace");
+    assert.notEqual(probe.sentinelPresent, true, "the MCP process must not read the controlled host environment");
+    await client.close();
+    client = undefined;
+    // `close()` is the stronger registered-process contract: it returns only after systemd confirms the scope is empty.
+  } finally {
+    if (client) await client.close();
+    if (hostProcess.exitCode === null && hostProcess.signalCode === null) hostProcess.kill("SIGTERM");
+    await new Promise<void>((resolve) => {
+      if (hostProcess.exitCode !== null || hostProcess.signalCode !== null) return resolve();
+      hostProcess.once("exit", () => resolve());
+      setTimeout(() => {
+        if (hostProcess.exitCode === null && hostProcess.signalCode === null) hostProcess.kill("SIGKILL");
+        resolve();
+      }, 2_000).unref();
+    });
+  }
 });
 
 test("an outbound MCP process cannot connect to a host-local listener", { skip: process.platform !== "linux" }, async () => {
@@ -526,7 +528,7 @@ test("an outbound MCP process cannot connect to a host-local listener", { skip: 
     if (client) await client.close();
     await new Promise<void>((resolve) => listener.close(() => resolve()));
   }
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("tool-level isError is preserved for the caller", async () => {
@@ -535,14 +537,14 @@ test("tool-level isError is preserved for the caller", async () => {
   const result = await client.callTool("echo", { text: "input" });
   assert.deepEqual(result, { content: [{ type: "text", text: "expected tool failure" }], isError: true });
   await client.close();
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("invalid tool content fails closed and terminates the server", async () => {
   const { options, pidFile } = fixture("invalid-content");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.callTool("echo", { text: "input" }), /failed during tools\/call/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("structured tool output is validated against the advertised output schema", async () => {
@@ -551,12 +553,12 @@ test("structured tool output is validated against the advertised output schema",
   const result = await client.callTool("echo", {});
   assert.deepEqual(result.structuredContent, { result: "ok" });
   await client.close();
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });
 
 test("structured tool output violating outputSchema fails closed", async () => {
   const { options, pidFile } = fixture("output-schema-invalid");
   const client = await connectStdioMcpServer(options);
   await assert.rejects(client.callTool("echo", {}), /failed during tools\/call/);
-  await assertChildReaped(pidFile);
+  assertServerStarted(pidFile);
 });

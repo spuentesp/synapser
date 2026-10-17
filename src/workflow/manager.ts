@@ -97,6 +97,15 @@ export interface ManagerOptions {
 
 const newId = (): string => `wf-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`;
 
+/** Acceptance and waiver records are operator attestations, not user-authored workflow data. */
+function hasOperatorAttestations(input: unknown): boolean {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return false;
+  const conditions = (input as Record<string, unknown>)["conditions"];
+  if (!Array.isArray(conditions)) return false;
+  return conditions.some((condition) => typeof condition === "object" && condition !== null && !Array.isArray(condition) &&
+    (Object.hasOwn(condition, "secondaryAccepted") || Object.hasOwn(condition, "waivedBy")));
+}
+
 export class WorkflowManager {
   readonly #o: ManagerOptions;
   readonly #journals = new Map<string, Journal>();
@@ -202,6 +211,9 @@ export class WorkflowManager {
   }
 
   create(input: unknown, actor: Actor): Result<{ id: string }> {
+    if (actor.role !== "operator" && hasOperatorAttestations(input)) {
+      return { ok: false, code: "OPERATOR_ATTESTATION_REQUIRES_OPERATOR", errors: ["secondaryAccepted and waivedBy can only be recorded by an operator"] };
+    }
     const raw = { ...(input as Record<string, unknown>) };
     if (raw["id"] === undefined) raw["id"] = newId();
     const v = validateWorkflow(raw, { workspaceRoot: this.#o.workspaceRoot, commandIds: this.#o.commandIds, ...this.#profileIdsOption() });
@@ -224,6 +236,9 @@ export class WorkflowManager {
   /** Changing conditions is a REVISION (C2): allowed until the workflow is terminal; the next DONE must
    *  be judged against it (the engine reads the current revision on every evaluation round). */
   edit(id: string, input: unknown, actor: Actor): Result<{ revision: number }> {
+    if (actor.role !== "operator" && hasOperatorAttestations(input)) {
+      return { ok: false, code: "OPERATOR_ATTESTATION_REQUIRES_OPERATOR", errors: ["secondaryAccepted and waivedBy can only be recorded by an operator"] };
+    }
     const j = this.#journal(id);
     if (!j) return { ok: false, code: "UNKNOWN_WORKFLOW" };
     const { state } = this.#state(j);

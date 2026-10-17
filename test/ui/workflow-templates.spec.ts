@@ -4,15 +4,15 @@ import { expect, test } from "@playwright/test";
 const templates = [
   {
     name: "Bounded change with tests",
-    params: { Title: "Bounded change", "Scope (paths, one per line)": "src/one.ts\nsrc/two.ts", "Allowlisted command": "test:unit" },
+    params: { Title: "Bounded change", "Scope (paths, one per line)": "src/one.ts\nsrc/two.ts", "Allowlisted command": "unit-check" },
     expected: {
       title: "Bounded change",
-      description: "Change only the files in scope and prove the change with the allowlisted check test:unit.",
+      description: "Change only the files in scope and prove the change with the allowlisted check unit-check.",
       goals: ["The change is made inside the declared scope and its check passes"],
       nonGoals: [{ statement: "Touch files outside the declared scope" }],
       conditions: [
         { id: "in-scope", statement: "The declared files changed", required: true, checker: { kind: "diff", require: ["src/one.ts", "src/two.ts"] } },
-        { id: "checks-pass", statement: "The allowlisted check passes", required: true, checker: { kind: "command", commandId: "test:unit" } },
+        { id: "checks-pass", statement: "The allowlisted check passes", required: true, checker: { kind: "command", commandId: "unit-check" } },
       ],
     },
   },
@@ -29,14 +29,14 @@ const templates = [
   },
   {
     name: "Review",
-    params: { Title: "Review API", "Files to review (paths, one per line)": "src/api.ts\nsrc/types.ts", "Reviewer profile": "reviewer", Rubric: "Check compatibility and error handling." },
+    params: { Title: "Review API", "Files to review (paths, one per line)": "src/api.ts\nsrc/types.ts", "Reviewer profile": "claude-opus-advisor", Rubric: "Check compatibility and error handling." },
     expected: {
       title: "Review API",
       description: "A reviewer judges the files against the rubric. The reviewed files must not change in this run.",
       goals: ["A reviewer has judged the files against the rubric"],
       nonGoals: [{ statement: "Change the reviewed files", guard: { kind: "diff", forbid: ["src/api.ts", "src/types.ts"] } }],
       conditions: [
-        { id: "judged", statement: "A reviewer judged the files", required: false, checker: { kind: "review", profile: "reviewer", rubric: "Check compatibility and error handling." } },
+        { id: "judged", statement: "A reviewer judged the files", required: false, checker: { kind: "review", profile: "claude-opus-advisor", rubric: "Check compatibility and error handling." } },
         { id: "unchanged", statement: "The reviewed files are unchanged", required: true, checker: { kind: "diff", forbid: ["src/api.ts", "src/types.ts"] } },
       ],
     },
@@ -72,5 +72,43 @@ for (const template of templates) {
 
     const preview = await page.locator("#wf-preview").inputValue();
     expect(JSON.parse(preview)).toEqual(template.expected);
+
+    const validation = await page.evaluate(async (document) => {
+      const response = await fetch("/api/designer/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(document),
+      });
+      return { status: response.status, body: await response.json() as { ok?: boolean; errors?: string[] } };
+    }, JSON.parse(preview));
+    expect(validation.status, JSON.stringify(validation.body)).toBe(200);
+    expect(validation.body).toEqual({ ok: true });
   });
 }
+
+test("the server rejects a bounded-change template with an empty scope", async ({ page }) => {
+  await page.goto("/#workflows");
+  await page.getByRole("button", { name: "New workflow" }).click();
+
+  const templatePanel = page.locator("section").filter({ has: page.getByRole("heading", { name: "Template" }) });
+  await templatePanel.getByRole("combobox").click();
+  await page.getByRole("option", { name: "Bounded change with tests", exact: true }).click();
+  await templatePanel.getByLabel("Title", { exact: true }).fill("Empty scope");
+  await templatePanel.getByLabel("Allowlisted command", { exact: true }).fill("unit-check");
+  await templatePanel.getByRole("button", { name: "Use template" }).click();
+
+  const preview = await page.locator("#wf-preview").inputValue();
+  const validation = await page.evaluate(async (document) => {
+    const response = await fetch("/api/designer/check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(document),
+    });
+    return { status: response.status, body: await response.json() as { ok?: boolean; errors?: string[] } };
+  }, JSON.parse(preview));
+  expect(validation.status).toBe(200);
+  expect(validation.body.ok).toBe(false);
+  expect(validation.body.errors?.join("\n")).toContain("diff needs at least one require or forbid pattern");
+
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+});
