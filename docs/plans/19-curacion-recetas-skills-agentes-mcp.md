@@ -120,6 +120,16 @@ orquestador expone únicamente las herramientas MCP aprobadas en su registro de 
 copian configuraciones al repositorio ni al HOME del usuario. Retirar o revocar un servidor impide
 nuevas ejecuciones y no altera los snapshots ya registrados.
 
+El primer transporte de P19.5 será `stdio`, sin dependencia de ejecución nueva. El cliente de
+descubrimiento implementa solo `initialize`, `tools/list` y `tools/call`; negocia una versión de
+protocolo explícita, limita tamaño de frames, herramientas, páginas y tiempos, y falla cerrado ante
+respuestas o palabras clave de esquema que no soporta. Las anotaciones del servidor no autorizan
+herramientas. El cliente por sí solo no es un sandbox ni un broker de efectos: hasta que el proxy,
+la allowlist efectiva y la frontera de proceso/red estén verificadas, no se inyectarán herramientas
+de efecto ni secretos a procesos MCP externos. Los comandos MCP son código ejecutable elegido por el
+operador y deben tratarse como confiables; `stdio` no restringe su acceso a archivos o red. El
+transporte HTTP queda fuera de este incremento.
+
 El catálogo MCP de tareas vincula recetas publicadas con las integraciones necesarias. `task_request`
 explica qué servidor/herramientas asignará y por qué; el inicio falla cerrado si falta una integración,
 una versión o un perfil compatible. Los MCPs se llaman desde el agente mediante esa inyección, con
@@ -209,6 +219,12 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   del HOME o workspace no constituyen autorización y deben quedar deshabilitadas por defecto.
   Falsación: servidor/tool desconocido, versión no aprobada, secreto filtrado o tool de efecto alcanza
   datos/escritura fuera de política, o un CLI arranca un servidor heredado sin autorización.
+- **RCP6a — Transporte acotado**: el cliente stdio acepta solo el ciclo de herramientas explícito,
+  aplica límites y valida el subconjunto de esquema que puede hacer cumplir; en POSIX confirma el
+  cierre del proceso y del grupo aislado que controla antes de devolver timeout/cierre exitoso. Esto
+  no contiene un ejecutable operador que se escape creando otra sesión. Falsación: RPC desconocido, esquema
+  con restricción no soportada, frame/paginación fuera de límites, argumento inválido que llega al
+  servidor o descendiente vivo tras cerrar el cliente.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.
