@@ -1,3 +1,4 @@
+import { join } from "node:path";
 // The production engine: runs ONE workflow on the real executor, journal, Zoanthrope and models.
 //   decompose (Nemotron, seeing goals/non-goals/conditions and the agent catalog)
 //   → baseline snapshot → mission (conditions are the acceptance decision) → DONE / FAILED / CANCELLED
@@ -12,6 +13,8 @@ import { selectAuthorizedSkills } from "../agents/skills.ts";
 import { GENERIC_CLI_ADAPTER } from "../agents/generic-cli.ts";
 import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
+import type { McpServerRegistration } from "../mcp/registry.ts";
+import { NativeMcpRunRegistry } from "../mcp/native-tool-registry.ts";
 import { Executor } from "../executor/executor.ts";
 import { acquireWorkspaceLockInOrder } from "../journal/lock.ts";
 import type { Journal } from "../journal/journal.ts";
@@ -53,6 +56,8 @@ export interface EngineConfig {
   providerKeyEnv?: readonly string[];
   /** The library skills each agent id receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
   agentSkills?: Record<string, readonly string[]>;
+  /** Operator MCP registry; only explicitly read-only tools are connected to native worker runs. */
+  mcpServers?: readonly McpServerRegistration[];
   /** One model port per run (so calls are recorded in THAT run's journal). */
   models: (journal: Journal) => ModelPort;
   research?: (journal: Journal, runId: string) => ResearchSession | undefined;
@@ -100,6 +105,7 @@ export class ProductionEngine implements WorkflowEngine {
       const model = c.models(journal);
       const budget = new BudgetManager({ maxTokens: c.limits?.maxTokens ?? 800_000, maxCalls: 200 });
       const research = c.research?.(journal, runId);
+      const nativeMcp = new NativeMcpRunRegistry(c.mcpServers ?? [], join(c.stateDir, "mcp-artifacts"), journal, runId);
       const catalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}), allowedSkillsByProfile: new Map([...library.skillsFor].map(([id, skills]) => [id, skills.map((skill) => skill.id)])) });
       const w0 = r.workflow();
 
@@ -146,7 +152,7 @@ export class ProductionEngine implements WorkflowEngine {
       };
       // plan 17 P17.6: CLI runners resolve an injectProvider against the operator's providers, never the library's.
       const operatorProviders = () => c.providers ?? defaultModelConfig().providers;
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection) });
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor, (profile, _runId, taskId) => nativeMcp.open(profile.id, taskId)), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection) });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;

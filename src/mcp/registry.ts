@@ -15,6 +15,8 @@ export interface McpServerRegistration {
   expectedServer: { name: string; version: string };
   /** Per-profile allowlist of tool names. A profile absent from this map has no tools enabled. */
   profiles: Record<string, string[]>;
+  /** Explicit operator declaration that these tools are read-only and may be exposed to native workers. */
+  nativeReadOnlyProfiles?: Record<string, string[]>;
 }
 
 const ID = /^[a-z0-9][a-z0-9_-]{0,40}$/;
@@ -60,7 +62,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
       errors.push(`${at} must be an object`);
       return;
     }
-    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "artifact", "expectedServer", "profiles"], at, errors);
+    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "artifact", "expectedServer", "profiles", "nativeReadOnlyProfiles"], at, errors);
 
     const id = entry["id"];
     if (typeof id !== "string" || !ID.test(id)) errors.push(`${at}.id must match [a-z0-9][a-z0-9_-]*`);
@@ -130,8 +132,29 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
       }
     }
 
+    const rawNativeReadOnly = entry["nativeReadOnlyProfiles"];
+    const nativeReadOnlyProfiles: Record<string, string[]> = {};
+    if (rawNativeReadOnly !== undefined) {
+      if (!isObject(rawNativeReadOnly)) errors.push(`${at}.nativeReadOnlyProfiles must map native profile ids to explicitly read-only tool-name arrays`);
+      else {
+        for (const [profile, tools] of Object.entries(rawNativeReadOnly)) {
+          if (!PROFILE_ID.test(profile)) errors.push(`${at}.nativeReadOnlyProfiles key "${profile}" is not a profile id`);
+          else if (!known.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles references unknown profile "${profile}"`);
+          if (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string" || !TOOL_NAME.test(tool))) {
+            errors.push(`${at}.nativeReadOnlyProfiles.${profile} must be an array of valid tool names`);
+            continue;
+          }
+          const duplicates = tools.filter((tool, index) => tools.indexOf(tool) !== index);
+          if (duplicates.length) errors.push(`${at}.nativeReadOnlyProfiles.${profile} has duplicate tool name(s): ${[...new Set(duplicates)].join(", ")}`);
+          const allowedForProfile = allowlists[profile] ?? [];
+          for (const tool of tools) if (!allowedForProfile.includes(tool as string)) errors.push(`${at}.nativeReadOnlyProfiles.${profile}.${String(tool)} must also be in the general profile allowlist`);
+          nativeReadOnlyProfiles[profile] = [...tools] as string[];
+        }
+      }
+    }
+
     if (typeof id === "string" && ID.test(id) && typeof enabled === "boolean" && validOrigin(origin) && typeof version === "string" && version.trim() === version && version.length > 0 && version.length <= 128 && typeof command === "string" && isAbsolute(command) && !command.includes("\0") && Array.isArray(args) && args.every((arg) => typeof arg === "string" && !arg.includes("\0") && !SECRET_MARKER.test(arg)) && expectedServer && isObject(profiles)) {
-      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], ...(pinnedArtifact ? { artifact: pinnedArtifact } : {}), expectedServer, profiles: allowlists });
+      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], ...(pinnedArtifact ? { artifact: pinnedArtifact } : {}), expectedServer, profiles: allowlists, ...(Object.keys(nativeReadOnlyProfiles).length ? { nativeReadOnlyProfiles } : {}) });
     }
   });
 

@@ -120,6 +120,20 @@ describe("agent loop", () => {
     assert.equal(r.modelCalls, 3);
   });
 
+  test("repeated MCP transport/tool failures count toward the invalid-output limit", async () => {
+    const model = new ScriptedModel(() => ({ calls: [call("mcp_test__inspect", {})] }));
+    const r = await runTask(deps(model, {
+      mcpTools: {
+        tools: [{ type: "function", function: { name: "mcp_test__inspect", description: "read-only fixture", parameters: { type: "object" } } }],
+        call: async () => { throw new Error("transport failed"); },
+        close: async () => {},
+      },
+    }), T1);
+    assert.equal(r.status, "INVALID_OUTPUT");
+    assert.equal(r.modelCalls, 3);
+    assert.deepEqual(steps().map((event) => event.toState), ["REJECTED", "REJECTED", "REJECTED"]);
+  });
+
   test("immediate, exact feedback on bad replacements — nothing is staged, nothing reaches the executor", async () => {
     const model = new ScriptedModel((_m, n) => {
       if (n === 1) return { calls: [call("read_files", { paths: ["app/schema.py", "app/billing.py"] })] };

@@ -78,7 +78,14 @@ export interface OutboundMcpToolResult {
 
 export type OutboundMcpState = "new" | "starting" | "ready" | "stopping" | "closed" | "halted";
 
-class OutboundMcpStartError extends Error {
+export class McpProcessCleanupUnconfirmedError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "McpProcessCleanupUnconfirmedError";
+  }
+}
+
+class OutboundMcpStartError extends McpProcessCleanupUnconfirmedError {
   constructor(options?: ErrorOptions) {
     super("registered MCP server startup failed and scope teardown could not be confirmed; its artifact snapshot was retained", options);
     this.name = "OutboundMcpStartError";
@@ -716,9 +723,16 @@ class OutboundStdioMcpClient {
         groupExited = await this.#waitForGroupExit(pgid, this.#options.killGraceMs * 2);
       }
     }
-    try { await this.#client.close(); } catch { /* cleanup errors are reported by the verified process-group check */ }
-    this.#state = scopeExited && groupExited ? "closed" : "halted";
-    if (!scopeExited || !groupExited) throw new Error("registered MCP server cgroup or wrapper exit could not be confirmed");
+    let clientCloseError: unknown;
+    try { await this.#client.close(); } catch (error) { clientCloseError = error; }
+    const cleanupConfirmed = scopeExited && groupExited && clientCloseError === undefined;
+    this.#state = cleanupConfirmed ? "closed" : "halted";
+    if (!cleanupConfirmed) {
+      throw new McpProcessCleanupUnconfirmedError(
+        "registered MCP server cgroup, wrapper, or client teardown could not be confirmed",
+        clientCloseError === undefined ? undefined : { cause: clientCloseError },
+      );
+    }
   }
 
   async #waitForGroupExit(pgid: number, timeoutMs: number): Promise<boolean> {
@@ -829,8 +843,8 @@ export async function connectRegisteredMcpServer(options: ConnectRegisteredMcpSe
     if (client.serverInfo.name !== expected.name || client.serverInfo.version !== expected.version) {
       try {
         await client.close();
-      } catch {
-        throw new Error("registered MCP server identity mismatched and process cleanup could not be confirmed");
+      } catch (error) {
+        throw new McpProcessCleanupUnconfirmedError("registered MCP server identity mismatched and process cleanup could not be confirmed", { cause: error });
       }
       client = undefined;
       throw new Error("registered MCP server identity did not match the operator-pinned server");
@@ -851,8 +865,14 @@ export async function connectRegisteredMcpServer(options: ConnectRegisteredMcpSe
       },
     };
   } catch (error) {
-    if (error instanceof OutboundMcpStartError) throw error;
-    if (client) await client.close();
+    if (error instanceof McpProcessCleanupUnconfirmedError) throw error;
+    if (client) {
+      try {
+        await client.close();
+      } catch (closeError) {
+        throw new McpProcessCleanupUnconfirmedError("registered MCP server failed and process cleanup could not be confirmed", { cause: closeError });
+      }
+    }
     cleanup();
     throw error;
   }

@@ -41,6 +41,16 @@ describe("operator MCP process registry", () => {
     assert.deepEqual(load({ mcpServers: [server] }).mcpServers, [server]);
   });
 
+  test("requires native read-only tools to be explicitly declared and already generally allowlisted", () => {
+    const native = entry({
+      profiles: { "nemotron-worker": ["inspect", "write"] },
+      nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] },
+    });
+    assert.deepEqual(load({ mcpServers: [native] }).mcpServers, [native]);
+    rejects({ mcpServers: [entry({ nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] } })] }, /must also be in the general profile allowlist/);
+    rejects({ mcpServers: [entry({ nativeReadOnlyProfiles: { "future-agent": ["inspect"] } })] }, /unknown profile/);
+  });
+
   test("accepts a normalized content-addressed artifact entrypoint and rejects malformed pins", () => {
     assert.deepEqual(load({ mcpServers: [entry()] }).mcpServers[0]?.artifact, {
       digest: `sha256:${"a".repeat(64)}`, entrypoint: "bin/review-tools",
