@@ -13,6 +13,8 @@ import type { ProfileCard } from "../orchestration/catalog.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingGates } from "../orchestration/gates.ts";
 import type { Journal } from "../journal/journal.ts";
 import type { Actor, WorkflowManager } from "../workflow/manager.ts";
+import type { LibraryStore } from "../library/store.ts";
+import { taskRecipeSchema, type TaskRecipe } from "../library/schema.ts";
 
 export type McpRole = "initiator" | "worker";
 
@@ -25,6 +27,8 @@ export interface McpSession {
 
 interface Tool {
   name: string;
+  title?: string;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean };
   description: string;
   roles: readonly McpRole[];
   readOnly: boolean;
@@ -81,6 +85,7 @@ export interface McpOptions {
   bound?: { workflowId: string; taskId: string };
   catalog?: () => ProfileCard[];
   policy?: () => unknown;
+  library?: LibraryStore;
   /** Journal for calls that belong to no workflow (list, catalog). */
   serverJournal: Journal;
   version?: string;
@@ -341,7 +346,70 @@ export class McpServer {
           profiles: (this.#o.catalog?.() ?? []).map((c) => ({ id: c.id, kinds: c.kinds, enabled: c.enabled, integration: c.integration, strengths: c.strengths, cost: c.cost, observed: c.observed })),
         }),
       },
+      {
+        name: "task_catalog", title: "Published task recipes", annotations: { readOnlyHint: true }, roles: ["initiator"], readOnly: true,
+        description: "List operator-published task recipes. Draft and unpublished library entries are never exposed here.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        run: () => ({ recipes: (this.#o.library?.publishedRecipes() ?? []).flatMap((entry) => {
+          const recipe = taskRecipeSchema.safeParse(entry.document);
+          return recipe.success ? [{ id: entry.id, digest: entry.digest, title: recipe.data.title, description: recipe.data.description, category: recipe.data.category, parameters: recipe.data.parameters, requiredCapabilities: recipe.data.requiredCapabilities, requiredSkills: recipe.data.requiredSkills, requiredMcpServers: recipe.data.requiredMcpServers, startPolicy: recipe.data.startPolicy }] : [];
+        }) }),
+      },
+      {
+        name: "task_request", title: "Request a task from a recipe", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }, roles: ["initiator"], readOnly: false,
+        description: "Resolve an operator-published recipe and create a parameterized workflow DRAFT. Parameters are substituted into and stored with that draft; never submit secrets. This tool never starts it.",
+        inputSchema: { type: "object", required: ["recipe_id", "params"], additionalProperties: false, properties: { recipe_id: str("Published recipe id."), params: { type: "object", additionalProperties: true } } },
+        run: (a, s) => this.#requestTask(a, s),
+      },
     ];
+  }
+
+  #requestTask(args: Record<string, unknown>, session: McpSession): unknown {
+    const recipeId = args["recipe_id"];
+    const params = args["params"];
+    if (Object.keys(args).some((key) => !["recipe_id", "params"].includes(key)) || typeof recipeId !== "string" || !params || typeof params !== "object" || Array.isArray(params)) return { error: "INVALID_REQUEST" };
+    const entry = this.#o.library?.publishedRecipes().find((candidate) => candidate.id === recipeId);
+    if (!entry) return { error: "UNKNOWN_PUBLISHED_RECIPE" };
+    const checkedRecipe = taskRecipeSchema.safeParse(entry.document);
+    if (!checkedRecipe.success) return { error: "PUBLISHED_RECIPE_INVALID" };
+    const recipe = checkedRecipe.data;
+    const resolved = resolveRecipeParameters(recipe, params as Record<string, unknown>);
+    if (!resolved.ok) return { error: "INVALID_PARAMETERS", errors: resolved.errors };
+    const requiredSkills = recipe.requiredSkills.filter((skill) => skill.required);
+    const absentSkills = requiredSkills.filter((skill) => !this.#o.library?.get("skills", skill.id)).map((skill) => skill.id);
+    const missingMcps = recipe.requiredMcpServers;
+    const profileKind = recipe.category === "implementation" ? "write" : recipe.category === "research" ? "research" : recipe.category === "alternatives" ? "advise" : "review";
+    const cards = this.#o.catalog?.() ?? [];
+    const compatible = cards.filter((card) => card.enabled && card.kinds.includes(profileKind) && recipe.requiredCapabilities.every((capability) => card.capabilities.capabilityIds.includes(capability))
+      && requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id) && card.capabilities.skills !== "none"));
+    const resolution = {
+      profiles: compatible.map((card) => ({ id: card.id, cost: card.cost, integration: card.integration })),
+      profileAssignment: "candidate profiles only; no profile is bound until workflow execution",
+      category: { recipe: recipe.category, profileKind, enforced: false },
+      capabilities: { required: recipe.requiredCapabilities, candidateProfiles: compatible.map((card) => card.id), enforced: false },
+      skills: { required: requiredSkills.map((skill) => skill.id), optionalNotSelected: recipe.requiredSkills.filter((skill) => !skill.required).map((skill) => skill.id), missing: absentSkills, compatibleProfiles: compatible.filter((card) => requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id))).map((card) => card.id), assignment: "workflow execution does not yet bind recipe skills to a selected profile" },
+      mcpServers: { required: missingMcps, available: [], missing: missingMcps },
+      cost: compatible.map((card) => ({ profile: card.id, estimate: card.cost })),
+      costLimit: "profile costs are estimates; recipe-level USD is not enforced by the workflow runtime",
+      disclosure: "not configured",
+    };
+    if (absentSkills.length || missingMcps.length || compatible.length === 0 || requiredSkills.length > 0 || recipe.requiredCapabilities.length > 0) return { error: "RECIPE_UNRESOLVED", resolution };
+    if (recipe.startPolicy !== "draft") return { error: "START_POLICY_UNSUPPORTED", policy: recipe.startPolicy, detail: "recipe-specific start gates and enforced execution bounds are not available; only draft recipes can be requested", resolution };
+    if (recipe.workflow.budget?.usd !== undefined) return { error: "RECIPE_BUDGET_UNSUPPORTED", detail: "recipe-level USD budgets are not enforced by the workflow runtime; remove the USD budget or use an enforced time limit", resolution };
+    let workflow: TaskRecipe["workflow"];
+    try {
+      workflow = substituteRecipe(recipe.workflow, resolved.values);
+    } catch {
+      return { error: "INVALID_RECIPE_TEMPLATE" };
+    }
+    const created = this.#o.manager.create(workflow, this.#actor(session));
+    if (!created.ok) return { error: created.code, errors: created.errors };
+    const paramsDigest = createHash("sha256").update(JSON.stringify(resolved.values)).digest("hex");
+    const journal = this.#o.manager.journalOf(created.id);
+    journal?.tx((tx) => tx.event(created.id, "recipe_request", recipeId, null, "DRAFT", {
+      recipe_id: recipeId, recipe_digest: entry.digest, params_digest: paramsDigest, parameter_names: Object.keys(resolved.values).sort(),
+    }));
+    return { workflow_id: created.id, state: "DRAFT", recipe: { id: recipeId, digest: entry.digest }, parameter_names: Object.keys(resolved.values).sort(), resolution };
   }
 
   #pending(j: Journal) {
@@ -417,7 +485,7 @@ export class McpServer {
   }
 
   #listed() {
-    return this.#tools.filter((t) => t.roles.includes(this.#session.role)).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+    return this.#tools.filter((t) => t.roles.includes(this.#session.role)).map((t) => ({ name: t.name, ...(t.title ? { title: t.title } : {}), description: t.description, ...(t.annotations ? { annotations: t.annotations } : {}), inputSchema: t.inputSchema }));
   }
 
   async #callReply(msg: Incoming): Promise<Record<string, unknown>> {
@@ -480,4 +548,44 @@ export function serveStdio(server: { handle(msg: Incoming): Promise<Record<strin
     });
     input.on("end", () => void chain.then(() => resolve()));
   });
+}
+
+function resolveRecipeParameters(recipe: TaskRecipe, input: Record<string, unknown>): { ok: true; values: Record<string, unknown> } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const values: Record<string, unknown> = {};
+  const definitions = new Map(recipe.parameters.map((parameter) => [parameter.name, parameter]));
+  for (const key of Object.keys(input)) if (!definitions.has(key)) errors.push(`unexpected parameter: ${key}`);
+  for (const parameter of recipe.parameters) {
+    let value = input[parameter.name];
+    if (value === undefined) {
+      if (Object.hasOwn(parameter, "default")) value = parameter.default;
+      else if (parameter.required) { errors.push(`missing required parameter: ${parameter.name}`); continue; }
+      else continue;
+    }
+    let valid = false;
+    switch (parameter.type) {
+      case "string": valid = typeof value === "string" && value.trim().length > 0 && (parameter.maxLength === undefined || value.length <= parameter.maxLength); break;
+      case "string_list": valid = Array.isArray(value) && value.every((item) => typeof item === "string") && (parameter.maxItems === undefined || value.length <= parameter.maxItems); break;
+      case "integer": valid = typeof value === "number" && Number.isSafeInteger(value) && (parameter.minimum === undefined || value >= parameter.minimum) && (parameter.maximum === undefined || value <= parameter.maximum); break;
+      case "boolean": valid = typeof value === "boolean"; break;
+      case "enum": valid = typeof value === "string" && parameter.options.includes(value); break;
+    }
+    if (!valid) errors.push(`invalid value for parameter: ${parameter.name}`);
+    else values[parameter.name] = value;
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, values };
+}
+
+/** Interpolation is intentionally restricted to strings and declared parameter names; no eval or object-path lookup. */
+function substituteRecipe<T>(value: T, params: Record<string, unknown>): T {
+  if (typeof value === "string") {
+    return value.replace(/\{\{([a-z][a-z0-9_-]{0,62})\}\}/g, (_match, key: string) => {
+      if (!Object.hasOwn(params, key)) throw new Error(`recipe contains unresolved parameter ${key}`);
+      const replacement = params[key];
+      return Array.isArray(replacement) ? replacement.join("\n") : String(replacement);
+    }) as T;
+  }
+  if (Array.isArray(value)) return value.map((item) => substituteRecipe(item, params)) as T;
+  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, substituteRecipe(child, params)])) as T;
+  return value;
 }

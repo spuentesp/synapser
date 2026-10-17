@@ -72,7 +72,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
     model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(serverJournal, systemPrice) }),
     manager,
     journal: serverJournal,
-    catalog: () => buildCatalog(liveProfiles(), [], { knownUsdPerRun: cfg.knownUsdPerRun }),
+    catalog: () => buildCatalog(liveProfiles(), [], { knownUsdPerRun: cfg.knownUsdPerRun, allowedSkillsByProfile: new Map(Object.entries(cfg.agentSkills ?? {})) }),
     commandIds: () => cfg.commands.map((c) => c.id),
     advise: async (workflowId, question) => {
       const adv = manager.advisorOf(workflowId);
@@ -84,7 +84,7 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
   const catalog = () => {
     const profiles = liveProfiles();
     const adapters = new Map(profiles.map((profile) => [profile.id, adapterOf(profile)]));
-    return buildCatalog(profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun }).map((card) => ({ ...card, adapter: adapters.get(card.id) ?? "generic-cli" }));
+    return buildCatalog(profiles, [], { knownUsdPerRun: cfg.knownUsdPerRun, allowedSkillsByProfile: new Map(Object.entries(cfg.agentSkills ?? {})) }).map((card) => ({ ...card, adapter: adapters.get(card.id) ?? "generic-cli" }));
   };
   return {
     manager,

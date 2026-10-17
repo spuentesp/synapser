@@ -40,11 +40,13 @@ export interface FrozenLibrary {
 
 export interface LibraryHistoryEntry {
   seq: number;
-  operation: "PUT" | "DELETE" | "ROLLBACK";
+  operation: "PUT" | "DELETE" | "ROLLBACK" | "PUBLISH" | "UNPUBLISH";
   digest: Digest;
   actor: string;
   reason?: string;
 }
+
+export interface RecipePublication { seq: number; id: string; digest: Digest; actor: string; published: boolean }
 
 // library documents carry decimal prices; the request and journal digests stay integers-only (canonical.ts)
 const DOC_JSON: CanonicalOptions = { decimals: true };
@@ -149,17 +151,23 @@ export class LibraryStore {
 
   history(kind: LibraryKind, id: string): LibraryHistoryEntry[] {
     checkKindAndId(kind, id);
-    return this.#events().filter((event) => event.entityId === `${kind}:${id}`).map((event) => {
+    const changes = this.#events().filter((event) => event.entityId === `${kind}:${id}`).map((event) => {
       const data = event.data as Record<string, unknown>;
       const operation = data["operation"];
       return {
         seq: event.seq,
-        operation: operation === "ROLLBACK" ? "ROLLBACK" : event.toState as "PUT" | "DELETE",
+        operation: operation === "ROLLBACK" ? "ROLLBACK" as const : event.toState as "PUT" | "DELETE",
         digest: data["digest"] as Digest,
         actor: data["actor"] as string,
         ...(typeof data["reason"] === "string" ? { reason: data["reason"] } : {}),
       };
     });
+    if (kind !== "recipes") return changes;
+    const publications = this.#journal.listEvents().filter((event) => event.entity === "recipe_publication" && event.entityId === id).map((event) => {
+      const data = event.data as Record<string, unknown>;
+      return { seq: event.seq, operation: event.toState === "PUBLISHED" ? "PUBLISH" as const : "UNPUBLISH" as const, digest: data["digest"] as Digest, actor: String(data["actor"] ?? "") };
+    });
+    return [...changes, ...publications].sort((a, b) => a.seq - b.seq);
   }
 
   /** Read an immutable historical version without changing the live projection. */
@@ -168,6 +176,37 @@ export class LibraryStore {
     if (!isDigest(digest)) return null;
     const event = this.#events().find((candidate) => candidate.entityId === `${kind}:${id}` && candidate.toState === "PUT" && (candidate.data as Record<string, unknown>)["digest"] === digest);
     return event ? this.#entry(event) : null;
+  }
+
+  /** Explicit, digest-bound recipe publication. A PUT never publishes implicitly. */
+  publishRecipe(id: string, digest: Digest, actor: string): RecipePublication {
+    this.#assertWritable();
+    checkIdentity("recipes", id, actor);
+    const current = this.get("recipes", id);
+    if (!current || current.digest !== digest) throw new Error("recipe digest is not current");
+    let seq = 0;
+    this.#journal.tx((tx) => { seq = tx.event("_server", "recipe_publication", id, null, "PUBLISHED", { id, digest, actor }); });
+    return { seq, id, digest, actor, published: true };
+  }
+
+  unpublishRecipe(id: string, actor: string): RecipePublication {
+    this.#assertWritable();
+    checkIdentity("recipes", id, actor);
+    const current = this.get("recipes", id);
+    if (!current) throw new Error("recipe does not exist");
+    let seq = 0;
+    this.#journal.tx((tx) => { seq = tx.event("_server", "recipe_publication", id, current.digest, "UNPUBLISHED", { id, digest: current.digest, actor }); });
+    return { seq, id, digest: current.digest, actor, published: false };
+  }
+
+  /** Publication only applies to the exact current digest; editing or deleting withdraws it. */
+  publishedRecipes(): LibraryEntry[] {
+    const latest = new Map<string, EventRow>();
+    for (const event of this.#journal.listEvents().filter((candidate) => candidate.entity === "recipe_publication")) latest.set(event.entityId, event);
+    return this.list("recipes").filter((entry) => {
+      const event = latest.get(entry.id);
+      return event?.toState === "PUBLISHED" && event.seq > entry.seq && (event.data as Record<string, unknown>)["digest"] === entry.digest;
+    });
   }
 
   /**

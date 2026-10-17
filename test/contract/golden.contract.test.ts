@@ -15,9 +15,9 @@ describe("C-MCP-TASK-1: the task connector's tools", () => {
     assert.deepEqual(await taskToolList(), read("task-connector.tools.json"));
   });
 
-  test("it lists 18 tools and no configuration tool (K3)", async () => {
+  test("it lists 20 tools and no configuration tool (K3)", async () => {
     const names = (await taskToolList()).map((t) => t.name);
-    assert.equal(names.length, 18);
+    assert.equal(names.length, 20);
     assert.equal(names.some((n) => n.startsWith("config_")), false);
   });
 });

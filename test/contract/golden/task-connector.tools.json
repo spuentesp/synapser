@@ -363,5 +363,46 @@
       "type": "object",
       "properties": {}
     }
+  },
+  {
+    "name": "task_catalog",
+    "title": "Published task recipes",
+    "description": "List operator-published task recipes. Draft and unpublished library entries are never exposed here.",
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "task_request",
+    "title": "Request a task from a recipe",
+    "description": "Resolve an operator-published recipe and create a parameterized workflow DRAFT. Parameters are substituted into and stored with that draft; never submit secrets. This tool never starts it.",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "recipe_id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "recipe_id": {
+          "type": "string",
+          "description": "Published recipe id."
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
   }
 ]

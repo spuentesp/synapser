@@ -103,6 +103,35 @@ recibir skills incluidas en la autorización del operador. El planificador selec
 por tarea; la selección ausente, inválida o no compatible falla cerrada. Si falta una skill, el
 borrador indica el hueco y puede proponer una skill, pero nunca la instala ni la asigna.
 
+#### P19.6: frontera segura del primer catálogo/request
+
+La publicación y despublicación son acciones explícitas del operador por API autenticada, ligadas al
+digest vigente y auditadas en el journal `_server`; un `PUT` no publica y una edición/borrado retira
+la versión anterior del catálogo. `task_catalog` solo expone recetas publicadas y válidas.
+`task_request` valida estrictamente los parámetros tipados y su interpolación, crea un workflow
+`DRAFT` y nunca lo inicia. La solicitud registra en el journal del workflow el id/digest de receta y
+el digest/nombres de parámetros, sin duplicar los valores en el evento de procedencia. Los valores
+sustituidos sí forman parte del documento de workflow almacenado: no se deben enviar secretos como
+parámetros.
+
+Esta primera entrega no afirma enrutamiento ni límites que el runtime no pueda hacer cumplir. Los
+perfiles y costos devueltos son candidatos/estimaciones, no una asignación ni una reserva. Categoría,
+capacidades y skills aún no quedan ligadas al plan despachado; por ello toda receta con capacidades o
+skills requeridas se rechaza. También se rechazan MCP requeridos (sin inyección en workflows), un
+presupuesto USD (sin tope USD efectivo) y las políticas `human_approval`/`auto_start_bounded` (sin
+compuerta por receta y presupuesto agregado aplicado). Solo `draft` es aceptado. La divulgación se
+marca “not configured”; `clientInfo.name` sigue siendo una etiqueta no autenticada, no una identidad
+para cuotas. Estos rechazos se levantan únicamente cuando el runtime tenga los controles y pruebas
+de composición correspondientes.
+
+- **RCP10 — solicitud tipada sin ejecución implícita**: solo recetas publicadas para el digest actual
+  son descubribles; publicar requiere operador autenticado. Parámetros no declarados, inválidos,
+  capacidades/dependencias no ejecutables y políticas sin enforcement no crean workflow; una solicitud
+  aceptada crea exclusivamente `DRAFT` y conserva procedencia por digest sin guardar valores crudos en
+  el evento MCP. *Verificador:* API HTTP real y servidor MCP de Synapser comprueban publicación,
+  retiro, validación, procedencia y estado; *falsación:* aparece una receta no publicada, un digest
+  obsoleto se publica, un rechazo crea estado o la herramienta inicia una corrida.
+
 La UI de curación de recetas será distinta del diseñador de corridas. Debe permitir editar propósito,
 parámetros, grafo de tareas, capacidades, skills, verificadores, límites, permisos y divulgación;
 validar con el servidor; previsualizar el workflow que produciría MCP; evaluar con casos `dev` y

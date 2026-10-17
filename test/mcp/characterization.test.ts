@@ -107,7 +107,7 @@ describe("characterization: what the hand-written server does today", () => {
     const s = await start();
     try {
       const r = await s.rpc("tools/list");
-      assert.equal(r.result!.tools.length, 18);
+      assert.equal(r.result!.tools.length, 20);
     } finally {
       await s.close();
     }
@@ -296,9 +296,9 @@ describe("characterization: what the hand-written server does today", () => {
       assert.deepEqual(await s.srv.handle({ id: 7, method: "ping" }), { jsonrpc: "2.0", id: 7, result: {} }, "a missing jsonrpc is tolerated");
       assert.deepEqual(await s.srv.handle({ jsonrpc: "2.0", id: 11, method: "ping", params: 5 }), { jsonrpc: "2.0", id: 11, result: {} }, "params that are not an object are ignored");
       const listed = (await s.srv.handle({ jsonrpc: "2.0", id: 12, method: "tools/list", params: "x" })) as { result: { tools: unknown[] } };
-      assert.equal(listed.result.tools.length, 18);
+      assert.equal(listed.result.tools.length, 20);
       const cursor = (await s.srv.handle({ jsonrpc: "2.0", id: 18, method: "tools/list", params: { cursor: 3 } })) as { result: { tools: unknown[] } };
-      assert.equal(cursor.result.tools.length, 18, "a cursor the server never reads does not refuse the listing");
+      assert.equal(cursor.result.tools.length, 20, "a cursor the server never reads does not refuse the listing");
     } finally {
       await s.close();
     }

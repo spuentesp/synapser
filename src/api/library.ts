@@ -85,6 +85,29 @@ export async function libraryRoute(lib: LibraryStore, req: IncomingMessage, res:
       return fail(res, 400, "BAD_ID");
     }
   }
+  if (key !== undefined && sub === "publish" && k === "recipes" && method === "POST") {
+    const body = await readBody(req, res) as { digest?: unknown } | undefined;
+    if (body === undefined) return;
+    if (typeof body.digest !== "string" || !isDigest(body.digest)) return fail(res, 400, "PUBLISH_DIGEST_REQUIRED");
+    const current = lib.get("recipes", key);
+    if (!current || current.digest !== body.digest) return fail(res, 409, "RECIPE_DIGEST_NOT_CURRENT");
+    const errors = validateLibraryDocument("recipes", key, current.document, policy);
+    const recipe = current.document as { requiredSkills?: { id: string }[]; requiredMcpServers?: string[] };
+    for (const skill of recipe.requiredSkills ?? []) if (!lib.get("skills", skill.id)) errors.push(`recipes/${key}: required skill ${skill.id} is not in the operator library`);
+    // Outbound MCP servers are not yet an execution capability of workflows. Publishing a recipe that needs one
+    // would suggest a capability the runtime cannot inject, so publication fails closed.
+    if ((recipe.requiredMcpServers ?? []).length) errors.push(`recipes/${key}: required MCP servers are not integrated with workflow execution`);
+    if (errors.length) return json(res, 409, { error: "RECIPE_NOT_PUBLISHABLE", errors });
+    try {
+      return json(res, 200, lib.publishRecipe(key, body.digest, OPERATOR.id));
+    } catch {
+      return fail(res, 409, "RECIPE_DIGEST_NOT_CURRENT");
+    }
+  }
+  if (key !== undefined && sub === "unpublish" && k === "recipes" && method === "POST") {
+    try { return json(res, 200, lib.unpublishRecipe(key, OPERATOR.id)); }
+    catch { return fail(res, 404, "UNKNOWN_RECIPE"); }
+  }
   if (key !== undefined && sub === "rollback" && k === "skills" && method === "POST") {
     const body = await readBody(req, res) as { digest?: unknown; reason?: unknown } | undefined;
     if (body === undefined) return;
