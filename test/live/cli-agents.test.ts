@@ -4,6 +4,9 @@
 //   SYNAPSER_LIVE_CLIS=claude-sonnet-writer,codex-writer,kimi-writer node --env-file=.env --test test/live/cli-agents.test.ts
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { integrateRun } from "../../src/agents/broker.ts";
 import { ProfileRegistry } from "../../src/agents/profile.ts";
@@ -25,14 +28,27 @@ const MINIMAX_KIMI_PROVIDER: InjectedProvider = {
   protocol: "anthropic",
 };
 
+/** Resolve the opt-in live-test key without printing it or copying it into a persistent config. */
+function minimaxApiKey(): string | null {
+  const fromEnvironment = process.env["MINIMAX_API_KEY"];
+  if (fromEnvironment?.trim()) return fromEnvironment;
+  try {
+    const config = JSON.parse(readFileSync(join(homedir(), ".mmx", "config.json"), "utf8")) as { api_key?: unknown };
+    return typeof config.api_key === "string" && config.api_key.trim() ? config.api_key : null;
+  } catch {
+    return null;
+  }
+}
+
 for (const id of wanted) {
   test(`live CLI profile ${id}: isolated edit → broker → ledger`, { timeout: 330_000 }, async () => {
     const profile = new ProfileRegistry().get(id);
     assert.ok(profile, `unknown profile ${id}`);
-    // Explicit opt-in with no credential is a configuration error, not a silent skip. Never inspect
-    // another CLI's config or print the secret; runAgent passes this process variable only to Kimi.
+    const minimaxKey = id === "kimi-writer" ? minimaxApiKey() : null;
+    // Explicit opt-in with no credential is a configuration error, not a silent skip. The local mmx
+    // config is read only by this host-side test harness; runAgent passes the value only to Kimi.
     if (id === "kimi-writer") {
-      assert.ok((process.env["MINIMAX_API_KEY"] ?? "").trim(), "MINIMAX_API_KEY must be set in the process environment for the opted-in Kimi/MiniMax live test");
+      assert.ok(minimaxKey, "set MINIMAX_API_KEY or authenticate mmx for the opted-in Kimi/MiniMax live test");
     }
     const env = await makeEnv();
     try {
@@ -47,6 +63,7 @@ for (const id of wanted) {
         taskId: "t1",
         journal: env.journal,
         generation: env.lock.generation,
+        ...(id === "kimi-writer" && minimaxKey ? { envSource: { ...process.env, MINIMAX_API_KEY: minimaxKey } } : {}),
         ...(adapter ? { adapter } : {}),
         ...(id === "kimi-writer" ? { provider: MINIMAX_KIMI_PROVIDER } : {}),
       });
