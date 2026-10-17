@@ -6,11 +6,13 @@ export const AGENT_TASKS_MAX = 64;
 export const AGENT_MEMORY_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 
 /** Wrap a CLI in a per-run systemd scope; never fall back to an unbounded invocation. */
-export function boundedAgentArgv(argv: readonly string[], unit = `synapser-agent-${randomUUID()}.scope`): string[] {
+export function boundedAgentArgv(argv: readonly string[], unit = `synapser-agent-${randomUUID()}.scope`, parentSlice?: string): string[] {
   if (argv.length === 0 || !argv[0]) throw new Error("agent command is empty");
   if (!/^synapser-agent-[0-9a-f-]+\.scope$/.test(unit)) throw new Error("invalid agent systemd scope name");
+  if (parentSlice !== undefined && !/^synapser-run-[0-9a-f-]+\.slice$/.test(parentSlice)) throw new Error("invalid workflow systemd slice name");
   return [
     "systemd-run", "--user", "--scope", "--quiet", `--unit=${unit}`,
+    ...(parentSlice ? [`--slice=${parentSlice}`] : []),
     `--property=TasksMax=${AGENT_TASKS_MAX}`,
     "--property=MemoryAccounting=yes",
     `--property=MemoryMax=${AGENT_MEMORY_MAX_BYTES}`,

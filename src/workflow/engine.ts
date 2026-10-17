@@ -15,6 +15,7 @@ import { AgentRunnerRegistry } from "../agents/port.ts";
 import type { AgentProfile } from "../agents/profile.ts";
 import type { McpServerRegistration } from "../mcp/registry.ts";
 import { NativeMcpRunRegistry } from "../mcp/native-tool-registry.ts";
+import { RunMemoryScope } from "../agents/run-memory-scope.ts";
 import { Executor } from "../executor/executor.ts";
 import { acquireWorkspaceLockInOrder } from "../journal/lock.ts";
 import type { Journal } from "../journal/journal.ts";
@@ -99,6 +100,7 @@ export class ProductionEngine implements WorkflowEngine {
     const { journal, runId } = r;
     // A second run in the same workspace waits its turn (first come, first served, plan 18 E10) instead of failing at once.
     const lock = await acquireWorkspaceLockInOrder(c.stateDir, c.workspaceRoot);
+    const runMemoryScope = new RunMemoryScope();
     const zoo = await ZooAdapter.open(loadPin(), c.workspaceRoot);
     try {
       const executor = new Executor({ workspace: c.workspaceRoot, runId, journal, zoo, generation: lock.generation });
@@ -152,7 +154,7 @@ export class ProductionEngine implements WorkflowEngine {
       };
       // plan 17 P17.6: CLI runners resolve an injectProvider against the operator's providers, never the library's.
       const operatorProviders = () => c.providers ?? defaultModelConfig().providers;
-      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor, (profile, _runId, taskId) => nativeMcp.open(profile.id, taskId)), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection) });
+      const registry = new AgentRunnerRegistry([new NativeLoopRunner(model, undefined, research, modelFor, (profile, _runId, taskId, _journal, scope) => nativeMcp.open(profile.id, taskId, scope)), new CliOneShotRunner(undefined, operatorProviders), new CliOneShotRunner(GENERIC_CLI_ADAPTER, operatorProviders), new CliOneShotRunner(CLAUDE_CODE_ADAPTER, operatorProviders), new CliOneShotRunner(CODEX_ADAPTER, operatorProviders), new CliOneShotRunner(KIMI_ADAPTER, operatorProviders), new CliOneShotRunner(MIMO_ADAPTER, operatorProviders)], { skillsFor: (profileId, selection) => selectAuthorizedSkills(library.skillsFor.get(profileId) ?? [], selection), runMemoryScope });
       const pools = c.pools?.length ? new PoolLimiter(c.pools) : undefined;
       const missionMs = c.limits?.missionMs ?? (w0.budget?.minutes ? w0.budget.minutes * 60_000 : 15 * 60_000);
       const deadline = Date.now() + missionMs;
@@ -285,8 +287,12 @@ export class ProductionEngine implements WorkflowEngine {
         reason: mission.reason,
       };
     } finally {
-      await zoo.close();
-      lock.release();
+      try {
+        await runMemoryScope.close();
+      } finally {
+        try { await zoo.close(); }
+        finally { lock.release(); }
+      }
     }
   }
 }

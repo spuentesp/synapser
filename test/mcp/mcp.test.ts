@@ -118,7 +118,7 @@ describe("MCP server", () => {
     const id = String(created.body["workflow_id"]);
     const started = await c.tool("workflow_start", { workflow_id: id });
     assert.equal(started.isError, false);
-    assert.equal(await done(id), "DONE");
+    assert.equal(await done(id), "DONE", JSON.stringify(mgr.status(id)));
 
     const st = await c.tool("workflow_status", { workflow_id: id });
     assert.equal(st.body["state"], "DONE");

@@ -170,11 +170,17 @@ artefacto/origen, allowlist efectiva, identidad esperada, inyección por perfil 
 estén conectados y verificados, no se habilitan llamadas MCP desde agentes ni se inyectan secretos o
 herramientas de efecto. El transporte HTTP queda fuera de este incremento.
 
-El límite de 4 GiB está aplicado y verificado por proceso MCP, pero todavía no es una cuota agregada
-compartida por todas las conexiones MCP concurrentes de una corrida/workflow. No se debe presentar
-como satisfecha la decisión de 4 GiB agregados por corrida ni habilitar concurrencia MCP que requiera
-ese límite hasta que un scope/cuota común cubra todos los procesos y tenga un verificador de carga
-concurrente.
+Cada MCP mantiene su scope propio (4 GiB y 64 tareas), y cada CLI conserva sus límites por invocación.
+Además, `ProductionEngine` crea de manera perezosa un slice transitorio privado por workflow con
+`MemoryMax=4G` y `MemoryAccounting=yes`; todos los scopes externos CLI/MCP de esa ejecución se
+colocan debajo de ese padre, por lo que el cgroup aplica la cuota agregada elegida por el usuario.
+La creación falla cerrada si no se pueden leer de vuelta las propiedades y el `memory.max` efectivo;
+al finalizar, Synapser mata los scopes descendientes y exige que el slice desaparezca sin procesos.
+`test/live/run-memory-scope.test.ts` verifica con dos scopes CLI benignos la pertenencia compartida y
+el readback de un límite de prueba pequeño; `test/mcp/outbound-stdio-client.test.ts` verifica que un
+servidor MCP real se inicia bajo el padre y conserva su techo individual. No se provoca OOM ni se
+incluye el proceso principal de Synapser en la cuota; los procesos de la corrida no deben exceder el
+límite configurado.
 
 #### P19.5 — RCP6b: frontera local del proceso MCP
 

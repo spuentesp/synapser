@@ -6,6 +6,7 @@ import type { Journal } from "../journal/journal.ts";
 import type { ToolSpec } from "../model/types.ts";
 import { connectRegisteredMcpServer, McpProcessCleanupUnconfirmedError, type ConnectedStdioMcpServer, type McpJson, type McpJsonObject, type OutboundMcpTool } from "./outbound-stdio-client.ts";
 import type { McpServerRegistration } from "./registry.ts";
+import type { RunMemoryScope } from "../agents/run-memory-scope.ts";
 
 export interface NativeMcpToolSet {
   readonly tools: readonly ToolSpec[];
@@ -50,6 +51,7 @@ export async function openNativeMcpToolSet(options: {
   journal: Journal;
   runId: string;
   taskId: string;
+  runMemoryScope?: RunMemoryScope;
   assertRunSnapshot?: (profileId: string, snapshotDigest: string) => void;
 }): Promise<NativeMcpToolSet | undefined> {
   const selected = JSON.parse(JSON.stringify(options.servers)) as McpServerRegistration[];
@@ -58,6 +60,7 @@ export async function openNativeMcpToolSet(options: {
     return names.length ? [{ registration, names: [...names] }] : [];
   });
   if (configured.length === 0) return undefined;
+  const parentSlice = options.runMemoryScope ? await options.runMemoryScope.ensure() : undefined;
 
   const clients: { client: ConnectedStdioMcpServer; scratch: string }[] = [];
   const bindings = new Map<string, BoundTool>();
@@ -78,6 +81,7 @@ export async function openNativeMcpToolSet(options: {
           artifactStoreRoot: options.artifactStoreRoot,
           env: { HOME: home },
           cwd,
+          ...(parentSlice ? { parentSlice } : {}),
           timeoutMs: 10_000,
         });
       } catch (error) {
@@ -211,7 +215,7 @@ export class NativeMcpRunRegistry {
     this.#runId = runId;
   }
 
-  open(profileId: string, taskId: string): Promise<NativeMcpToolSet | undefined> {
+  open(profileId: string, taskId: string, runMemoryScope?: RunMemoryScope): Promise<NativeMcpToolSet | undefined> {
     return openNativeMcpToolSet({
       servers: this.#servers,
       profileId,
@@ -219,6 +223,7 @@ export class NativeMcpRunRegistry {
       journal: this.#journal,
       runId: this.#runId,
       taskId,
+      ...(runMemoryScope ? { runMemoryScope } : {}),
       assertRunSnapshot: (id, current) => {
         const expected = this.#snapshotDigests.get(id);
         if (expected !== undefined && expected !== current) throw new Error(`native MCP schema snapshot changed within workflow run for profile ${id}`);

@@ -38,6 +38,8 @@ export interface OutboundMcpClientOptions {
   artifactRoot?: string;
   /** Normalized package-relative script path; used as the first runtime argument. */
   artifactEntrypoint?: string;
+  /** Parent slice shared with the rest of the workflow's external processes. */
+  parentSlice?: string;
 }
 
 export interface ConnectStdioMcpServerOptions {
@@ -52,6 +54,7 @@ export interface ConnectStdioMcpServerOptions {
   killGraceMs?: number;
   maxMessageBytes?: number;
   signal?: AbortSignal;
+  parentSlice?: string;
 }
 
 /** Runtime inputs for connecting one registered server under one profile's operator allowlist. */
@@ -255,11 +258,13 @@ class BoundedStdioClientTransport extends StdioClientTransport {
   #scopeUnit: string | null = null;
   #scopeVerified = false;
   readonly #unit: string;
+  readonly #parentSlice: string | undefined;
 
-  constructor(options: StdioServerParameters, maxMessageBytes: number, unit: string) {
+  constructor(options: StdioServerParameters, maxMessageBytes: number, unit: string, parentSlice?: string) {
     super(options);
     this.#maxMessageBytes = maxMessageBytes;
     this.#unit = unit;
+    this.#parentSlice = parentSlice;
   }
 
   override send(message: JSONRPCMessage): Promise<void> {
@@ -280,7 +285,7 @@ class BoundedStdioClientTransport extends StdioClientTransport {
     if (pid === null) throw new Error("registered MCP process did not start");
     this.#spawnedPid = pid;
     this.#scopeUnit = this.#unit;
-    await verifyScope(this.#scopeUnit);
+    await verifyScope(this.#scopeUnit, this.#parentSlice);
     this.#scopeVerified = true;
     // Capture the short-lived systemd-run process group as a secondary teardown handle. The cgroup is
     // the authority: unlike a process group it also contains descendants that call setsid().
@@ -390,6 +395,9 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
   bwrapArgs.push("--", sandboxCommand, ...runtimeArgs);
 
   const unit = `synapser-mcp-${process.pid}-${randomUUID()}.scope`;
+  if (options.parentSlice !== undefined && !/^synapser-run-[0-9a-f-]+\.slice$/.test(options.parentSlice)) {
+    throw new Error("outbound MCP parent slice name is invalid");
+  }
   const outerEnv: Record<string, string> = {};
   for (const key of DEFAULT_INHERITED_ENV_VARS) outerEnv[key] = "";
   // Only the trusted systemd-run wrapper receives access to the user's manager socket. bwrap clears this
@@ -403,6 +411,7 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
     args: [
       SYSTEMD_RUN,
       "--user", "--scope", "--quiet", `--unit=${unit}`,
+      ...(options.parentSlice ? [`--slice=${options.parentSlice}`] : []),
       `--property=TasksMax=${AGENT_TASKS_MAX}`,
       "--property=MemoryAccounting=yes",
       `--property=MemoryMax=${AGENT_MEMORY_MAX_BYTES}`,
@@ -418,7 +427,7 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
 }
 
 function systemdShow(unit: string): Record<string, string> | null {
-  const result = spawnSync(SYSTEMCTL, ["--user", "show", unit, "--property=LoadState", "--property=ActiveState", "--property=ControlGroup", "--property=MemoryMax", "--property=TasksMax", "--property=MemoryAccounting", "--property=KillMode"], {
+  const result = spawnSync(SYSTEMCTL, ["--user", "show", unit, "--property=LoadState", "--property=ActiveState", "--property=ControlGroup", "--property=MemoryMax", "--property=TasksMax", "--property=MemoryAccounting", "--property=KillMode", "--property=Slice"], {
     encoding: "utf8", timeout: 250, stdio: ["ignore", "pipe", "ignore"],
   });
   if (result.error || result.status !== 0) return null;
@@ -428,12 +437,13 @@ function systemdShow(unit: string): Record<string, string> | null {
   }));
 }
 
-async function verifyScope(unit: string): Promise<void> {
+async function verifyScope(unit: string, parentSlice?: string): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt++) {
     const props = systemdShow(unit);
     if (props?.["LoadState"] === "loaded" && props["ActiveState"] === "active" && props["ControlGroup"] &&
       Number(props["MemoryMax"]) === AGENT_MEMORY_MAX_BYTES && Number(props["TasksMax"]) === AGENT_TASKS_MAX &&
-      props["MemoryAccounting"] === "yes" && props["KillMode"] === "control-group") return;
+      props["MemoryAccounting"] === "yes" && props["KillMode"] === "control-group" &&
+      (parentSlice === undefined || props["Slice"] === parentSlice)) return;
     await delay(10);
   }
   throw new Error("registered MCP systemd cgroup limits could not be verified");
@@ -548,7 +558,7 @@ class OutboundStdioMcpClient {
     if (process.platform !== "linux" || !existsSync(SETSID)) throw new Error("registered MCP stdio is unavailable: verified Linux systemd/bwrap supervision is required");
     const { server, unit } = sandboxLaunch({ ...options, maxMessageBytes });
     this.#options = { ...options, startupTimeoutMs, callTimeoutMs, killGraceMs, maxMessageBytes };
-    this.#transport = new BoundedStdioClientTransport(server, maxMessageBytes, unit);
+    this.#transport = new BoundedStdioClientTransport(server, maxMessageBytes, unit, options.parentSlice);
     // Do not enable modern discovery/elicitation negotiation for an untrusted child process. P19.5 pins the legacy
     // initialize path until those additional client capabilities have their own security and broker rules.
     this.#client = new Client(
@@ -775,6 +785,7 @@ export async function connectStdioMcpServer(options: ConnectStdioMcpServerOption
     killGraceMs: options.killGraceMs,
     maxMessageBytes: options.maxMessageBytes,
     signal: options.signal,
+    parentSlice: options.parentSlice,
   });
 }
 
@@ -837,6 +848,7 @@ export async function connectRegisteredMcpServer(options: ConnectRegisteredMcpSe
       killGraceMs: options.killGraceMs,
       maxMessageBytes: options.maxMessageBytes,
       signal: options.signal,
+      parentSlice: options.parentSlice,
       artifactRoot: materializedArtifact,
       artifactEntrypoint: entrypoint,
     });

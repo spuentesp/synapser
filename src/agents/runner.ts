@@ -115,6 +115,8 @@ export interface RunAgentOptions {
   envSource?: NodeJS.ProcessEnv;
   /** Provider to inject into this run (plan 17 P17.5). A run with a provider gets no login overlay (K8). */
   provider?: InjectedProvider;
+  /** Shared per-workflow cgroup parent; child scopes remain independently bounded beneath it. */
+  parentSlice?: string;
 }
 
 export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
@@ -171,7 +173,7 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
           workspaceRoot: o.workspaceRoot, work, home, scratch, env: sandboxEnv,
           envFromStdin: Object.keys(sensitiveEnv).length > 0,
         });
-        const bounded = boundedAgentArgv(sandboxed, scopeUnit);
+        const bounded = boundedAgentArgv(sandboxed, scopeUnit, o.parentSlice);
         // systemd-run needs a minimal host environment to create its transient scope. Provider
         // configuration and credentials are kept out; bwrap constructs the CLI environment itself.
         const scopeEnv = {

@@ -19,6 +19,7 @@ import { integrateRun, type IntegrationResult } from "./broker.ts";
 import { type AdapterId, type AgentProfile, adapterOf } from "./profile.ts";
 import type { AgentRunResult, FileChange } from "./runner.ts";
 import type { Outcome, UsageRecord } from "./usage.ts";
+import type { RunMemoryScope } from "./run-memory-scope.ts";
 
 export interface AgentTaskSpec {
   taskId: string;
@@ -50,6 +51,8 @@ export interface AgentRunRequest {
   effects?: import("../effects/port.ts").EffectPort;
   /** Advisor channel for a native loop: guidance between turns and holds. */
   control?: { notes(taskId: string): string[]; held(taskId: string): boolean };
+  /** Shared hard memory parent for all external child processes in this workflow run. */
+  runMemoryScope?: RunMemoryScope;
 }
 
 export type IntegrationMode =
@@ -81,17 +84,20 @@ export interface AgentRunner {
 export interface RegistryOptions {
   /** The library skills a profile's agents receive in this run (plan 14 Q5.4). */
   skillsFor?: (profileId: string, selection?: readonly SkillSelection[]) => readonly InjectedSkill[];
+  runMemoryScope?: RunMemoryScope;
 }
 
 export class AgentRunnerRegistry {
   readonly #by = new Map<AdapterId, AgentRunner>();
   readonly #skillsFor: ((profileId: string, selection?: readonly SkillSelection[]) => readonly InjectedSkill[]) | undefined;
+  readonly #runMemoryScope: RunMemoryScope | undefined;
   constructor(runners: readonly AgentRunner[], options: RegistryOptions = {}) {
     for (const r of runners) {
       if (this.#by.has(r.adapter)) throw new Error(`duplicate runner for adapter ${r.adapter}`);
       this.#by.set(r.adapter, r);
     }
     this.#skillsFor = options.skillsFor;
+    this.#runMemoryScope = options.runMemoryScope;
   }
   for(profile: AgentProfile): AgentRunner {
     const r = this.#by.get(adapterOf(profile));
@@ -100,10 +106,11 @@ export class AgentRunnerRegistry {
     return {
       adapter: r.adapter,
       run: (req) => {
+        const scoped = this.#runMemoryScope ? { ...req, runMemoryScope: this.#runMemoryScope } : req;
         const selection = req.task.skillSelection;
         if (!skillsFor && selection?.some((skill) => skill.required)) throw new Error("required task skills need an operator allowlist resolver");
-        if (!skillsFor && selection === undefined) return r.run(req);
-        return r.run({ ...req, injectedSkills: { skills: skillsFor ? skillsFor(req.profile.id, selection) : [] } });
+        if (!skillsFor && selection === undefined) return r.run(scoped);
+        return r.run({ ...scoped, injectedSkills: { skills: skillsFor ? skillsFor(req.profile.id, selection) : [] } });
       },
     };
   }

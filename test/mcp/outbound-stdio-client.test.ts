@@ -3,10 +3,11 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { connectRegisteredMcpServer, connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
 import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
 import { importArtifact } from "../../src/mcp/artifact-store.ts";
+import { RunMemoryScope } from "../../src/agents/run-memory-scope.ts";
 
 // This is an actual child process speaking MCP's newline-delimited JSON-RPC protocol. It is intentionally
 // small enough to make the adversarial wire cases explicit instead of relying on an in-process server double.
@@ -480,15 +481,23 @@ test("close terminates a detached descendant, not only the verified process grou
   }
 });
 
-test("an outbound MCP process is placed under the 4 GiB and 64-task cgroup ceiling", { skip: process.platform !== "linux" }, async () => {
+test("an outbound MCP process joins the workflow memory slice and retains its per-process ceilings", { skip: process.platform !== "linux" }, async () => {
   const { options, pidFile, resourceLimitsFile } = fixture();
-  const client = await connectStdioMcpServer(options);
+  const scope = new RunMemoryScope();
+  const parentSlice = await scope.ensure();
+  let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
   try {
-    const limits = JSON.parse(readFileSync(resourceLimitsFile, "utf8")) as { memoryMax: string; pidsMax: string };
-    assert.equal(limits.memoryMax, String(4 * 1024 * 1024 * 1024), "effective cgroup memory.max must enforce the approved aggregate 4 GiB limit");
+    client = await connectStdioMcpServer({ ...options, parentSlice });
+    const limits = JSON.parse(readFileSync(resourceLimitsFile, "utf8")) as { relative: string; memoryMax: string; pidsMax: string };
+    const parent = spawnSync("systemctl", ["--user", "show", parentSlice, "--property=ControlGroup"], { encoding: "utf8" });
+    assert.equal(parent.status, 0);
+    const parentCgroup = String(parent.stdout).trim().slice("ControlGroup=".length);
+    assert.ok(limits.relative.startsWith(`${parentCgroup}/`), `MCP cgroup ${limits.relative} must be nested beneath workflow cgroup ${parentCgroup}`);
+    assert.equal(limits.memoryMax, String(4 * 1024 * 1024 * 1024), "effective cgroup memory.max must preserve the per-process ceiling");
     assert.equal(limits.pidsMax, "64", "effective cgroup pids.max must enforce the per-server 64-task limit");
   } finally {
-    await client.close();
+    if (client) await client.close();
+    await scope.close();
   }
   assertServerStarted(pidFile);
 });
