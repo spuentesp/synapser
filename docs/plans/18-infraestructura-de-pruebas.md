@@ -234,9 +234,9 @@ Cada dependencia entra con versión exacta y con la historia que la usa. Ninguna
 - **Pantalla de configuración (H9.5):** se reabrió el 16 oct 2026 por decisión del usuario; se implementa y verifica como parte de P17.9.
 - **Umbral de mutación (H4.3):** desde el primer ciclo, para los módulos de seguridad.
 
-## 8. Estado y pendientes (16 oct 2026)
+## 8. Estado y pendientes (17 oct 2026)
 
-Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
+Cerradas: E1, E2, E3, E4, E5, E8, E10, E11, E12 y E13. En curso: E6 (reabierta tras comprobar que el runner de producción no aplica bwrap), E7 y E9 (H9.5 reabierta por decisión del usuario el 16 oct).
 
 ### Hecho en esta pasada
 
@@ -249,12 +249,12 @@ Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9
 - **E12:** H12.4 genera un informe informativo; no bloquea sin umbral acordado, de acuerdo con su criterio de aceptación.
 - **E13 cerrada:** H13.1 tiene lista vacía y regresiones para `kimi --help` y S13; H13.2 tiene un presupuesto definido. H13.5 se revisó en `docs/contracts/README.md`; los diez contratos tienen una prueba trazable y `GET /api/config` cuenta con regresión contra la API. `scripts/verify.ts` separa cada corrida de mutación en un temporal absoluto y un reporte únicos, excluye `.env*` de la copia de Stryker y, junto con `scripts/duplication-report.ts`, permite guardar evidencia en una ruta absoluta externa autorizada mediante `SYNAPSER_EVIDENCE_DIR`. H13.3–H13.4 se verificaron con `npm run verify`; la evidencia cruda quedó fuera de archivos versionados.
 
-### E6 cerrada
+### E6 parcial, reabierta el 17 oct 2026
 
-- **H6.1**: cubierto por `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts`.
-- **H6.2**: `test/agents/runner-credential-redaction.test.ts` ejecuta el runner con los cuatro adaptadores CLI que admiten inyección (Claude, Codex, Kimi y MiMo), usando sus configuraciones de proveedor y un ejecutable sonda que recorre el HOME efímero y el entorno del proceso; envía esa superficie a un endpoint HTTP local, que rechaza cualquier centinela del corpus. También se comprueba que la inyección excluye el overlay de inicio de sesión Claude. Es una prueba de frontera/adaptadores sin invocar modelos ni proveedores externos; no afirma validar el comportamiento interno de los binarios comerciales.
-- **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
-- **H6.4**: `test/sandbox/isolation.test.ts` verifica timeout, `RLIMIT_AS` y `TasksMax` en scope transitorio; `test/agents/runner-broker.test.ts` comprueba en el cgroup real `memory.max=4 GiB`, 64 tareas y 2 GiB de espacio virtual por proceso. El host delega `cpu memory pids`; si el controlador de memoria no está disponible, el scope falla cerrado.
+- **H6.1**: los tests `test/sandbox/h6-1-boundaries.test.ts` y `test/sandbox/isolation.test.ts` verifican bwrap en su harness, pero no prueban todavía que `runAgent` invoque el CLI dentro de esa frontera. La integración al runner queda pendiente.
+- **H6.2**: `test/agents/runner-credential-redaction.test.ts` ejercita `runAgent` con cuatro adaptadores y un ejecutable sonda, pero solo demuestra el HOME/entorno que observa el proceso; no evita lecturas absolutas del HOME real ni de `/run`. Falta que el proceso productivo corra bajo mounts aislados y que esta prueba falsifique acceso por ruta absoluta.
+- **H6.3**: `test/live/p159-network-proxy.test.ts` prueba localmente la alternativa B con un CLI instalado y un fixture, pero no está conectada al runner. La decisión K7 de P17 mantiene la red de CLIs sin aislar; no se reclama este control para la aplicación.
+- **H6.4**: el runner aplica `RLIMIT_AS`, `TasksMax`, `MemoryMax` y timeout, verificados por `test/agents/runner-broker.test.ts`. Aún falta detener y comprobar vacío el scope completo, incluidos descendientes detached, al timeout/cierre; la prueba de límites de `test/sandbox/isolation.test.ts` es un harness aparte. El host delega `cpu memory pids`; si el controlador de memoria no está disponible, el scope falla cerrado.
 
 ### Pruebas opt-in y límites fuera de `verify`
 
