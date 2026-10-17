@@ -10,6 +10,7 @@ import type { Role } from "../model/types.ts";
 import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
+import { validateMcpServerRegistry, type McpServerRegistration } from "../mcp/registry.ts";
 
 export interface SynapserConfig {
   workspace: string;
@@ -20,6 +21,8 @@ export interface SynapserConfig {
   providers: Record<string, ProviderConfig>;
   /** Environment variable names a LIBRARY provider may name as its key (P15 IC2). Empty by default; only this file grows it. */
   providerKeyEnv: string[];
+  /** Operator-owned external MCP process registry. Registration is not isolation and grants no tools by itself. */
+  mcpServers: McpServerRegistration[];
   /** The library skills each agent id receives, decided by the operator's file (plan 14 Q5.4, decision D6). */
   agentSkills: Record<string, string[]>;
   /** operator (default): the page's session is granted at once. adversarial: only after serve's one-time code (plan 15 D7). */
@@ -193,6 +196,15 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
     else if (!provider.models.some((model) => model.id === profile.model)) errors.push(`agent "${profile.id}" references model "${String(profile.model)}" not declared by provider "${profile.provider}"`);
   }
 
+  // External MCP processes are trusted operator executables. Their tool allowlists bind to the final profile set,
+  // including operator-defined profiles; merely registering a process does not isolate it or authorize its tools.
+  let mcpServers: McpServerRegistration[] = [];
+  if (raw["mcpServers"] !== undefined) {
+    const result = validateMcpServerRegistry(raw["mcpServers"], profiles.map((profile) => profile.id));
+    if (result.ok) mcpServers = result.servers;
+    else errors.push(...result.errors);
+  }
+
   // ---- system roles (plan 14 Q2.3): a role that appears in the file replaces its default assignment entirely:
   // it must state provider AND model, and inherits nothing else (no fallbacks from the default provider)
   const roles: Record<Role, RoleConfig> = defaultModelConfig().roles;
@@ -324,7 +336,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   }
 
   const cfg: SynapserConfig = {
-    workspace, stateDir, commands, providers, roles, providerKeyEnv, agentSkills, profiles, pools, policy, identity, advisor, configPath: path,
+    workspace, stateDir, commands, providers, roles, providerKeyEnv, mcpServers, agentSkills, profiles, pools, policy, identity, advisor, configPath: path,
     trustMode: trustMode === "adversarial" ? "adversarial" : "operator",
     startRequiresApproval: bool("startRequiresApproval", DEFAULTS.startRequiresApproval),
     research: bool("research", DEFAULTS.research),

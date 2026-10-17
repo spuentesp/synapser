@@ -130,6 +130,15 @@ de efecto ni secretos a procesos MCP externos. Los comandos MCP son código ejec
 operador y deben tratarse como confiables; `stdio` no restringe su acceso a archivos o red. El
 transporte HTTP queda fuera de este incremento.
 
+El registro inicial en `mcpServers` es solo configuración declarativa operator-owned: exige un id,
+estado habilitado explícito, localizador HTTPS o `file:` sin credenciales, versión declarada,
+ejecutable absoluto, argumentos separados, identidad de servidor esperada y allowlists por perfil
+conocido. No instala ni descarga el artefacto, no comprueba origen/digest ni inicia el proceso; esos
+campos son metadatos declarativos, no pins de reproducibilidad. No acepta variables de entorno. Un
+filtro de marcadores comunes en `args` es solo higiene y no detecta todos los secretos; no se debe
+tratar como control de divulgación. Hasta verificar el broker, el ejecutable y sus argumentos se
+consideran código de confianza del operador y el registro no basta para habilitar una llamada.
+
 El catálogo MCP de tareas vincula recetas publicadas con las integraciones necesarias. `task_request`
 explica qué servidor/herramientas asignará y por qué; el inicio falla cerrado si falta una integración,
 una versión o un perfil compatible. Los MCPs se llaman desde el agente mediante esa inyección, con
