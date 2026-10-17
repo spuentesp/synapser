@@ -227,6 +227,10 @@ export function createApi(opts: ApiOptions): ApiServer {
         throw e;
       }
     }
+    if (top === "mcp" && id === undefined && method === "GET") {
+      const servers = (c.mcpServers?.() ?? []).map(({ id, enabled, version, expectedServer, profiles }) => ({ id, enabled, version, expectedServer, profiles }));
+      return json(res, 200, { servers });
+    }
     if (top === "mcp" && id && action === "discover" && method === "POST") {
       if (!c.mcpDiscover) return fail(res, 404, "MCP_DISCOVERY_UNAVAILABLE");
       const body = await readBody(req, res) as { profileId?: unknown } | undefined;

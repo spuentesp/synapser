@@ -162,7 +162,8 @@ la inaccesibilidad de un archivo host vecino, el aislamiento de loopback y el ci
 que llama a `setsid`. El SDK administra JSON-RPC y lifecycle del transporte, mientras Synapser mantiene
 validación adicional de política. El límite del SDK es del buffer de lectura, no una garantía de tamaño
 independiente por frame. La contención verificada reduce acceso accidental y persistencia de procesos,
-pero no es una frontera frente a exploits del kernel: no configura seccomp ni un namespace PID. Tampoco
+pero no es una frontera frente a exploits del kernel: no configura seccomp. El namespace PID separa la
+enumeración de procesos del host, pero no es una frontera contra exploits del kernel. Tampoco
 provee proxy de salida; el networking queda completamente aislado. Las anotaciones del servidor no
 autorizan herramientas. El cliente por sí solo no es un broker de efectos: hasta que pin de
 artefacto/origen, allowlist efectiva, identidad esperada, inyección por perfil y mediación de efectos

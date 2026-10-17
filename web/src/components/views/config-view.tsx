@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { api, ApiError } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
+import { McpCuration } from './mcp-curation'
 
 type Provider = {
   protocol: 'openai-compatible' | 'anthropic'
@@ -138,6 +139,7 @@ export function ConfigView({ session }: { session: boolean }) {
           </Card>
         </div>
       )}
+      <McpCuration session={session} />
     </div>
   )
 }

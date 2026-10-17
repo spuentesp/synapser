@@ -9,7 +9,22 @@ const dir = mkdtempSync(join(tmpdir(), "ui-fixture-"));
 writeFileSync(join(dir, "synapser.config.json"), JSON.stringify({
   workspace: dir,
   stateDir: join(dir, "state"),
-  profiles: ["claude-opus-advisor"],
+  profiles: ["claude-opus-advisor", "nemotron-worker"],
+  mcpServers: [{
+    id: "ui-review-tools",
+    enabled: true,
+    origin: "file:///ui-fixture/review-tools",
+    version: "1.0.0",
+    command: process.execPath,
+    args: ["-e", [
+      "let input = '';",
+      "function reply(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n'); }",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', chunk => { input += chunk; for (;;) { const i = input.indexOf('\\n'); if (i < 0) return; const request = JSON.parse(input.slice(0, i)); input = input.slice(i + 1); if (request.method === 'initialize') reply(request.id, { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'ui-review-tools-fixture', version: '1' } }); else if (request.method === 'tools/list') reply(request.id, { tools: [{ name: 'inspect', description: 'Read-only review helper', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, additionalProperties: false } }, { name: 'write', inputSchema: { type: 'object' } }] }); else if (request.method === 'tools/call') process.exit(24); else if (request.id !== undefined) reply(request.id, {}); } });",
+    ].join("\n")],
+    expectedServer: { name: "ui-review-tools-fixture", version: "1" },
+    profiles: { "claude-opus-advisor": ["inspect"] },
+  }],
   commands: [{ id: "unit-check", argv: [process.execPath, "-e", "process.exit(0)"] }],
   agentSkills: { "q33-inspect-agent": ["fixture-skill"] },
 }));

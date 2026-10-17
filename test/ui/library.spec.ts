@@ -21,7 +21,7 @@ test("a refused library document shows the server's reasons, unchanged, in the i
   await page.getByLabel("New id").fill(ID);
   await page.getByRole("button", { name: "New", exact: true }).click();
   await page.locator("#library-doc").fill(JSON.stringify(BODY));
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save / publish manually", exact: true }).click();
 
   const shown = await page.locator("ul.list-disc > li").allTextContents();
   expect(shown).toEqual(api.errors);

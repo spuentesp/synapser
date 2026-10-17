@@ -56,6 +56,15 @@ test("operator MCP discovery crosses HTTP and a real process, filters tools, and
     control: { manager, mcpServers: () => [registration], mcpDiscover: connect },
   });
   const base = `http://127.0.0.1:${await api.listen(0)}`;
+  const listed = await fetch(`${base}/api/mcp`);
+  assert.equal(listed.status, 200);
+  const summary = await listed.json() as { servers: Record<string, unknown>[] };
+  assert.deepEqual(summary.servers[0], {
+    id: "local-discovery", enabled: true, version: "1.0.0",
+    expectedServer: { name: "local-discovery-fixture", version: "1" }, profiles: { worker: ["inspect"] },
+  });
+  assert.equal(JSON.stringify(summary).includes(registration.command), false, "the UI summary must not reveal executable paths");
+  assert.equal(JSON.stringify(summary).includes(serverSource), false, "the UI summary must not reveal command arguments");
   const unauthenticated = await fetch(`${base}/api/mcp/local-discovery/discover`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ profileId: "worker" }) });
   assert.equal(unauthenticated.status, 401);
   const unconfiguredProfile = await fetch(`${base}/api/mcp/local-discovery/discover`, {
