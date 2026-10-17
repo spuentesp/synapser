@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { describe, test } from "node:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, test } from "node:test";
 import { NO_INJECTED_SKILLS } from "../../src/agents/adapter.ts";
 import { CLAUDE_CODE_ADAPTER } from "../../src/agents/claude-code.ts";
 import { CODEX_ADAPTER } from "../../src/agents/codex.ts";
@@ -9,6 +11,20 @@ import { MIMO_ADAPTER } from "../../src/agents/mimo.ts";
 import { GENERIC_CLI_ADAPTER } from "../../src/agents/generic-cli.ts";
 import { BUILTIN_PROFILES, validateProfile } from "../../src/agents/profile.ts";
 import { effectiveProfileCapabilities } from "../../src/agents/capabilities.ts";
+import { NativeLoopRunner } from "../../src/agents/adapters.ts";
+import { Journal } from "../../src/journal/journal.ts";
+import type { ModelPort } from "../../src/model/types.ts";
+import { RUN } from "../executor/env.ts";
+import { call, ScriptedModel } from "../agent/scripted.ts";
+
+let scratch: string | undefined;
+let nativeJournal: Journal | undefined;
+afterEach(async () => {
+  nativeJournal?.close();
+  nativeJournal = undefined;
+  if (scratch) rmSync(scratch, { recursive: true, force: true });
+  scratch = undefined;
+});
 
 describe("profile permission fields match adapter capabilities", () => {
   test("permission validation and the effective catalog matrix derive from one declaration", () => {
@@ -157,6 +173,57 @@ describe("MimoAdapter", () => {
     assert.match(parsed.reason ?? "", /402/);
     assert.ok(validateProfile({ ...profile, permissions: { mode: "never-ask" } }).some((problem) => /mimo permission mode/.test(problem)));
     assert.ok(validateProfile({ ...profile, maxBudgetUsd: 1 }).some((problem) => /no per-run USD budget/.test(problem)));
+  });
+});
+
+describe("NativeLoopRunner MCP role boundary", () => {
+  test("a recipe binding is not opened or exposed to a repair-role run", async () => {
+    scratch = mkdtempSync(join(tmpdir(), "synapser-repair-mcp-"));
+    const workspace = join(scratch, "workspace");
+    const stateDir = join(scratch, "state");
+    mkdirSync(workspace);
+    mkdirSync(stateDir);
+    nativeJournal = Journal.open(stateDir, RUN);
+    nativeJournal.tx((tx) => tx.insertMission({ runId: RUN, objective: "repair boundary", repo: "workspace", baseSha: "n/a", planRevision: 1, limits: {} }));
+    const profile = BUILTIN_PROFILES.find((candidate) => candidate.id === "nemotron-repair")!;
+    const scripted = new ScriptedModel(() => ({ calls: [call("finish", { summary: "repair checked" })] }));
+    const offeredTools: string[][] = [];
+    const model: ModelPort = {
+      complete(request, context) {
+        offeredTools.push(request.tools?.map((tool) => tool.function.name) ?? []);
+        return scripted.complete(request, context);
+      },
+    };
+    const opened: unknown[] = [];
+    const runner = new NativeLoopRunner(model, undefined, undefined, undefined, async (...args) => {
+      opened.push(args);
+      return {
+        tools: [{ type: "function", function: { name: "mcp_demo__inspect", description: "fixture", parameters: { type: "object" } } }],
+        call: async () => ({ content: "should not be called" }),
+        close: async () => {},
+      };
+    });
+
+    const result = await runner.run({
+      profile,
+      task: {
+        taskId: "repair-1",
+        objective: "Repair only the acceptance failure.",
+        scope: ["app/billing.py"],
+        criteria: ["the acceptance failure is corrected"],
+        mcpToolSelection: [{ serverId: "demo", toolName: "inspect", registrationDigest: `sha256:${"a".repeat(64)}` }],
+        planRevision: 1,
+      },
+      workspaceRoot: workspace,
+      runId: RUN,
+      journal: nativeJournal,
+      executor: { beginSession: () => ({ incarnation: "test-incarnation" }) } as never,
+      generation: 1,
+    });
+
+    assert.equal(result.outcome, "SUCCEEDED");
+    assert.deepEqual(opened, [], "repair must not spawn an MCP server even if recipe metadata is present");
+    assert.equal(offeredTools[0]?.some((name) => name.startsWith("mcp_")), false, "the repair model must not receive MCP tool definitions");
   });
 });
 

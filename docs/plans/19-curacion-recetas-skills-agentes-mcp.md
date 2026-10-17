@@ -382,7 +382,9 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   `nativeReadOnlyProfiles` del operador. La selección y el digest de configuración/pin observado al
   solicitar la receta se persisten como procedencia; cambiar esa configuración antes del inicio bloquea
   la corrida. La selección viaja fuera del plan del modelo y se hereda sin cambios en tareas delegadas y
-  de reparación; el registro de corrida expone únicamente las herramientas exactas. Selecciones ausentes en
+  se conserva como metadato de procedencia en reparación; el runtime solo abre herramientas para tareas
+  `worker` nativas elegibles. Una reparación no recibe herramientas MCP ni inicia un servidor. El
+  registro de corrida expone únicamente las herramientas exactas al worker autorizado. Selecciones ausentes en
   workflows manuales conservan el comportamiento anterior; una lista vacía de receta significa cero
   herramientas. *Verificador:* e2e con MCP stdio local pinneado recorre `task_catalog → task_request →
   workflow_start → ProductionEngine → checker`, concediendo al operador `inspect` y `status` mientras
