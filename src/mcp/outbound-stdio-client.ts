@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Client, SdkErrorCode, type CallToolResult, type JSONRPCMessage, type Tool } from "@modelcontextprotocol/client";
 import { DEFAULT_INHERITED_ENV_VARS, StdioClientTransport, type StdioServerParameters } from "@modelcontextprotocol/client/stdio";
 import { AGENT_MEMORY_MAX_BYTES, AGENT_TASKS_MAX } from "../agents/limits.ts";
+import type { McpServerRegistration } from "./registry.ts";
 
 /** JSON data that can safely cross the MCP stdio boundary. */
 export type McpJson = null | boolean | number | string | McpJson[] | { [key: string]: McpJson };
@@ -45,6 +46,12 @@ export interface ConnectStdioMcpServerOptions {
   killGraceMs?: number;
   maxMessageBytes?: number;
   signal?: AbortSignal;
+}
+
+/** Runtime inputs for connecting one registered server under one profile's operator allowlist. */
+export interface ConnectRegisteredMcpServerOptions extends Omit<ConnectStdioMcpServerOptions, "command" | "args"> {
+  registration: McpServerRegistration;
+  profileId: string;
 }
 
 export interface ConnectedStdioMcpServer {
@@ -717,6 +724,58 @@ export async function connectStdioMcpServer(options: ConnectStdioMcpServerOption
     capabilities: client.capabilities,
     listTools: (requestOptions) => client.listTools(requestOptions),
     callTool: (name, arguments_, requestOptions) => client.callTool(name, arguments_, requestOptions),
+    close: () => client.close(),
+  };
+}
+
+/**
+ * Connect to an explicitly enabled registry entry and expose only the tool names assigned to this profile.
+ * The registration is snapshotted before startup; identity mismatch closes the child and fails closed.
+ */
+export async function connectRegisteredMcpServer(options: ConnectRegisteredMcpServerOptions): Promise<ConnectedStdioMcpServer> {
+  const registration = options.registration as unknown;
+  if (!plainObject(registration) || registration["enabled"] !== true || typeof registration["command"] !== "string" ||
+    !Array.isArray(registration["args"]) || registration["args"].some((arg) => typeof arg !== "string") ||
+    !plainObject(registration["expectedServer"]) || typeof registration["expectedServer"]["name"] !== "string" ||
+    typeof registration["expectedServer"]["version"] !== "string" || typeof options.profileId !== "string" ||
+    !plainObject(registration["profiles"])) {
+    throw new Error("registered MCP server is disabled or invalid");
+  }
+
+  const expectedName = registration["expectedServer"]["name"];
+  const expectedVersion = registration["expectedServer"]["version"];
+  if (!expectedName || expectedName.trim() !== expectedName || !expectedVersion || expectedVersion.trim() !== expectedVersion) {
+    throw new Error("registered MCP server identity is invalid");
+  }
+  const rawAllowlist = registration["profiles"][options.profileId];
+  if (!Array.isArray(rawAllowlist) || rawAllowlist.length === 0 ||
+    rawAllowlist.some((name) => typeof name !== "string" || !VALID_NAME.test(name)) ||
+    new Set(rawAllowlist).size !== rawAllowlist.length) {
+    throw new Error("registered MCP profile has no explicit valid tool allowlist");
+  }
+
+  const allowed = new Set(rawAllowlist as string[]);
+  const expected = { name: expectedName, version: expectedVersion };
+  const command = registration["command"];
+  const args = [...registration["args"]] as string[];
+  const client = await connectStdioMcpServer({ ...options, command, args });
+  if (client.serverInfo.name !== expected.name || client.serverInfo.version !== expected.version) {
+    try {
+      await client.close();
+    } catch {
+      throw new Error("registered MCP server identity mismatched and process cleanup could not be confirmed");
+    }
+    throw new Error("registered MCP server identity did not match the operator-pinned server");
+  }
+
+  return {
+    serverInfo: client.serverInfo,
+    capabilities: client.capabilities,
+    listTools: async (requestOptions) => (await client.listTools(requestOptions)).filter((tool) => allowed.has(tool.name)),
+    callTool: (name, arguments_, requestOptions) => {
+      if (!allowed.has(name)) return Promise.reject(new Error("MCP tool is not allowlisted for this profile"));
+      return client.callTool(name, arguments_, requestOptions);
+    },
     close: () => client.close(),
   };
 }

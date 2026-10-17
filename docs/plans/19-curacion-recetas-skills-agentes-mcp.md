@@ -297,6 +297,13 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   límites cgroup, no lee sentinel host/no conecta a loopback y no deja un descendiente detached activo.
   *Falsación:* límite ausente/distinto, acceso externo, conexión a host o scope/descendiente activo tras
   cerrar. No implica resistencia a exploits del kernel.
+- **RCP6c — Identidad y superficie por perfil**: un conector de registro exige coincidencia exacta de
+  `name/version` anunciados por el proceso con la identidad fijada por el operador; publica únicamente
+  herramientas incluidas en la allowlist explícita del perfil y rechaza llamadas directas fuera de ella
+  antes de enviar RPC. *Verificador:* proceso MCP local anuncia identidad correcta/incorrecta, ofrece
+  tools permitidas y ajenas, y se prueba filtrado más rechazo de la llamada no permitida sin que llegue
+  al proceso. *Falsación:* identidad parcialmente distinta aceptada, tool ajena visible o llamada directa
+  no autorizada alcanza al servidor.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

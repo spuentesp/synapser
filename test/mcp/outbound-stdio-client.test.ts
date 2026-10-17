@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
-import { connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
+import { connectRegisteredMcpServer, connectStdioMcpServer } from "../../src/mcp/outbound-stdio-client.ts";
+import { validateMcpServerRegistry } from "../../src/mcp/registry.ts";
 
 // This is an actual child process speaking MCP's newline-delimited JSON-RPC protocol. It is intentionally
 // small enough to make the adversarial wire cases explicit instead of relying on an in-process server double.
@@ -60,7 +61,11 @@ function onLine(line) {
       process.stdout.write(init + '\n' + unsolicited + '\n');
       return;
     }
-    reply(request.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: mode === 'bad-identity' ? { name: 'local-fixture' } : { name: 'local-fixture', version: '1' } });
+    const serverInfo = mode === 'bad-identity' ? { name: 'local-fixture' }
+      : mode === 'wrong-name' ? { name: 'unexpected-fixture', version: '1' }
+      : mode === 'wrong-version' ? { name: 'local-fixture', version: '2' }
+      : { name: 'local-fixture', version: '1' };
+    reply(request.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo });
     return;
   }
   if (request.method === 'notifications/initialized') {
@@ -146,6 +151,36 @@ function fixture(mode = "normal") {
     maxMessageBytes: mode === "oversized" || mode === "coalesced-invalid" ? 256 : 1024,
   };
   return { options, dir, pidFile, homeDir, grandchildPidFile, callsFile, handshakeFile, cursorFile, frameLengthsFile, observedEnvFile, initRequestFile, resourceLimitsFile };
+}
+
+function registrationFor(options: ReturnType<typeof fixture>["options"], profiles: Record<string, string[]> = { worker: ["echo"] }) {
+  const serverPath = join(options.cwd!, "local-mcp-server.cjs");
+  writeFileSync(serverPath, SERVER);
+  const validation = validateMcpServerRegistry([{
+    id: "local-fixture",
+    enabled: true,
+    origin: "file:///tmp/local-fixture",
+    version: "1.0.0",
+    command: options.command,
+    args: [serverPath],
+    expectedServer: { name: "local-fixture", version: "1" },
+    profiles,
+  }], ["worker"]);
+  assert.equal(validation.ok, true, "test registration must pass the operator-owned registry validator");
+  return validation.servers[0]!;
+}
+
+function registeredOptions(options: ReturnType<typeof fixture>["options"], profiles?: Record<string, string[]>) {
+  return {
+    registration: registrationFor(options, profiles),
+    profileId: "worker",
+    env: options.env,
+    cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
+    callTimeoutMs: options.callTimeoutMs,
+    killGraceMs: options.killGraceMs,
+    maxMessageBytes: options.maxMessageBytes,
+  };
 }
 
 async function assertChildReaped(pidFile: string): Promise<void> {
@@ -296,6 +331,36 @@ test("a server exit during initialization is reported without leaking its proces
 test("server identity must include both name and version", async () => {
   const { options, pidFile } = fixture("bad-identity");
   await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
+  await assertChildReaped(pidFile);
+});
+
+test("registered MCP connection requires the exact operator-pinned server name and version", async (t) => {
+  for (const mode of ["wrong-name", "wrong-version"]) {
+    await t.test(`rejects ${mode}`, async () => {
+      const { options, pidFile } = fixture(mode);
+      await assert.rejects(connectRegisteredMcpServer(registeredOptions(options)), /identity|server.*(?:name|version)|expected/i);
+      await assertChildReaped(pidFile);
+    });
+  }
+});
+
+test("registered MCP connection exposes only the profile allowlist and blocks direct calls outside it", async () => {
+  const { options, pidFile, callsFile } = fixture();
+  const client = await connectRegisteredMcpServer(registeredOptions(options, { worker: ["echo"] }));
+  try {
+    const tools = await client.listTools();
+    assert.deepEqual(tools.map((tool) => tool.name), ["echo"], "tools/list must contain only the effective profile allowlist");
+
+    await assert.rejects(client.callTool("raw", { text: "bypass" }), /not allowed|allowlist|not registered/i,
+      "calling the unexposed tool directly must still be denied locally");
+    assert.equal(existsSync(callsFile), false, "a denied direct call must never reach the MCP process");
+
+    const result = await client.callTool("echo", { text: "allowed" });
+    assert.equal(result.isError, false);
+    assert.equal(readFileSync(callsFile, "utf8"), "1");
+  } finally {
+    await client.close();
+  }
   await assertChildReaped(pidFile);
 });
 
