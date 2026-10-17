@@ -7,7 +7,7 @@ import { AGENT_MEMORY_MAX_BYTES } from "./limits.ts";
 const BUSCTL = "/usr/bin/busctl";
 const SYSTEMCTL = "/usr/bin/systemctl";
 const SYSTEMD_RUN = "/usr/bin/systemd-run";
-const UNIT_NAME = /^synapser-run-[0-9a-f-]+\.slice$/;
+const UNIT_NAME = /^synapser-run-[0-9a-f]{32}\.slice$/;
 
 function invoke(binary: string, args: string[], timeout = 5_000): ReturnType<typeof spawnSync> {
   const env: NodeJS.ProcessEnv = { PATH: process.env["PATH"] ?? "/usr/bin:/bin" };
@@ -34,7 +34,9 @@ function cgroupMemoryMax(controlGroup: string): string | null {
 
 /** One lazily-created parent cgroup shared by every CLI and MCP child in a workflow run. */
 export class RunMemoryScope {
-  readonly unit = `synapser-run-${randomUUID()}.slice`;
+  // Hyphens have hierarchy semantics in systemd slice names. Keep the random id as one component so
+  // every workflow creates only one transient leaf, instead of leaving a chain of random ancestors.
+  readonly unit = `synapser-run-${randomUUID().replaceAll("-", "")}.slice`;
   readonly #memoryMaxBytes: number;
   #started = false;
   #closed = false;
@@ -68,10 +70,18 @@ export class RunMemoryScope {
     ]);
     if (result.error || result.status !== 0) throw new Error("workflow process memory scope could not be created");
     this.#started = true;
-    const props = properties(this.unit);
-    if (props?.["LoadState"] !== "loaded" || props["ActiveState"] !== "active" || !props["ControlGroup"] ||
-      Number(props["MemoryMax"]) !== this.#memoryMaxBytes || props["MemoryAccounting"] !== "yes" ||
-      cgroupMemoryMax(props["ControlGroup"]) !== String(this.#memoryMaxBytes)) {
+    const deadline = Date.now() + 2_000;
+    let verified = false;
+    do {
+      const props = properties(this.unit);
+      const controlGroup = props?.["ControlGroup"];
+      verified = props?.["LoadState"] === "loaded" && props["ActiveState"] === "active" && Boolean(controlGroup) &&
+        Number(props["MemoryMax"]) === this.#memoryMaxBytes && props["MemoryAccounting"] === "yes" &&
+        cgroupMemoryMax(controlGroup!) === String(this.#memoryMaxBytes);
+      if (verified || Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } while (true);
+    if (!verified) {
       this.#closed = true;
       invoke(SYSTEMCTL, ["--user", "stop", this.unit]);
       this.#started = false;

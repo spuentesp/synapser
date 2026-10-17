@@ -484,6 +484,7 @@ test("close terminates a detached descendant, not only the verified process grou
 test("an outbound MCP process joins the workflow memory slice and retains its per-process ceilings", { skip: process.platform !== "linux" }, async () => {
   const { options, pidFile, resourceLimitsFile } = fixture();
   const scope = new RunMemoryScope();
+  assert.match(scope.unit, /^synapser-run-[0-9a-f]{32}\.slice$/);
   const parentSlice = await scope.ensure();
   let client: Awaited<ReturnType<typeof connectStdioMcpServer>> | undefined;
   try {

@@ -395,7 +395,7 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
   bwrapArgs.push("--", sandboxCommand, ...runtimeArgs);
 
   const unit = `synapser-mcp-${process.pid}-${randomUUID()}.scope`;
-  if (options.parentSlice !== undefined && !/^synapser-run-[0-9a-f-]+\.slice$/.test(options.parentSlice)) {
+  if (options.parentSlice !== undefined && !/^synapser-run-[0-9a-f]{32}\.slice$/.test(options.parentSlice)) {
     throw new Error("outbound MCP parent slice name is invalid");
   }
   const outerEnv: Record<string, string> = {};
@@ -428,7 +428,7 @@ function sandboxLaunch(options: OutboundMcpClientOptions): { server: StdioServer
 
 function systemdShow(unit: string): Record<string, string> | null {
   const result = spawnSync(SYSTEMCTL, ["--user", "show", unit, "--property=LoadState", "--property=ActiveState", "--property=ControlGroup", "--property=MemoryMax", "--property=TasksMax", "--property=MemoryAccounting", "--property=KillMode", "--property=Slice"], {
-    encoding: "utf8", timeout: 250, stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf8", timeout: 1_000, stdio: ["ignore", "pipe", "ignore"],
   });
   if (result.error || result.status !== 0) return null;
   return Object.fromEntries(result.stdout.trim().split("\n").map((line) => {
