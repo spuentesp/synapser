@@ -256,9 +256,9 @@ Cerradas: E1, E2, E3, E4, E5, E6, E8, E10, E11, E12 y E13. En curso: E7 y E9 (H9
 - **H6.3**: verificador local opt-in definido en `test/live/p159-network-proxy.test.ts`; usa la alternativa B autorizada y verificada en P15.9.
 - **H6.4**: `test/sandbox/isolation.test.ts` verifica timeout, `RLIMIT_AS` y `TasksMax` en scope transitorio; `test/agents/runner-broker.test.ts` comprueba en el cgroup real `memory.max=4 GiB`, 64 tareas y 2 GiB de espacio virtual por proceso. El host delega `cpu memory pids`; si el controlador de memoria no está disponible, el scope falla cerrado.
 
-### Bloqueado por una decisión del operador o del usuario
+### Pruebas opt-in y límites fuera de `verify`
 
-- **H7.5** ejecución `live`: necesita credenciales reales, que esta sesión no lee. `test:live` queda opcional.
+- **H7.5** ejecución `live`: opt-in por CLI y cuota autorizada. Se reintenta Kimi con MiniMax M3 en `test/live/cli-agents.test.ts`; la credencial se toma de la configuración local de `mmx` y no se registra ni se imprime. `test:live` sigue siendo opcional en CI.
 - **H12.5** aplicado con la decisión del operador (aplicar 2 a 4). Hallazgos 1, 2, 3 y 5 aplicados (commits 1ce20eb, 8cf489a, 4381443). El 4 se aplicó en lo que el SDK cubre: `tools/call` y -32002 se mantienen por M3 y por la imposibilidad de expresar -32002 en el SDK, y así queda documentado.
 
 ### Decisiones que la regla de `verify` no cubre
