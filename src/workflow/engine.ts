@@ -44,7 +44,7 @@ import { libraryFetch } from "../model/destinations.ts";
 import { OpenAICompatibleProvider } from "../model/openai-compatible-provider.ts";
 import { DelegationBroker } from "../orchestration/delegation.ts";
 import { approvalWaiter, baselineOf, evaluateWorkflow } from "./checkers.ts";
-import type { EngineResult, EngineRun, WorkflowEngine } from "./manager.ts";
+import type { EngineResult, EngineRun, RecipeSkillBinding, WorkflowEngine } from "./manager.ts";
 import type { Workflow } from "./model.ts";
 
 export interface EngineConfig {
@@ -111,10 +111,20 @@ export class ProductionEngine implements WorkflowEngine {
       const nativeMcp = new NativeMcpRunRegistry(c.mcpServers ?? [], join(c.stateDir, "mcp-artifacts"), journal, runId);
       const fullCatalog = buildCatalog(library.profiles, c.history?.(journal) ?? [], { ...(c.knownUsdPerRun ? { knownUsdPerRun: c.knownUsdPerRun } : {}), allowedSkillsByProfile: new Map([...library.skillsFor].map(([id, skills]) => [id, skills.map((skill) => skill.id)])) });
       const recipeMcpTools = r.recipeMcpTools;
+      const recipeSkills: readonly RecipeSkillBinding[] | undefined = r.recipeSkills;
+      const recipeEligibleProfiles = new Set(r.recipeEligibleProfiles ?? []);
+      const recipeSkillSelections = recipeSkills?.map((skill) => ({ id: skill.id, required: true, reason: "required by published recipe" }));
       const mcpEligibleIds = new Set<string>();
       if (recipeMcpTools && recipeMcpTools.length > 0) {
+        for (const skill of recipeSkills ?? []) {
+          const frozen = r.library?.entries.some((entry) => entry.kind === "skills" && entry.id === skill.id && entry.digest === skill.digest);
+          if (!frozen) return { status: "FAILED", reason: `recipe skill ${skill.id} no longer matches the frozen library snapshot` };
+        }
         for (const profile of library.profiles) {
+          if (!recipeEligibleProfiles.has(profile.id)) continue;
           if (!profile.enabled || profile.role !== "writer" || profile.adapter !== "native" || profile.nativeRole !== "worker") continue;
+          const authorizedSkills = library.skillsFor.get(profile.id) ?? [];
+          if (!(recipeSkills ?? []).every((selection) => authorizedSkills.some((skill) => skill.id === selection.id))) continue;
           const allowed = recipeMcpTools.every((selection) => {
             const server = c.mcpServers?.find((candidate) => candidate.id === selection.serverId);
             return !!server?.enabled && !!server.artifact && digestOfJson(JSON.parse(JSON.stringify(server))) === selection.registrationDigest
@@ -125,6 +135,7 @@ export class ProductionEngine implements WorkflowEngine {
         }
         if (mcpEligibleIds.size === 0) return { status: "FAILED", reason: "recipe MCP tool selection is no longer available to an enabled native worker profile" };
       }
+      if (recipeSkills?.length && (!recipeMcpTools || recipeMcpTools.length === 0)) return { status: "FAILED", reason: "recipe skills are supported only with an explicitly selected native MCP worker in this runtime" };
       const catalog = recipeMcpTools && recipeMcpTools.length > 0
         ? fullCatalog.filter((card) => mcpEligibleIds.has(card.id))
         : fullCatalog;
@@ -134,11 +145,14 @@ export class ProductionEngine implements WorkflowEngine {
       const plan: Plan = c.planner
         ? await c.planner(w0, catalog, journal)
         : (await planMission(model, { runId, objective: w0.description, contract: w0.goals, workspaceRoot: c.workspaceRoot, maxTasks: 8, catalog, workflow: w0 }, { budget })).plan;
+      let executionPlan = plan;
       if (recipeMcpTools && recipeMcpTools.length > 0) {
-        const invalid = plan.tasks.some((task) => (task.kind ?? "write") !== "write" || (task.skills !== undefined && task.skills.length > 0));
-        if (invalid) return { status: "FAILED", reason: "recipe MCP selection supports write tasks only and cannot be combined with unbound recipe skills" };
+        const boundSkillIds = new Set((recipeSkills ?? []).map((skill) => skill.id));
+        const invalid = plan.tasks.some((task) => (task.kind ?? "write") !== "write" || !mcpEligibleIds.has(task.profile ?? "") || (task.skills ?? []).some((skill) => !boundSkillIds.has(skill.id)));
+        if (invalid) return { status: "FAILED", reason: "recipe MCP selection supports write tasks only on request-time eligible workers and rejects skills outside the published recipe" };
+        if (recipeSkillSelections?.length) executionPlan = { ...plan, tasks: plan.tasks.map((task) => ({ ...task, skills: recipeSkillSelections })) };
       }
-      journal.tx((t) => t.event(runId, "decomposition", runId, null, "ACCEPTED", { tasks: plan.tasks.length, serves: plan.tasks.map((x) => ({ id: x.id, serves: x.serves ?? [] })), uncovered: [...conditionCoverage(w0).mustServe].filter((id) => !plan.tasks.some((x) => x.serves?.includes(id))) }));
+      journal.tx((t) => t.event(runId, "decomposition", runId, null, "ACCEPTED", { tasks: executionPlan.tasks.length, serves: executionPlan.tasks.map((x) => ({ id: x.id, serves: x.serves ?? [] })), uncovered: [...conditionCoverage(w0).mustServe].filter((id) => !executionPlan.tasks.some((x) => x.serves?.includes(id))) }));
       if (r.signal.aborted) return { status: "CANCELLED", reason: "cancelled while planning" };
 
       // ---- baseline: what the repository looked like BEFORE any agent touched it ------------------
@@ -295,7 +309,7 @@ export class ProductionEngine implements WorkflowEngine {
           },
         },
         {
-          runId, objective: w0.description, plan, acceptance: [],
+          runId, objective: w0.description, plan: executionPlan, acceptance: [],
           ...(recipeMcpTools !== undefined ? { mcpToolSelection: recipeMcpTools as readonly McpToolBinding[] } : {}),
           limits: {
             concurrency: c.limits?.concurrency ?? 3, maxRepairRounds: c.limits?.maxRepairRounds ?? 2, missionMs,

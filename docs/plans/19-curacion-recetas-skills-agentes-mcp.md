@@ -115,9 +115,11 @@ sustituidos sí forman parte del documento de workflow almacenado: no se deben e
 parámetros.
 
 Esta primera entrega no afirma enrutamiento ni límites que el runtime no pueda hacer cumplir. Los
-perfiles y costos devueltos son candidatos/estimaciones, no una asignación ni una reserva. Categoría,
-capacidades y skills aún no quedan ligadas al plan despachado; por ello toda receta con capacidades o
-skills requeridas se rechaza. También se rechazan MCP requeridos (sin inyección en workflows), un
+perfiles y costos devueltos son candidatos/estimaciones, no una asignación ni una reserva. En la
+primera entrega, categoría, capacidades y skills no estaban ligadas al plan despachado, por lo que se
+rechazaban. El binding de skills de P19.8 levanta ese rechazo solo para la combinación implementada:
+workflow solicitado por receta con selección MCP exacta y worker `native` elegible; el resto sigue
+fallando cerrado. También se rechaza un
 presupuesto USD (sin tope USD efectivo) y las políticas `human_approval`/`auto_start_bounded` (sin
 compuerta por receta y presupuesto agregado aplicado). Solo `draft` es aceptado. La divulgación se
 marca “not configured”; `clientInfo.name` sigue siendo una etiqueta no autenticada, no una identidad
@@ -389,12 +391,20 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   herramientas. *Verificador:* e2e con MCP stdio local pinneado recorre `task_catalog → task_request →
   workflow_start → ProductionEngine → checker`, concediendo al operador `inspect` y `status` mientras
   la receta solo selecciona `inspect`; prueba unitaria rechaza la llamada directa a `status`, y el
-  esquema rechaza servidores sin tool, pares inconsistentes y duplicados. El binding liga al digest
+  esquema rechaza servidores sin tool, pares inconsistentes y duplicados. Las skills requeridas de
+  una receta se resuelven al digest vigente al crear el workflow, se guardan en su procedencia y se
+  validan contra el snapshot congelado al iniciar. Solo se aceptan con binding MCP y perfil `native`
+  worker que tenga cada skill en la allowlist de operador; el engine impone esa selección en todas las
+  tareas write del plan, sin permitir que el planner la omita o amplíe. Una skill requerida sin MCP o
+  sin worker compatible se rechaza antes de crear el workflow. *Verificador:* las pruebas de receta
+  rechazan skill ausente o perfil no autorizado; el e2e comprueba el digest exacto, llegada al prompt,
+  registro de inyección y rechazo antes de planificar si la skill cambia después del request. El binding liga al digest
   del registro/configuración observado al solicitar; se prueba que un cambio posterior de configuración
   se rechaza antes de spawn. El broker de delegación hereda ese binding del requester sin aceptarlo en
   la solicitud del agente. *Falsación:* el agente ve o
   llama una tool no seleccionada, una propuesta del planner amplía la selección, una revocación llega
-  tarde, un workflow manual pierde compatibilidad o una subtarea delegada obtiene un grant más amplio.
+  tarde, un workflow manual pierde compatibilidad, una tarea write omite la skill fijada o una subtarea
+  delegada obtiene un grant más amplio.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

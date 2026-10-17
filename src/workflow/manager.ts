@@ -31,6 +31,13 @@ export interface RecipeRequestProvenance {
   paramsDigest: string;
   parameterNames: readonly string[];
   mcpTools: readonly McpToolBinding[];
+  skills: readonly RecipeSkillBinding[];
+  eligibleProfiles: readonly string[];
+}
+
+export interface RecipeSkillBinding {
+  id: string;
+  digest: string;
 }
 
 export interface EngineRun {
@@ -47,6 +54,10 @@ export interface EngineRun {
   library?: FrozenLibrary;
   /** Explicit recipe-origin MCP selection; undefined means an ordinary workflow, [] means no tools. */
   recipeMcpTools?: readonly McpToolBinding[];
+  /** Required recipe skills are immutable selections bound to every worker task. */
+  recipeSkills?: readonly RecipeSkillBinding[];
+  /** Profiles that satisfied recipe requirements when the request was accepted. */
+  recipeEligibleProfiles?: readonly string[];
 }
 export interface EngineResult {
   status: "DONE" | "FAILED" | "CANCELLED" | "TIMED_OUT";
@@ -197,6 +208,8 @@ export class WorkflowManager {
         params_digest: recipe.paramsDigest,
         parameter_names: [...recipe.parameterNames].sort(),
         required_mcp_tools: [...recipe.mcpTools].map((tool) => ({ server_id: tool.serverId, tool_name: tool.toolName, registration_digest: tool.registrationDigest })).sort((a, b) => a.server_id.localeCompare(b.server_id) || a.tool_name.localeCompare(b.tool_name)),
+        required_skills: [...recipe.skills].map((skill) => ({ id: skill.id, digest: skill.digest })).sort((a, b) => a.id.localeCompare(b.id)),
+        eligible_profiles: [...new Set(recipe.eligibleProfiles)].sort(),
       });
     });
   }
@@ -244,7 +257,14 @@ export class WorkflowManager {
       || recipe.parameterNames.some((name) => !/^[a-z][a-z0-9_-]{0,62}$/.test(name))
       || !Array.isArray(recipe.mcpTools)
       || recipe.mcpTools.some((tool) => !/^[a-z][a-z0-9_-]{0,62}$/.test(tool.serverId) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(tool.toolName) || !isDigest(tool.registrationDigest))
-      || new Set(recipe.mcpTools.map((tool) => `${tool.serverId}\0${tool.toolName}`)).size !== recipe.mcpTools.length) {
+      || new Set(recipe.mcpTools.map((tool) => `${tool.serverId}\0${tool.toolName}`)).size !== recipe.mcpTools.length
+      || !Array.isArray(recipe.skills)
+      || recipe.skills.some((skill) => !/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(skill.id) || !isDigest(skill.digest))
+      || new Set(recipe.skills.map((skill) => skill.id)).size !== recipe.skills.length
+      || !Array.isArray(recipe.eligibleProfiles)
+      || recipe.eligibleProfiles.length === 0
+      || recipe.eligibleProfiles.some((id) => !/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(id))
+      || new Set(recipe.eligibleProfiles).size !== recipe.eligibleProfiles.length) {
       return { ok: false, code: "INVALID_RECIPE_PROVENANCE" };
     }
     return this.#create(input, actor, recipe);
@@ -343,7 +363,7 @@ export class WorkflowManager {
         // L3: the library is frozen when the run starts; edits made after this point do not reach the run
         const library = this.#o.library?.freeze(j);
         const recipeRequest = j.listEvents().find((event) => event.entity === "recipe_request");
-        const recipeData = recipeRequest?.data as { required_mcp_tools?: unknown } | undefined;
+        const recipeData = recipeRequest?.data as { required_mcp_tools?: unknown; required_skills?: unknown; eligible_profiles?: unknown } | undefined;
         const recipeMcpTools: McpToolBinding[] | undefined = recipeRequest
           ? Array.isArray(recipeData?.required_mcp_tools)
             ? (recipeData.required_mcp_tools as unknown[]).map((item) => {
@@ -352,6 +372,21 @@ export class WorkflowManager {
                 if (typeof row["server_id"] !== "string" || typeof row["tool_name"] !== "string" || typeof row["registration_digest"] !== "string" || !isDigest(row["registration_digest"])) throw new Error("recipe MCP binding is invalid");
                 return { serverId: row["server_id"], toolName: row["tool_name"], registrationDigest: row["registration_digest"] };
               })
+            : []
+          : undefined;
+        const recipeSkills: RecipeSkillBinding[] | undefined = recipeRequest
+          ? Array.isArray(recipeData?.required_skills)
+            ? (recipeData.required_skills as unknown[]).map((item) => {
+                if (typeof item !== "object" || item === null || Array.isArray(item)) throw new Error("recipe skill binding is invalid");
+                const row = item as Record<string, unknown>;
+                if (typeof row["id"] !== "string" || !/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(row["id"]) || typeof row["digest"] !== "string" || !isDigest(row["digest"])) throw new Error("recipe skill binding is invalid");
+                return { id: row["id"], digest: row["digest"] };
+              })
+            : []
+          : undefined;
+        const recipeEligibleProfiles: string[] | undefined = recipeRequest
+          ? Array.isArray(recipeData?.eligible_profiles) && recipeData.eligible_profiles.every((id) => typeof id === "string" && /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(id))
+            ? [...new Set(recipeData.eligible_profiles as string[])].sort()
             : []
           : undefined;
         res = await this.#o.engine.run({
@@ -366,6 +401,8 @@ export class WorkflowManager {
           },
           ...(library ? { library } : {}),
           ...(recipeMcpTools !== undefined ? { recipeMcpTools } : {}),
+          ...(recipeSkills !== undefined ? { recipeSkills } : {}),
+          ...(recipeEligibleProfiles !== undefined ? { recipeEligibleProfiles } : {}),
         });
       } catch (e) {
         res = { status: "FAILED", reason: `engine error: ${String((e as Error).message ?? e).slice(0, 300)}` };

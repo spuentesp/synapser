@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,7 @@ const PLAN: Plan = {
     skills: [],
   }],
 };
+const RECIPE_SKILL = "A review skill must inspect evidence and name at least one concrete risk.";
 
 let workspace: string;
 let stateDir: string;
@@ -87,8 +89,15 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
   }], [PROFILE.id], nativeWorkerProfileIds([PROFILE]));
   if (!checkedRegistry.ok) throw new Error(checkedRegistry.errors.join("; "));
 
+  serverJournal = Journal.open(stateDir, "_server");
+  const library = new LibraryStore(stateDir, serverJournal);
+  library.put("skills", "review-evidence", { name: "Review evidence", description: "A concrete-risk review skill", content: RECIPE_SKILL }, "operator");
+
   const model = new ScriptedModel((_messages, turn) => {
-    if (turn === 1) return { calls: [call("mcp_workflow-inspector__inspect", {})] };
+    if (turn === 1) {
+      assert.ok(JSON.stringify(_messages).includes(RECIPE_SKILL), "the recipe-required skill must reach the native worker prompt");
+      return { calls: [call("mcp_workflow-inspector__inspect", {})] };
+    }
     if (turn === 2) return { calls: [call("read_files", { paths: ["mcp-report.md"] })] };
     if (turn === 3) {
       const mcpMessage = _messages.find((message) => message.role === "tool" && message.content?.includes("UNTRUSTED_MCP_DATA"));
@@ -99,14 +108,17 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     if (turn === 4) return { calls: [call("apply_changes", {})] };
     return { calls: [call("finish", { summary: "Recorded the inspected MCP value." })] };
   });
+  let plannerCalls = 0;
+  const engineAgentSkills: Record<string, readonly string[]> = { [PROFILE.id]: ["review-evidence"] };
   const engine = new ProductionEngine({
     workspaceRoot: workspace,
     stateDir,
     commands: [],
     profiles: [PROFILE],
+    agentSkills: engineAgentSkills,
     mcpServers: checkedRegistry.servers,
     models: () => model,
-    planner: async () => PLAN,
+    planner: async () => { plannerCalls += 1; return PLAN; },
     limits: { maxRepairRounds: 0, concurrency: 1, missionMs: 60_000 },
     pollMs: 10,
   });
@@ -116,13 +128,12 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     commandIds: new Set(),
     profileIds: new Set([PROFILE.id]),
     engine,
+    library,
     pollMs: 10,
   });
 
   // Exercise the real MCP request path that turns a published recipe into a workflow; then
   // the normal start/runtime path must still compose the local MCP worker and deterministic checker.
-  serverJournal = Journal.open(stateDir, "_server");
-  const library = new LibraryStore(stateDir, serverJournal);
   const recipe = library.put("recipes", "inspect-approved-mcp", {
     schemaVersion: 1,
     title: "Inspect the approved local MCP",
@@ -130,7 +141,7 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     category: "implementation",
     parameters: [],
     requiredCapabilities: [],
-    requiredSkills: [],
+    requiredSkills: [{ id: "review-evidence", required: true }],
     requiredMcpServers: ["workflow-inspector"],
     requiredMcpTools: [{ serverId: "workflow-inspector", toolName: "inspect" }],
     workflow: {
@@ -143,7 +154,7 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     startPolicy: "draft",
   }, "operator").entry;
   library.publishRecipe(recipe.id, recipe.digest, "operator");
-  const mcp = new McpServer({ manager, library, serverJournal, catalog: () => buildCatalog([PROFILE], []), mcpServers: () => checkedRegistry.servers });
+  const mcp = new McpServer({ manager, library, serverJournal, catalog: () => buildCatalog([PROFILE], [], { allowedSkillsByProfile: new Map([[PROFILE.id, ["review-evidence"]]]) }), mcpServers: () => checkedRegistry.servers });
   await mcp.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", clientInfo: { name: INITIATOR.id }, capabilities: {} } });
   const callTool = async (id: number, name: string, args: Record<string, unknown>) => {
     const response = await mcp.handle({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
@@ -174,11 +185,38 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
   const journal = manager.journalOf(workflowId)!;
   const requestEvent = journal.listEvents().find((event) => event.entity === "recipe_request");
   assert.equal((requestEvent?.data as { recipe_digest?: string } | undefined)?.recipe_digest, recipe.digest);
+  assert.deepEqual((requestEvent?.data as { required_skills?: { id: string; digest: string }[] } | undefined)?.required_skills, [{ id: "review-evidence", digest: library.get("skills", "review-evidence")!.digest }]);
+  assert.deepEqual((requestEvent?.data as { eligible_profiles?: string[] } | undefined)?.eligible_profiles, [PROFILE.id]);
   assert.deepEqual((requestEvent?.data as { required_mcp_tools?: { server_id: string; tool_name: string; registration_digest: string }[] } | undefined)?.required_mcp_tools?.map(({ server_id, tool_name }) => [server_id, tool_name]), [["workflow-inspector", "inspect"]]);
   assert.match((requestEvent?.data as { required_mcp_tools: { registration_digest: string }[] }).required_mcp_tools[0]!.registration_digest, /^sha256:[a-f0-9]{64}$/);
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_snapshot").length, 1);
   const snapshot = journal.listEvents().find((event) => event.entity === "mcp_tool_snapshot")?.data as { tools: { tool: string }[] };
   assert.deepEqual(snapshot.tools.map((tool) => tool.tool), ["inspect"], "recipe binding must not inherit the broader operator grant");
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_call").length, 1);
-  assert.equal(journal.listAgentRuns().some((run) => run.profileId === PROFILE.id && run.outcome === "SUCCEEDED"), true);
+  const agentRun = journal.listAgentRuns().find((run) => run.profileId === PROFILE.id && run.outcome === "SUCCEEDED");
+  assert.ok(agentRun);
+  assert.deepEqual(agentRun.skills, [{ id: "review-evidence", digest: `sha256:${createHash("sha256").update(RECIPE_SKILL).digest("hex")}`, mechanism: "prompt-prepend", reason: "required by published recipe" }]);
+
+  const staleRequest = await callTool(6, "task_request", { recipe_id: recipe.id, params: {} });
+  const staleWorkflowId = staleRequest.workflow_id as string;
+  library.put("skills", "review-evidence", { name: "Review evidence", description: "Changed after request", content: "Changed skill content." }, "operator");
+  const staleStart = await callTool(7, "workflow_start", { workflow_id: staleWorkflowId });
+  assert.ok(["PLANNING", "FAILED"].includes(staleStart.state as string), JSON.stringify(staleStart));
+  await manager.settled(staleWorkflowId);
+  const staleView = manager.status(staleWorkflowId)!;
+  assert.equal(staleView.state, "FAILED");
+  assert.match(staleView.reason ?? "", /review-evidence.*frozen library snapshot/);
+  assert.equal(plannerCalls, 1, "a post-request skill mutation fails before the planner or worker can run");
+  assert.equal(manager.journalOf(staleWorkflowId)!.listAgentRuns().length, 0);
+  assert.equal(manager.journalOf(staleWorkflowId)!.listEvents().some((event) => event.entity === "mcp_tool_snapshot"), false);
+
+  const revokedRequest = await callTool(8, "task_request", { recipe_id: recipe.id, params: {} });
+  const revokedWorkflowId = revokedRequest.workflow_id as string;
+  engineAgentSkills[PROFILE.id] = [];
+  const revokedStart = await callTool(9, "workflow_start", { workflow_id: revokedWorkflowId });
+  assert.ok(["PLANNING", "FAILED"].includes(revokedStart.state as string), JSON.stringify(revokedStart));
+  await manager.settled(revokedWorkflowId);
+  assert.equal(manager.status(revokedWorkflowId)!.state, "FAILED");
+  assert.match(manager.status(revokedWorkflowId)!.reason ?? "", /no longer available to an enabled native worker profile/);
+  assert.equal(plannerCalls, 1, "a skill authorization revoked after request cannot move the recipe to a new worker");
 });

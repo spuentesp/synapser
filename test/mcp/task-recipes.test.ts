@@ -180,6 +180,8 @@ describe("P19.6 task recipes over MCP", () => {
       params_digest: createHash("sha256").update(JSON.stringify({ scope: submitted.scope, focus: submitted.focus })).digest("hex"),
       parameter_names: ["focus", "scope"],
       required_mcp_tools: [],
+      required_skills: [],
+      eligible_profiles: ["reviewer"],
     });
     for (const event of [callEvent, provenance]) {
       const audit = JSON.stringify(event.data);
@@ -262,5 +264,47 @@ describe("P19.6 task recipes over MCP", () => {
     const events = serverJournal.listEvents().filter((event) => event.entity === "mcp_call" && event.toState === "task_request");
     assert.ok(events.every((event) => (event.data as { client: string }).client === "client-name-is-spoofable"));
     // clientInfo.name is a caller-supplied label, not authentication; this suite makes no identity authorization claim.
+  });
+
+  test("a recipe skill binds only when its digest exists and a granted native worker is eligible", async () => {
+    const registration = {
+      id: "source-reader", enabled: true, origin: "file:///review/source-reader", version: "1.0.0",
+      command: process.execPath, args: [], artifact: { digest: `sha256:${"a".repeat(64)}`, entrypoint: "server.cjs" },
+      expectedServer: { name: "source-reader", version: "1" },
+      profiles: { "nemotron-worker": ["read"] }, nativeReadOnlyProfiles: { "nemotron-worker": ["read"] },
+    };
+    const worker = {
+      id: "nemotron-worker", kinds: ["review", "write"], integration: "direct", tier: "standard", pool: null, strengths: [],
+      capabilities: { capabilityIds: ["skills.injectable"], skills: "prompt-prepend" }, allowedSkillIds: [],
+      cost: { basis: "unknown", reason: "NO_HISTORY" }, observed: null, enabled: true,
+    } as any;
+    cards = [worker];
+    server = new McpServer({ manager, serverJournal, library, catalog: () => cards, mcpServers: () => [registration] as any });
+    await rpc("initialize", { protocolVersion: "2024-11-05", clientInfo: { name: "skill-recipe-client" }, capabilities: {} });
+    const doc = recipe({
+      requiredSkills: [{ id: "review-skill", required: true }],
+      requiredMcpServers: ["source-reader"],
+      requiredMcpTools: [{ serverId: "source-reader", toolName: "read" }],
+    });
+    addRecipe("recipe-skill", doc);
+    publish("recipe-skill");
+
+    const absent = await tool("task_request", { recipe_id: "recipe-skill", params: { scope: ["src"] } });
+    assert.equal(absent.body.error, "RECIPE_UNRESOLVED");
+    assert.deepEqual(absent.body.resolution.skills.missing, ["review-skill"]);
+    assert.equal(manager.list().length, 0);
+
+    const skill = library.put("skills", "review-skill", { name: "Review", description: "Report risks", content: "Report one concrete risk." }, "operator").entry;
+    const unauthorized = await tool("task_request", { recipe_id: "recipe-skill", params: { scope: ["src"] } });
+    assert.equal(unauthorized.body.error, "RECIPE_UNRESOLVED");
+    assert.deepEqual(unauthorized.body.resolution.skills.compatibleProfiles, []);
+    assert.equal(manager.list().length, 0);
+
+    worker.allowedSkillIds = ["review-skill"];
+    const accepted = await tool("task_request", { recipe_id: "recipe-skill", params: { scope: ["src"] } });
+    assert.equal(accepted.body.state, "DRAFT");
+    assert.equal(accepted.body.resolution.skills.assignment, "required skills are bound to every write task on a compatible native worker");
+    const provenance = manager.journalOf(accepted.body.workflow_id)!.listEvents().find((event) => event.entity === "recipe_request")!;
+    assert.deepEqual((provenance.data as { required_skills: { id: string; digest: string }[] }).required_skills, [{ id: "review-skill", digest: skill.digest }]);
   });
 });

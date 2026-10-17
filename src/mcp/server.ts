@@ -380,7 +380,11 @@ export class McpServer {
     const resolved = resolveRecipeParameters(recipe, params as Record<string, unknown>);
     if (!resolved.ok) return { error: "INVALID_PARAMETERS", errors: resolved.errors };
     const requiredSkills = recipe.requiredSkills.filter((skill) => skill.required);
-    const absentSkills = requiredSkills.filter((skill) => !this.#o.library?.get("skills", skill.id)).map((skill) => skill.id);
+    const skillEntries = requiredSkills.flatMap((skill) => {
+      const current = this.#o.library?.get("skills", skill.id);
+      return current ? [{ id: skill.id, digest: current.digest }] : [];
+    });
+    const absentSkills = requiredSkills.filter((skill) => !skillEntries.some((entry) => entry.id === skill.id)).map((skill) => skill.id);
     const mcpTools = recipe.requiredMcpTools ?? [];
     const registrations = this.#o.mcpServers?.() ?? [];
     const mcpBindings: McpToolBinding[] = mcpTools.flatMap((selection) => {
@@ -412,13 +416,13 @@ export class McpServer {
       profileAssignment: mcpTools.length ? "MCP recipes route only to eligible native worker profiles with every selected tool granted" : "candidate profiles only; no profile is bound until workflow execution",
       category: { recipe: recipe.category, profileKind, enforced: false },
       capabilities: { required: recipe.requiredCapabilities, candidateProfiles: mcpCompatible.map((card) => card.id), enforced: false },
-      skills: { required: requiredSkills.map((skill) => skill.id), optionalNotSelected: recipe.requiredSkills.filter((skill) => !skill.required).map((skill) => skill.id), missing: absentSkills, compatibleProfiles: mcpCompatible.filter((card) => requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id))).map((card) => card.id), assignment: "workflow execution does not yet bind recipe skills to a selected profile" },
+      skills: { required: requiredSkills.map((skill) => skill.id), optionalNotSelected: recipe.requiredSkills.filter((skill) => !skill.required).map((skill) => skill.id), missing: absentSkills, compatibleProfiles: mcpCompatible.filter((card) => requiredSkills.every((skill) => card.allowedSkillIds.includes(skill.id))).map((card) => card.id), assignment: requiredSkills.length && mcpTools.length ? "required skills are bound to every write task on a compatible native worker" : "candidate profiles only; no recipe skills are bound" },
       mcpServers: { required: recipe.requiredMcpServers, requiredTools: mcpTools, availableTools, missing: missingMcps, enforced: mcpTools.length > 0 },
       cost: mcpCompatible.map((card) => ({ profile: card.id, estimate: card.cost })),
       costLimit: "profile costs are estimates; recipe-level USD is not enforced by the workflow runtime",
       disclosure: "not configured",
     };
-    if (absentSkills.length || missingMcps.length || availableTools.length !== mcpTools.length || mcpCompatible.length === 0 || requiredSkills.length > 0 || recipe.requiredCapabilities.length > 0) return { error: "RECIPE_UNRESOLVED", resolution };
+    if (absentSkills.length || missingMcps.length || availableTools.length !== mcpTools.length || mcpCompatible.length === 0 || (requiredSkills.length > 0 && mcpTools.length === 0) || recipe.requiredCapabilities.length > 0) return { error: "RECIPE_UNRESOLVED", resolution };
     if (recipe.startPolicy !== "draft") return { error: "START_POLICY_UNSUPPORTED", policy: recipe.startPolicy, detail: "recipe-specific start gates and enforced execution bounds are not available; only draft recipes can be requested", resolution };
     if (recipe.workflow.budget?.usd !== undefined) return { error: "RECIPE_BUDGET_UNSUPPORTED", detail: "recipe-level USD budgets are not enforced by the workflow runtime; remove the USD budget or use an enforced time limit", resolution };
     let workflow: TaskRecipe["workflow"];
@@ -434,6 +438,8 @@ export class McpServer {
       paramsDigest,
       parameterNames: Object.keys(resolved.values).sort(),
       mcpTools: mcpBindings,
+      skills: skillEntries,
+      eligibleProfiles: mcpCompatible.map((card) => card.id),
     });
     if (!created.ok) return { error: created.code, errors: created.errors };
     return { workflow_id: created.id, state: "DRAFT", recipe: { id: recipeId, digest: entry.digest }, parameter_names: Object.keys(resolved.values).sort(), resolution };
