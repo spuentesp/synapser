@@ -51,6 +51,7 @@ for (const id of wanted) {
         ...(id === "kimi-writer" ? { provider: MINIMAX_KIMI_PROVIDER } : {}),
       });
       assert.equal(env.read("app/schema.py"), before, "isolation: nothing changed in the real workspace during the run");
+      assert.equal(run.outcome, "SUCCEEDED", run.reason ?? "the live CLI run must complete before usage or integration can be verified");
 
       const integ = run.outcome === "SUCCEEDED" ? await integrateRun(env.exec, { taskId: "t1", incarnation }, run) : null;
       const u = run.usage;
