@@ -30,6 +30,8 @@ import { type LibraryStore } from "../library/store.ts";
 import { type LibraryPolicy, NO_LIBRARY_POLICY } from "../library/validate.ts";
 import type { WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
+import type { McpServerRegistration } from "../mcp/registry.ts";
+import type { McpServerDiscovery } from "../mcp/discovery.ts";
 
 const RUN_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const APPROVAL_KEY = /^(?:[A-Za-z0-9._-]{1,80}|(?:cond|effect|iv):[A-Za-z0-9._-]{1,80})$/;
@@ -57,6 +59,9 @@ export interface ApiControl {
   libraryPolicy?: () => LibraryPolicy;
   /** Validated provider and role changes, written to the operator file and applied in place (plan 17 P17.8). */
   configWrite?: (change: ConfigChange) => void;
+  /** MCP discovery is an operator-only probe: it lists allowlisted tools and never calls them (plan 19 P19.5). */
+  mcpServers?: () => readonly McpServerRegistration[];
+  mcpDiscover?: (serverId: string, profileId: string) => Promise<McpServerDiscovery>;
 }
 
 import { type ConfigChange, ConfigWriteError } from "../config/write.ts";
@@ -222,6 +227,21 @@ export function createApi(opts: ApiOptions): ApiServer {
         throw e;
       }
     }
+    if (top === "mcp" && id && action === "discover" && method === "POST") {
+      if (!c.mcpDiscover) return fail(res, 404, "MCP_DISCOVERY_UNAVAILABLE");
+      const body = await readBody(req, res) as { profileId?: unknown } | undefined;
+      if (body === undefined) return;
+      if (typeof body.profileId !== "string" || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(body.profileId)) return fail(res, 400, "INVALID_PROFILE_ID");
+      const registration = c.mcpServers?.().find((server) => server.id === id);
+      if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
+      if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
+      if (!Object.hasOwn(registration.profiles, body.profileId)) return fail(res, 403, "MCP_PROFILE_NOT_CONFIGURED");
+      try {
+        return json(res, 200, await c.mcpDiscover(id, body.profileId));
+      } catch (error) {
+        return fail(res, 502, "MCP_DISCOVERY_FAILED", String((error as Error).message ?? error).slice(0, 300));
+      }
+    }
     const asResult = <T>(r: { ok: true } & T | { ok: false; code: string; errors?: string[] }) =>
       r.ok ? json(res, 200, r) : json(res, 409, { error: (r as { code: string }).code, errors: (r as { errors?: string[] }).errors ?? [] });
     if (id !== undefined && !RUN_ID.test(id)) return fail(res, 400, "BAD_ID");
@@ -352,7 +372,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       return void res.end(readFileSync(file));
     }
 
-    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer|home|agents)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
+    if (opts.control && /^\/api\/(workflows|chat|catalog|config|library|designer|home|agents|mcp)(\/|$)/.test(path)) return control(opts.control, req, res, path, method);
 
     const m = /^\/api\/(session|runs)(?:\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?)?$/.exec(path);
     if (!m) return fail(res, 404, "NOT_FOUND");

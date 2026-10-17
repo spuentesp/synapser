@@ -128,6 +128,7 @@ async function main(): Promise<void> {
     switch (cmd) {
       case "serve": {
         const { createApi } = await import("../api/server.ts");
+        const { discoverRegisteredMcpServer } = await import("../mcp/discovery.ts");
         const pi = argv.indexOf("--port");
         // plan 17 P17.8: a fixed operator token, from the environment, so writes survive a restart and clients can hold it.
         const operatorToken = process.env["SYNAPSER_OPERATOR_TOKEN"];
@@ -136,7 +137,11 @@ async function main(): Promise<void> {
           ...(operatorToken ? { token: operatorToken } : {}),
           stateDir: cfg.stateDir,
           trustMode: cfg.trustMode,
-          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor, providers: cfg.providers, roles: cfg.roles }) },
+          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), mcpServers: () => cfg.mcpServers, mcpDiscover: async (serverId, profileId) => {
+            const registration = cfg.mcpServers.find((server) => server.id === serverId);
+            if (!registration) throw new Error("unknown registered MCP server");
+            return discoverRegisteredMcpServer(registration, profileId);
+          }, config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor, providers: cfg.providers, roles: cfg.roles }) },
         });
         const port = await api.listen(pi >= 0 ? Number(argv[pi + 1]) : 4173);
         console.log(`Synapser → http://127.0.0.1:${port}/  (workspace: ${cfg.workspace})`);
