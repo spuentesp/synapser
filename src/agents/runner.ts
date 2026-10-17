@@ -150,6 +150,9 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
     materializeAdapterFiles(invocation.resetDirs, invocation.files, { worktree: work, home });
     const argv = [...invocation.argv];
     const template = [...invocation.argvTemplate];
+    const injectedEnv = injection?.env ?? {};
+    const sensitiveEnv = Object.fromEntries(Object.entries(invocation.env).filter(([key]) => Object.hasOwn(injectedEnv, key)));
+    const sandboxEnv = Object.fromEntries(Object.entries(invocation.env).filter(([key]) => !Object.hasOwn(injectedEnv, key)));
 
     const exec = await new Promise<{ code: number | null; signal: string | null; timedOut: boolean; stdout: string; stderr: string; spawnError: string | null }>((resolve) => {
       let stdout = "";
@@ -164,17 +167,29 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
       }
       let scopeStarted = false;
       try {
-        const sandboxed = sandboxAgentArgv(argv, { workspaceRoot: o.workspaceRoot, work, home, scratch, env: invocation.env });
+        const sandboxed = sandboxAgentArgv(argv, {
+          workspaceRoot: o.workspaceRoot, work, home, scratch, env: sandboxEnv,
+          envFromStdin: Object.keys(sensitiveEnv).length > 0,
+        });
         const bounded = boundedAgentArgv(sandboxed, scopeUnit);
-        // systemd-run needs the user's session bus to create its transient scope. Pass only the
-        // two transport variables to that launcher; the wrapper unsets them before exec'ing the CLI.
+        // systemd-run needs a minimal host environment to create its transient scope. Provider
+        // configuration and credentials are kept out; bwrap constructs the CLI environment itself.
         const scopeEnv = {
-          ...invocation.env,
+          ...scopeTransport,
           ...(process.env["DBUS_SESSION_BUS_ADDRESS"] ? { DBUS_SESSION_BUS_ADDRESS: process.env["DBUS_SESSION_BUS_ADDRESS"] } : {}),
           ...(process.env["XDG_RUNTIME_DIR"] ? { XDG_RUNTIME_DIR: process.env["XDG_RUNTIME_DIR"] } : {}),
         };
-        child = spawn(bounded[0] as string, bounded.slice(1), { cwd: work, detached: true, stdio: ["ignore", "pipe", "pipe"], env: scopeEnv });
+        child = spawn(bounded[0] as string, bounded.slice(1), {
+          cwd: work, detached: true,
+          stdio: [Object.keys(sensitiveEnv).length > 0 ? "pipe" : "ignore", "pipe", "pipe"],
+          env: scopeEnv,
+        });
         scopeStarted = true;
+        if (Object.keys(sensitiveEnv).length > 0) {
+          const chunks = Object.entries(sensitiveEnv).flatMap(([key, value]) => [Buffer.from(key), Buffer.from([0]), Buffer.from(value), Buffer.from([0])]);
+          child.stdin?.on("error", () => { /* a terminated launcher will be reported through its exit status */ });
+          child.stdin?.end(Buffer.concat(chunks));
+        }
       } catch (e) {
         return resolve({ code: null, signal: null, timedOut: false, stdout, stderr, spawnError: String((e as Error).message) });
       }
@@ -188,8 +203,8 @@ export async function runAgent(o: RunAgentOptions): Promise<AgentRunResult> {
         }
       }
       const cap = (cur: string, d: Buffer) => (cur.length >= MAX_OUT ? cur : cur + d.toString("utf8").slice(0, MAX_OUT - cur.length));
-      child.stdout.on("data", (d: Buffer) => (stdout = cap(stdout, d)));
-      child.stderr.on("data", (d: Buffer) => (stderr = cap(stderr, d)));
+      child.stdout?.on("data", (d: Buffer) => (stdout = cap(stdout, d)));
+      child.stderr?.on("data", (d: Buffer) => (stderr = cap(stderr, d)));
       const timer = setTimeout(() => {
         timedOut = true;
         try {

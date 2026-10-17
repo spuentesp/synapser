@@ -30,7 +30,7 @@ function resolveExecutable(program: string, pathValue: string | undefined): stri
  */
 export function sandboxAgentArgv(
   argv: readonly string[],
-  options: { workspaceRoot: string; work: string; home: string; scratch: string; env: Readonly<Record<string, string>> },
+  options: { workspaceRoot: string; work: string; home: string; scratch: string; env: Readonly<Record<string, string>>; envFromStdin?: boolean },
 ): string[] {
   if (process.platform !== "linux") throw new Error("agent filesystem sandbox requires Linux bubblewrap");
   if (argv.length === 0 || typeof argv[0] !== "string" || !argv[0]) throw new Error("agent command is empty");
@@ -120,6 +120,12 @@ export function sandboxAgentArgv(
   if (!["/home", "/root", "/run", "/tmp", "/var/tmp", "/opt"].some((root) => inside(root, workspaceRoot))) args.push("--tmpfs", workspaceRoot);
   args.push("--chdir", sandboxWork, "--clearenv");
   for (const [key, value] of Object.entries(childEnv)) args.push("--setenv", key, value);
-  args.push("--", mappedProgram, ...mappedArgs);
+  if (options.envFromStdin) {
+    // Keep injected credentials out of argv and files; a NUL-delimited stream feeds this fixed wrapper.
+    const loadEnv = 'while IFS= read -r -d "" key && IFS= read -r -d "" value; do export "$key=$value" || exit 125; done; exec "$@"';
+    args.push("--", "/bin/bash", "-c", loadEnv, "synapser-env-launcher", mappedProgram, ...mappedArgs);
+  } else {
+    args.push("--", mappedProgram, ...mappedArgs);
+  }
   return [BWRAP, ...args];
 }

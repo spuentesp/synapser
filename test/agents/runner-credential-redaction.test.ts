@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -27,6 +27,7 @@ test("an injected credential is redacted from output and withheld from changed-f
 import { unlinkSync, writeFileSync } from 'node:fs';
 writeFileSync('leak.txt', process.env.TEST_PROVIDER_KEY);
 unlinkSync('existing-secret.txt');
+await new Promise((resolve) => setTimeout(resolve, 500));
 console.log(JSON.stringify({ type: 'thread.started', thread_id: 'credential-test' }));
 console.log(JSON.stringify({ type: 'turn.started' }));
 console.log(JSON.stringify({ type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: process.env.TEST_PROVIDER_KEY } }));
@@ -36,7 +37,9 @@ console.error(process.env.TEST_PROVIDER_KEY);
   chmodSync(cli, 0o755);
   const journal = Journal.open(state, "credential-test");
   try {
-    const result = await runAgent({
+    let finished = false;
+    let sawEnvLauncher = false;
+    const running = runAgent({
       profile: { id: "codex-credential-test", description: "credential test", role: "writer", argv: ["codex"], parser: "codex-jsonl", timeoutMs: 10_000, tags: [], enabled: true },
       adapter: CODEX_ADAPTER,
       prompt: "write a file",
@@ -47,7 +50,23 @@ console.error(process.env.TEST_PROVIDER_KEY);
       generation: 1,
       envSource: { PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`, HOME: home, TEST_PROVIDER_KEY: secret },
       provider: { id: "test-provider", baseUrl: "https://models.example/v1", apiKeyEnv: "TEST_PROVIDER_KEY", model: "test-model", protocol: "openai-compatible" },
-    });
+    }).finally(() => { finished = true; });
+    const deadline = Date.now() + 5_000;
+    while (!finished && Date.now() < deadline) {
+      for (const entry of readdirSync("/proc")) {
+        if (!/^\d+$/.test(entry)) continue;
+        try {
+          const commandLine = readFileSync(`/proc/${entry}/cmdline`);
+          if (commandLine.includes(Buffer.from("synapser-env-launcher"))) sawEnvLauncher = true;
+          assert.equal(commandLine.includes(Buffer.from(secret)), false, "provider key must never appear in host-visible process arguments");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT" && (error as NodeJS.ErrnoException).code !== "EACCES") throw error;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const result = await running;
+    assert.equal(sawEnvLauncher, true, "the real bwrap command must use the stdin-only environment bridge");
     assert.equal(result.outcome, "FAILED");
     assert.equal(result.reason, "provider credential appeared in an agent output file; change withheld");
     assert.deepEqual(result.changes, []);

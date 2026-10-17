@@ -1,10 +1,10 @@
 // REAL agent CLIs (claude / codex / kimi) make a tiny edit in an isolated copy; the patch broker
 // integrates it through claims and digests; the ledger records usage. Spends subscription quota.
-// Kimi is explicitly routed to MiniMax M3 when selected; set MINIMAX_API_KEY in the process env.
+// Kimi is explicitly routed to MiniMax M3 when selected; opt in with mmx auth or MINIMAX_API_KEY.
 //   SYNAPSER_LIVE_CLIS=claude-sonnet-writer,codex-writer,kimi-writer node --env-file=.env --test test/live/cli-agents.test.ts
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -32,11 +32,17 @@ const MINIMAX_KIMI_PROVIDER: InjectedProvider = {
 function minimaxApiKey(): string | null {
   const fromEnvironment = process.env["MINIMAX_API_KEY"];
   if (fromEnvironment?.trim()) return fromEnvironment;
+  let fd: number | undefined;
   try {
-    const config = JSON.parse(readFileSync(join(homedir(), ".mmx", "config.json"), "utf8")) as { api_key?: unknown };
+    fd = openSync(join(homedir(), ".mmx", "config.json"), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const metadata = fstatSync(fd);
+    if (!metadata.isFile() || metadata.uid !== (process.getuid?.() ?? metadata.uid) || (metadata.mode & 0o077) !== 0) return null;
+    const config = JSON.parse(readFileSync(fd, "utf8")) as { api_key?: unknown };
     return typeof config.api_key === "string" && config.api_key.trim() ? config.api_key : null;
   } catch {
     return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
@@ -46,7 +52,7 @@ for (const id of wanted) {
     assert.ok(profile, `unknown profile ${id}`);
     const minimaxKey = id === "kimi-writer" ? minimaxApiKey() : null;
     // Explicit opt-in with no credential is a configuration error, not a silent skip. The local mmx
-    // config is read only by this host-side test harness; runAgent passes the value only to Kimi.
+    // config is read only by this host-side test harness; runAgent passes the value to Kimi over stdin.
     if (id === "kimi-writer") {
       assert.ok(minimaxKey, "set MINIMAX_API_KEY or authenticate mmx for the opted-in Kimi/MiniMax live test");
     }
