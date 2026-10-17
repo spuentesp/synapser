@@ -27,7 +27,7 @@ test("MCP curation discovers only the profile allowlist without exposing process
   await expect(editor.getByLabel("Host runtime (absolute path)")).toHaveValue(process.execPath);
   await editor.locator('input[type="checkbox"]').uncheck();
   await editor.getByRole("button", { name: "Save registration" }).click();
-  await expect(editor.getByRole("status")).toContainText("Registration saved.");
+  await expect(editor.getByRole("status")).toContainText("Configuration saved.");
   await expect(server.getByRole("button", { name: "Discover tools" })).toBeDisabled();
   const savedRegistration = await page.evaluate(async () => {
     const response = await fetch("/api/config/mcpServers");
@@ -44,5 +44,15 @@ test("MCP curation discovers only the profile allowlist without exposing process
   await expect(discovery).toContainText("inspect");
   await expect(discovery).toContainText("Read-only review helper");
   await expect(discovery).not.toContainText("write");
-  await expect(page.getByTestId("mcp-curation")).toContainText("Does not install, call tools, or enable agents.");
+  await expect(page.getByTestId("mcp-curation")).toContainText("Does not install or enable agents");
+  await discovery.getByText("inspect", { exact: true }).click();
+  const args = discovery.getByLabel("Test JSON arguments inspect");
+  await args.fill('{"path":"src/example.ts"}');
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await discovery.getByRole("button", { name: "Test call" }).click();
+  await expect(discovery.getByRole("status")).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await discovery.getByRole("button", { name: "Test call" }).click();
+  await expect(discovery.getByRole("status")).toContainText("inspected:src/example.ts");
+  await expect(discovery).toContainText("does not enable tools for agents");
 });

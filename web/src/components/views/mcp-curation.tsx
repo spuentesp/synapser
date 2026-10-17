@@ -55,6 +55,9 @@ export function McpCuration({ session }: { session: boolean }) {
   const [profileIds, setProfileIds] = useState<Record<string, string>>({})
   const [discoveries, setDiscoveries] = useState<Record<string, Discovery>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  const [testBusy, setTestBusy] = useState<string | null>(null)
+  const [testArguments, setTestArguments] = useState<Record<string, string>>({})
+  const [testResults, setTestResults] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState('')
   const [registrations, setRegistrations] = useState<McpRegistration[]>([])
   const [selectedId, setSelectedId] = useState('')
@@ -138,6 +141,28 @@ export function McpCuration({ session }: { session: boolean }) {
     }
   }
 
+  const testCall = async (server: McpServer, tool: McpTool) => {
+    const profileId = profileIds[server.id] ?? ''
+    const key = `${server.id}:${tool.name}`
+    if (!profileId || !window.confirm(t('mcpTestConfirm'))) return
+    setTestBusy(key)
+    setFailure('')
+    setTestResults((current) => ({ ...current, [key]: '' }))
+    try {
+      const parsed: unknown = JSON.parse(testArguments[key] ?? '{}')
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(t('mcpTestArgumentsInvalid'))
+      const result = await api<{ toolName: string; result: unknown }>(`/api/mcp/${encodeURIComponent(server.id)}/test-call`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profileId, toolName: tool.name, arguments: parsed }),
+      })
+      setTestResults((current) => ({ ...current, [key]: JSON.stringify(result.result, null, 2) }))
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.code : (error as Error).message)
+    } finally {
+      setTestBusy(null)
+    }
+  }
+
   return (
     <Card data-testid="mcp-curation">
       <CardHeader><CardTitle>{t('mcpTitle')}</CardTitle></CardHeader>
@@ -203,6 +228,18 @@ export function McpCuration({ session }: { session: boolean }) {
                   <summary className="cursor-pointer text-sm font-medium">{tool.name}</summary>
                   {tool.description ? <p className="mt-2 text-sm text-muted-foreground">{tool.description}</p> : null}
                   <pre className="mt-2 overflow-auto rounded bg-muted p-2 text-xs">{JSON.stringify(tool.inputSchema, null, 2)}</pre>
+                  {session ? <div className="mt-3 grid gap-2">
+                    <label className="grid gap-1 text-sm">{t('mcpTestArguments')} · {tool.name}
+                      <textarea aria-label={`${t('mcpTestArguments')} ${tool.name}`} className="min-h-16 rounded-md border bg-background p-2 font-mono text-xs" value={testArguments[`${server.id}:${tool.name}`] ?? '{}'} onChange={(event) => setTestArguments((current) => ({ ...current, [`${server.id}:${tool.name}`]: event.target.value }))} />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button type="button" size="sm" variant="outline" disabled={!server.enabled || !server.artifactPinned || busy !== null || testBusy !== null} onClick={() => void testCall(server, tool)}>
+                        {testBusy === `${server.id}:${tool.name}` ? t('mcpTestRunning') : t('mcpTestCall')}
+                      </Button>
+                      {testResults[`${server.id}:${tool.name}`] ? <pre role="status" className="max-h-48 overflow-auto rounded bg-muted p-2 text-xs">{testResults[`${server.id}:${tool.name}`]}</pre> : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t('mcpTestWarning')}</p>
+                  </div> : null}
                 </details>)}
               </div> : null}
             </section>
