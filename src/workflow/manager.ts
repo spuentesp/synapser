@@ -17,10 +17,18 @@ import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
 import { discloseConditionDetail, type ReviewAudience } from "./disclosure.ts";
+import { isDigest } from "../digest/file.ts";
 
 export interface Actor {
   id: string;
   role: "initiator" | "operator" | "system";
+}
+
+export interface RecipeRequestProvenance {
+  recipeId: string;
+  recipeDigest: string;
+  paramsDigest: string;
+  parameterNames: readonly string[];
 }
 
 export interface EngineRun {
@@ -175,9 +183,17 @@ export class WorkflowManager {
     return j;
   }
 
-  #writeDoc(j: Journal, w: Workflow, revision: number, by: Actor): void {
+  #writeDoc(j: Journal, w: Workflow, revision: number, by: Actor, recipe?: RecipeRequestProvenance): void {
     const blob = j.artifacts.put(Buffer.from(JSON.stringify(w), "utf8"));
-    j.tx((t) => t.event(j.runId, "workflow_doc", w.id, null, `REV${revision}`, { revision, blob, digest: digestOfJson(JSON.parse(JSON.stringify(w))), by: by.id, role: by.role }));
+    j.tx((t) => {
+      t.event(j.runId, "workflow_doc", w.id, null, `REV${revision}`, { revision, blob, digest: digestOfJson(JSON.parse(JSON.stringify(w))), by: by.id, role: by.role });
+      if (recipe) t.event(j.runId, "recipe_request", recipe.recipeId, null, "DRAFT", {
+        recipe_id: recipe.recipeId,
+        recipe_digest: recipe.recipeDigest,
+        params_digest: recipe.paramsDigest,
+        parameter_names: [...recipe.parameterNames].sort(),
+      });
+    });
   }
 
   #doc(j: Journal): { workflow: Workflow; revision: number; createdBy: string | null } | null {
@@ -212,6 +228,21 @@ export class WorkflowManager {
   }
 
   create(input: unknown, actor: Actor): Result<{ id: string }> {
+    return this.#create(input, actor);
+  }
+
+  /** Create a recipe-origin workflow with its immutable provenance in the same ledger transaction as revision 1. */
+  createFromRecipe(input: unknown, actor: Actor, recipe: RecipeRequestProvenance): Result<{ id: string }> {
+    if (!/^[a-z][a-z0-9_-]{0,62}$/.test(recipe.recipeId) || !isDigest(recipe.recipeDigest)
+      || !/^[a-f0-9]{64}$/.test(recipe.paramsDigest)
+      || new Set(recipe.parameterNames).size !== recipe.parameterNames.length
+      || recipe.parameterNames.some((name) => !/^[a-z][a-z0-9_-]{0,62}$/.test(name))) {
+      return { ok: false, code: "INVALID_RECIPE_PROVENANCE" };
+    }
+    return this.#create(input, actor, recipe);
+  }
+
+  #create(input: unknown, actor: Actor, recipe?: RecipeRequestProvenance): Result<{ id: string }> {
     if (actor.role !== "operator" && hasOperatorAttestations(input)) {
       return { ok: false, code: "OPERATOR_ATTESTATION_REQUIRES_OPERATOR", errors: ["secondaryAccepted and waivedBy can only be recorded by an operator"] };
     }
@@ -221,7 +252,7 @@ export class WorkflowManager {
     if (!v.ok) return { ok: false, code: "INVALID_WORKFLOW", errors: v.errors };
     if (existsSync(join(this.#o.stateDir, v.workflow.id))) return { ok: false, code: "ALREADY_EXISTS" };
     const j = this.#journal(v.workflow.id, true)!;
-    this.#writeDoc(j, v.workflow, 1, actor);
+    this.#writeDoc(j, v.workflow, 1, actor, recipe);
     j.tx((t) => t.event(j.runId, "workflow", j.runId, null, "DRAFT", { by: actor.id }));
     return { ok: true, id: v.workflow.id };
   }
@@ -242,6 +273,9 @@ export class WorkflowManager {
     }
     const j = this.#journal(id);
     if (!j) return { ok: false, code: "UNKNOWN_WORKFLOW" };
+    if (actor.role !== "operator" && j.listEvents().some((event) => event.entity === "recipe_request")) {
+      return { ok: false, code: "RECIPE_WORKFLOW_LOCKED", errors: ["only an operator may edit a workflow created from a published recipe"] };
+    }
     const { state } = this.#state(j);
     if (isTerminal(state)) return { ok: false, code: "TERMINAL" };
     const cur = this.#doc(j)!;

@@ -302,6 +302,13 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
 - **RCP1 — Autoridad**: recetas, skills y documentos de biblioteca no amplían permisos del perfil,
   presupuesto, red, sandbox o herramientas. Falsación: una skill o receta cambia un flag protegido o
   un perfil no autorizado recibe una skill; debe fallar antes de crear el proceso.
+- **RCP11 — Integridad del origen de receta**: el evento de solicitud queda en la misma transacción
+  del journal que la revisión inicial; un iniciador no puede cambiar una definición nacida de receta,
+  especialmente sus condiciones de aceptación. Solo el operador puede emitir una revisión posterior.
+  *Verificador:* el e2e crea por MCP, intenta retirar/modificar condiciones y comprueba rechazo sin
+  nueva revisión, y luego alcanza `DONE` por el checker original. *Falsación:* un reinicio o una llamada
+  MCP deja un borrador de receta sin procedencia, acepta un cambio del iniciador o juzga la corrida
+  contra condiciones distintas a las preservadas por el operador.
 - **RCP2 — Selección acotada**: las skills por tarea son subconjunto de la allowlist del operador y
   de la snapshot congelada; cada inyección registra id, digest, adaptador y motivo. Falsación: skill
   no autorizada, borrada o modificada entre draft y start entra en la corrida.

@@ -155,7 +155,12 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
   assert.equal(requested.state, "DRAFT", JSON.stringify(requested));
   assert.equal(requested.recipe.digest, recipe.digest);
   const workflowId = requested.workflow_id as string;
-  const started = await callTool(4, "workflow_start", { workflow_id: workflowId });
+  const original = manager.status(workflowId)!.workflow;
+  const weakened = await callTool(4, "workflow_edit", { workflow_id: workflowId, workflow: { ...original, title: "Remove the curated acceptance", conditions: [] } });
+  assert.equal(weakened.error, "RECIPE_WORKFLOW_LOCKED");
+  assert.equal(manager.status(workflowId)!.workflow.title, original.title);
+  assert.equal(manager.journalOf(workflowId)!.listEvents().filter((event) => event.entity === "workflow_doc").length, 1);
+  const started = await callTool(5, "workflow_start", { workflow_id: workflowId });
   assert.ok(["AWAITING_START", "PLANNING", "RUNNING", "VERIFYING", "DONE"].includes(started.state as string), JSON.stringify(started));
   await manager.settled(workflowId);
 

@@ -402,13 +402,14 @@ export class McpServer {
     } catch {
       return { error: "INVALID_RECIPE_TEMPLATE" };
     }
-    const created = this.#o.manager.create(workflow, this.#actor(session));
-    if (!created.ok) return { error: created.code, errors: created.errors };
     const paramsDigest = createHash("sha256").update(JSON.stringify(resolved.values)).digest("hex");
-    const journal = this.#o.manager.journalOf(created.id);
-    journal?.tx((tx) => tx.event(created.id, "recipe_request", recipeId, null, "DRAFT", {
-      recipe_id: recipeId, recipe_digest: entry.digest, params_digest: paramsDigest, parameter_names: Object.keys(resolved.values).sort(),
-    }));
+    const created = this.#o.manager.createFromRecipe(workflow, this.#actor(session), {
+      recipeId,
+      recipeDigest: entry.digest,
+      paramsDigest,
+      parameterNames: Object.keys(resolved.values).sort(),
+    });
+    if (!created.ok) return { error: created.code, errors: created.errors };
     return { workflow_id: created.id, state: "DRAFT", recipe: { id: recipeId, digest: entry.digest }, parameter_names: Object.keys(resolved.values).sort(), resolution };
   }
 
