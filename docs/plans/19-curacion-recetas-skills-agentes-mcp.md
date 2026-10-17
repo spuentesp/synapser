@@ -120,15 +120,23 @@ orquestador expone únicamente las herramientas MCP aprobadas en su registro de 
 copian configuraciones al repositorio ni al HOME del usuario. Retirar o revocar un servidor impide
 nuevas ejecuciones y no altera los snapshots ya registrados.
 
-El primer transporte de P19.5 será `stdio`, sin dependencia de ejecución nueva. El cliente de
-descubrimiento implementa solo `initialize`, `tools/list` y `tools/call`; negocia una versión de
-protocolo explícita, limita tamaño de frames, herramientas, páginas y tiempos, y falla cerrado ante
-respuestas o palabras clave de esquema que no soporta. Las anotaciones del servidor no autorizan
-herramientas. El cliente por sí solo no es un sandbox ni un broker de efectos: hasta que el proxy,
-la allowlist efectiva y la frontera de proceso/red estén verificadas, no se inyectarán herramientas
-de efecto ni secretos a procesos MCP externos. Los comandos MCP son código ejecutable elegido por el
-operador y deben tratarse como confiables; `stdio` no restringe su acceso a archivos o red. El
-transporte HTTP queda fuera de este incremento.
+El primer transporte de P19.5 es `stdio` con `@modelcontextprotocol/client` fijado en 2.3.1. El
+wrapper selecciona el handshake legacy `2025-11-25` y expone solo descubrimiento y llamada de
+herramientas; limita el buffer de lectura del SDK, número de tools/páginas, tiempos y esquemas
+soportados. En Linux verifica el PGID del proceso líder antes de conectar y al cerrar señaliza ese
+grupo y confirma su desaparición; en plataformas sin ese supervisor falla cerrado. El `HOME` debe
+ser una ruta absoluta existente proporcionada por el llamador: este wrapper no verifica que sea
+privado ni temporal. El SDK administra JSON-RPC y lifecycle del transporte, mientras
+Synapser mantiene validación adicional de política. El límite del SDK es del buffer de lectura, no una
+garantía de tamaño independiente por frame. El grupo de procesos ayuda a cerrar descendientes que lo
+heredan, pero no garantiza reap de descendientes y no contiene un proceso que use `setsid`/`detached`
+para desacoplarse; tampoco equivale a cgroup ni impone el límite agregado de 4 GiB. Por estos motivos
+no se habilitan aún llamadas MCP desde agentes. Las anotaciones del servidor no autorizan herramientas. El cliente por sí solo no es
+un sandbox ni un broker de efectos: hasta que el proxy, la allowlist efectiva y la frontera de
+proceso/red estén verificadas, no se inyectarán herramientas de efecto ni secretos a procesos MCP
+externos. Los comandos MCP son código ejecutable elegido por el operador y deben tratarse como
+confiables; `stdio` no restringe su acceso a archivos o red. El transporte HTTP queda fuera de este
+incremento.
 
 El registro inicial en `mcpServers` es solo configuración declarativa operator-owned: exige un id,
 estado habilitado explícito, localizador HTTPS o `file:` sin credenciales, versión declarada,
