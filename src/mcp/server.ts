@@ -202,7 +202,7 @@ export class McpServer {
         run: (a, s) => {
           const own = this.#owned(String(a["workflow_id"]), s);
           if (!own.ok) return { error: own.error };
-          const v = m.status(String(a["workflow_id"]))!;
+          const v = m.status(String(a["workflow_id"]), "initiator")!;
           return { workflow_id: v.id, state: v.state, reason: v.reason, revision: v.revision, round: v.round, title: v.workflow.title, conditions: v.conditions, events: v.events };
         },
       },
@@ -220,7 +220,7 @@ export class McpServer {
           const own = this.#owned(String(a["workflow_id"]), s);
           if (!own.ok) return { error: own.error };
           const limit = typeof a["limit"] === "number" ? (a["limit"] as number) : 200;
-          return { events: (m.events(String(a["workflow_id"]), Number(a["since_seq"] ?? 0)) ?? []).slice(0, limit) };
+          return { events: (m.events(String(a["workflow_id"]), Number(a["since_seq"] ?? 0), "initiator") ?? []).slice(0, limit) };
         },
       },
       {

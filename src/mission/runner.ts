@@ -6,6 +6,7 @@
 import { runTask, type LoopLimits, type TaskRunResult } from "../agents/native/loop.ts";
 import type { WriteGateway } from "../executor/gateway.ts";
 import type { Journal } from "../journal/journal.ts";
+import { discloseConditionDetail } from "../workflow/disclosure.ts";
 import type { BudgetManager } from "../model/budget.ts";
 import type { ModelPort } from "../model/types.ts";
 import type { ValidationPort, ValidationResult } from "../validation/runner.ts";
@@ -298,12 +299,12 @@ export async function runMission(deps: MissionDeps, spec: MissionSpec): Promise<
       emit("conditions.evaluated", id, { round, satisfied: r.satisfied });
       if (!r.satisfied) {
         const unmet = r.results.filter((c) => c.required && c.status === "UNSATISFIED");
-        lastUnmet = unmet.map((c) => ({ id: c.id, statement: c.statement, detail: c.detail }));
+        lastUnmet = unmet.map((c) => ({ id: c.id, statement: c.statement, detail: discloseConditionDetail(c.checker, c.detail, "executor") }));
         return {
           taskId: id,
           ok: false,
           label: "ACCEPTANCE_FAILED",
-          detail: unmet.map((c) => `- [${c.id}] ${c.statement}\n  ${c.detail}`).join("\n").slice(0, 3000),
+          detail: unmet.map((c) => `- [${c.id}] ${c.statement}\n  ${discloseConditionDetail(c.checker, c.detail, "executor")}`).join("\n").slice(0, 3000),
         };
       }
       return { taskId: id, ok: true, label: "ACCEPTED" };

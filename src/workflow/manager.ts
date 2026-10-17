@@ -16,6 +16,7 @@ import type { Exec } from "../effects/kinds.ts";
 import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
+import { discloseConditionDetail, type ReviewAudience } from "./disclosure.ts";
 
 export interface Actor {
   id: string;
@@ -345,7 +346,7 @@ export class WorkflowManager {
     return { ok: true, state: "CANCELLED" };
   }
 
-  status(id: string): WorkflowView | null {
+  status(id: string, audience: ReviewAudience = "operator"): WorkflowView | null {
     const j = this.#journal(id);
     if (!j) return null;
     const doc = this.#doc(j);
@@ -363,7 +364,8 @@ export class WorkflowManager {
       id, state: st.state, reason: st.reason, revision: doc.revision, workflow: doc.workflow, createdBy: doc.createdBy,
       conditions: doc.workflow.conditions.map((c) => ({
         id: c.id, statement: c.statement, required: c.required, waived: Boolean(c.waivedBy),
-        status: latest.get(c.id)?.status ?? null, evidence: latest.get(c.id)?.evidence ?? null, detail: latest.get(c.id)?.detail ?? null,
+        status: latest.get(c.id)?.status ?? null, evidence: latest.get(c.id)?.evidence ?? null,
+        detail: latest.has(c.id) ? discloseConditionDetail(c.checker.kind, latest.get(c.id)!.detail, audience) : null,
       })),
       round,
       events: events.length,
@@ -385,13 +387,19 @@ export class WorkflowManager {
     return out;
   }
 
-  events(id: string, sinceSeq = 0): { seq: number; ts: number; entity: string; id: string; to: string | null; data: unknown }[] | null {
+  events(id: string, sinceSeq = 0, audience: ReviewAudience = "operator"): { seq: number; ts: number; entity: string; id: string; to: string | null; data: unknown }[] | null {
     const j = this.#journal(id);
     if (!j) return null;
     return j
       .listEvents(sinceSeq)
       .filter((e) => !["approval_challenge"].includes(e.entity))
-      .map((e) => ({ seq: e.seq, ts: e.ts, entity: e.entity, id: e.entityId, to: e.toState, data: e.data }));
+      .map((e) => {
+        const data = e.data as { checker?: unknown; detail?: unknown };
+        const safeData = e.entity === "condition" && typeof data.checker === "string" && typeof data.detail === "string"
+          ? { ...data, detail: discloseConditionDetail(data.checker, data.detail, audience) }
+          : e.data;
+        return { seq: e.seq, ts: e.ts, entity: e.entity, id: e.entityId, to: e.toState, data: safeData };
+      });
   }
 
   /** Resolves when the workflow's execution (if any) has ended. Used by tests and shutdown. */

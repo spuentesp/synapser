@@ -176,6 +176,38 @@ describe("P19.6 task recipes over MCP", () => {
     }
   });
 
+  test("operator sees the review report, while the MCP requester gets only a non-disclosing status", async () => {
+    await rpc("initialize", { protocolVersion: "2024-11-05", clientInfo: { name: "review-requester" }, capabilities: {} });
+    const created = manager.create({
+      title: "Review",
+      description: "Review the implementation and keep reviewer findings private.",
+      goals: ["Review completed"],
+      nonGoals: [],
+      conditions: [
+        { id: "review", statement: "Independent review passes", required: false, checker: { kind: "review", profile: "reviewer", rubric: "Check security properties" } },
+        { id: "report", statement: "A report exists", required: true, checker: { kind: "file", path: "report.md", assert: "exists" } },
+      ],
+    }, { id: "review-requester#session", role: "initiator" });
+    assert.ok(created.ok);
+    const marker = "PRIVATE_REVIEW_FINDING_7f1e";
+    const journal = manager.journalOf(created.id)!;
+    journal.tx((tx) => {
+      tx.event(created.id, "condition_round", "1", null, "UNSATISFIED", { snapshot: "snapshot", conditions: 1 });
+      tx.event(created.id, "condition", "review", null, "INFO_FAIL", {
+        round: 1, statement: "Independent review passes", required: false, evidence: "secondary", checker: "review", detail: marker, snapshot: "snapshot",
+      });
+    });
+
+    assert.equal(manager.status(created.id)!.conditions[0]!.detail, marker, "operator view keeps the full finding");
+    const status = await tool("workflow_status", { workflow_id: created.id });
+    assert.equal(status.body.conditions[0].detail, "A secondary review did not pass. Ask the operator for permitted guidance.");
+    assert.doesNotMatch(JSON.stringify(status.body), new RegExp(marker));
+    const events = await tool("workflow_events", { workflow_id: created.id });
+    assert.doesNotMatch(JSON.stringify(events.body), new RegExp(marker));
+    const operatorEvents = manager.events(created.id)!;
+    assert.match(JSON.stringify(operatorEvents), new RegExp(marker), "operator event view retains the report");
+  });
+
   test("required skills, required MCP servers, and non-draft start policies fail closed", async () => {
     await rpc("initialize", { protocolVersion: "2024-11-05", clientInfo: { name: "client-name-is-spoofable" }, capabilities: {} });
 
