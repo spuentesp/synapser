@@ -7,6 +7,10 @@ import { BUILTIN_PROFILES } from "../../src/agents/profile.ts";
 import { importMcpArtifact } from "../../src/mcp/artifact-store.ts";
 import { nativeWorkerProfileIds, validateMcpServerRegistry } from "../../src/mcp/registry.ts";
 import type { Plan } from "../../src/mission/plan.ts";
+import { LibraryStore } from "../../src/library/store.ts";
+import { McpServer } from "../../src/mcp/server.ts";
+import { Journal } from "../../src/journal/journal.ts";
+import { buildCatalog } from "../../src/orchestration/catalog.ts";
 import { ScriptedModel, call } from "../agent/scripted.ts";
 import { BASELINE } from "../executor/env.ts";
 import { ProductionEngine } from "../../src/workflow/engine.ts";
@@ -33,6 +37,7 @@ let stateDir: string;
 let packageRoot: string;
 let artifactRoot: string;
 let manager: WorkflowManager | undefined;
+let serverJournal: Journal | undefined;
 
 beforeEach(() => {
   workspace = realpathSync(mkdtempSync(join(tmpdir(), "synapser-mcp-workflow-ws-")));
@@ -53,6 +58,8 @@ beforeEach(() => {
 afterEach(async () => {
   await manager?.close();
   manager = undefined;
+  serverJournal?.close();
+  serverJournal = undefined;
   const makeWritable = (path: string): void => {
     if (!lstatSync(path).isDirectory()) return;
     chmodSync(path, 0o700);
@@ -111,23 +118,55 @@ test("P19.8 composes a pinned operator-approved MCP tool through ProductionEngin
     pollMs: 10,
   });
 
-  const created = manager.create({
+  // Exercise the real MCP request path that turns a published recipe into a workflow; then
+  // the normal start/runtime path must still compose the local MCP worker and deterministic checker.
+  serverJournal = Journal.open(stateDir, "_server");
+  const library = new LibraryStore(stateDir, serverJournal);
+  const recipe = library.put("recipes", "inspect-approved-mcp", {
+    schemaVersion: 1,
     title: "Inspect the approved local MCP",
     description: "Record the value returned by the approved local MCP inspection tool.",
-    goals: ["mcp-report.md records the inspected value"],
-    nonGoals: ["Do not request other tools or perform effects"],
-    conditions: [{ id: "mcp-report", statement: "The report contains the inspected value", checker: { kind: "file", path: "mcp-report.md", assert: { contains: "composed-local-result" } } }],
-  }, INITIATOR);
-  assert.ok(created.ok, JSON.stringify(created));
-  assert.ok(manager.start(created.id, INITIATOR).ok);
-  await manager.settled(created.id);
+    category: "implementation",
+    parameters: [],
+    requiredCapabilities: [],
+    requiredSkills: [],
+    requiredMcpServers: [],
+    workflow: {
+      title: "Inspect the approved local MCP",
+      description: "Record the value returned by the approved local MCP inspection tool.",
+      goals: ["mcp-report.md records the inspected value"],
+      nonGoals: ["Do not request other tools or perform effects"],
+      conditions: [{ id: "mcp-report", statement: "The report contains the inspected value", checker: { kind: "file", path: "mcp-report.md", assert: { contains: "composed-local-result" } } }],
+    },
+    startPolicy: "draft",
+  }, "operator").entry;
+  library.publishRecipe(recipe.id, recipe.digest, "operator");
+  const mcp = new McpServer({ manager, library, serverJournal, catalog: () => buildCatalog([PROFILE], []) });
+  await mcp.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", clientInfo: { name: INITIATOR.id }, capabilities: {} } });
+  const callTool = async (id: number, name: string, args: Record<string, unknown>) => {
+    const response = await mcp.handle({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+    assert.ok(response?.result);
+    const content = (response.result as { content: { text: string }[] }).content;
+    return JSON.parse(content[0]!.text) as Record<string, any>;
+  };
+  const catalog = await callTool(2, "task_catalog", {});
+  assert.deepEqual(catalog.recipes.map((entry: { id: string; digest: string }) => [entry.id, entry.digest]), [[recipe.id, recipe.digest]]);
+  const requested = await callTool(3, "task_request", { recipe_id: recipe.id, params: {} });
+  assert.equal(requested.state, "DRAFT", JSON.stringify(requested));
+  assert.equal(requested.recipe.digest, recipe.digest);
+  const workflowId = requested.workflow_id as string;
+  const started = await callTool(4, "workflow_start", { workflow_id: workflowId });
+  assert.ok(["AWAITING_START", "PLANNING", "RUNNING", "VERIFYING", "DONE"].includes(started.state as string), JSON.stringify(started));
+  await manager.settled(workflowId);
 
-  const view = manager.status(created.id)!;
-  const failedTask = manager.journalOf(created.id)!.listEvents().find((event) => event.entity === "task" && event.toState === "FAILED");
+  const view = manager.status(workflowId)!;
+  const failedTask = manager.journalOf(workflowId)!.listEvents().find((event) => event.entity === "task" && event.toState === "FAILED");
   assert.equal(view.state, "DONE", `${view.reason ?? ""}${failedTask ? `: ${JSON.stringify(failedTask.data)}` : ""}`);
   assert.equal(view.conditions[0]?.status, "SATISFIED");
   assert.equal(readFileSync(join(workspace, "mcp-report.md"), "utf8"), "Observed: composed-local-result\n");
-  const journal = manager.journalOf(created.id)!;
+  const journal = manager.journalOf(workflowId)!;
+  const requestEvent = journal.listEvents().find((event) => event.entity === "recipe_request");
+  assert.equal((requestEvent?.data as { recipe_digest?: string } | undefined)?.recipe_digest, recipe.digest);
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_snapshot").length, 1);
   assert.equal(journal.listEvents().filter((event) => event.entity === "mcp_tool_call").length, 1);
   assert.equal(journal.listAgentRuns().some((run) => run.profileId === PROFILE.id && run.outcome === "SUCCEEDED"), true);
