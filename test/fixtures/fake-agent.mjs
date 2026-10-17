@@ -92,7 +92,8 @@ switch (mode) {
     const cgroup = readFileSync("/proc/self/cgroup", "utf8").trim().split(":").at(-1);
     const cgroupPath = `/sys/fs/cgroup${cgroup}`;
     const tasksMax = readFileSync(`${cgroupPath}/pids.max`, "utf8").trim();
-    writeFileSync("resource-limits.json", JSON.stringify({ virtualMemoryLimitKiB, cgroup, tasksMax }));
+    const memoryMax = readFileSync(`${cgroupPath}/memory.max`, "utf8").trim();
+    writeFileSync("resource-limits.json", JSON.stringify({ virtualMemoryLimitKiB, cgroup, tasksMax, memoryMax }));
     ok();
     break;
   }

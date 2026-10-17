@@ -150,10 +150,11 @@ describe("runner (isolation + observation)", () => {
     assert.equal(r.outcome, "SUCCEEDED", r.reason ?? "");
     const limitsFile = r.changes.find((c) => c.path === "resource-limits.json");
     assert.ok(limitsFile);
-    const observed = JSON.parse(journal.artifacts.get(limitsFile.afterBlob!).toString()) as { virtualMemoryLimitKiB: string; cgroup: string; tasksMax: string };
+    const observed = JSON.parse(journal.artifacts.get(limitsFile.afterBlob!).toString()) as { virtualMemoryLimitKiB: string; cgroup: string; tasksMax: string; memoryMax: string };
     assert.equal(observed.virtualMemoryLimitKiB, "2097152");
     assert.match(observed.cgroup, /synapser-agent-[0-9a-f-]+\.scope/);
     assert.equal(observed.tasksMax, "64");
+    assert.equal(observed.memoryMax, String(4 * 1024 * 1024 * 1024), "the kernel cgroup, not only systemd properties, enforces the aggregate cap");
   });
 
   test("a Claude HOME overlay never exposes or mutates operator skills", async () => {
