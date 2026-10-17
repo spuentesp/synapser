@@ -31,6 +31,8 @@ import { type LibraryPolicy, NO_LIBRARY_POLICY } from "../library/validate.ts";
 import type { WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { McpServerRegistration } from "../mcp/registry.ts";
+import { nativeWorkerProfileIds } from "../mcp/registry.ts";
+import type { AgentProfile } from "../agents/profile-types.ts";
 import type { McpServerDiscovery } from "../mcp/discovery.ts";
 import type { McpJsonObject, OutboundMcpToolResult } from "../mcp/outbound-stdio-client.ts";
 
@@ -62,6 +64,8 @@ export interface ApiControl {
   configWrite?: (change: ConfigChange) => void;
   /** MCP discovery is an operator-only probe: it lists allowlisted tools and never calls them (plan 19 P19.5). */
   mcpServers?: () => readonly McpServerRegistration[];
+  /** Effective, currently enabled profiles from the loaded operator config. */
+  profiles?: () => readonly AgentProfile[];
   mcpDiscover?: (serverId: string, profileId: string) => Promise<McpServerDiscovery>;
   /** Explicit operator test call. This is never passed to agent runtimes. */
   mcpTestCall?: (serverId: string, profileId: string, toolName: string, arguments_: McpJsonObject) => Promise<OutboundMcpToolResult>;
@@ -233,6 +237,36 @@ export function createApi(opts: ApiOptions): ApiServer {
     if (top === "mcp" && id === undefined && method === "GET") {
       const servers = (c.mcpServers?.() ?? []).map(({ id, enabled, version, expectedServer, profiles, artifact }) => ({ id, enabled, version, expectedServer, profiles, artifactPinned: artifact !== undefined }));
       return json(res, 200, { servers });
+    }
+    if (top === "mcp" && id && action === "native-profiles" && method === "GET") {
+      if (!writeAllowed(req, res)) return;
+      const registration = c.mcpServers?.().find((server) => server.id === id);
+      if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
+      if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
+      if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
+      const profiles = c.profiles?.() ?? [];
+      const eligible = new Set(nativeWorkerProfileIds(profiles));
+      return json(res, 200, { profiles: profiles.filter((profile) => eligible.has(profile.id) && (registration.profiles[profile.id]?.length ?? 0) > 0).map(({ id }) => ({ id })) });
+    }
+    if (top === "mcp" && id && action === "native-read-only" && method === "PUT") {
+      if (!c.configWrite) return fail(res, 404, "CONFIG_WRITE_UNAVAILABLE");
+      const body = await readBody(req, res) as { profiles?: unknown } | undefined;
+      if (body === undefined) return;
+      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, "profiles") ||
+        !body.profiles || typeof body.profiles !== "object" || Array.isArray(body.profiles) || Object.getPrototypeOf(body.profiles) !== Object.prototype) {
+        return fail(res, 400, "INVALID_NATIVE_MCP_PROFILES");
+      }
+      const registration = c.mcpServers?.().find((server) => server.id === id);
+      if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
+      if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
+      if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
+      try {
+        c.configWrite({ kind: "mcpNativeReadOnlyProfiles", id, value: body.profiles });
+        return json(res, 200, { ok: true });
+      } catch (e) {
+        if (e instanceof ConfigWriteError) return json(res, 400, { error: "INVALID_CONFIG", errors: e.errors });
+        throw e;
+      }
     }
     if (top === "config" && id === "mcpServers" && action === undefined && method === "GET") {
       if (!writeAllowed(req, res)) return;

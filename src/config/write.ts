@@ -11,7 +11,7 @@ import type { AgentProfile } from "../agents/profile.ts";
 import { type ProviderConfig, type RoleConfig, SYSTEM_ROLES } from "../model/config.ts";
 import type { Role } from "../model/types.ts";
 import { ConfigError, loadConfig } from "./load.ts";
-import type { McpServerRegistration } from "../mcp/registry.ts";
+import { nativeWorkerProfileIds, type McpServerRegistration } from "../mcp/registry.ts";
 
 export class ConfigWriteError extends Error {
   readonly errors: string[];
@@ -25,7 +25,8 @@ export type ConfigChange =
   | { kind: "providers"; id: string; value: unknown }
   | { kind: "roles"; id: string; value: unknown }
   | { kind: "agents"; id: string; value: unknown }
-  | { kind: "mcpServers"; id: string; value: unknown };
+  | { kind: "mcpServers"; id: string; value: unknown }
+  | { kind: "mcpNativeReadOnlyProfiles"; id: string; value: unknown };
 
 export interface LiveConfig {
   configPath?: string | null;
@@ -77,11 +78,12 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
   if (!path) throw new ConfigWriteError(["there is no operator file to write: create synapser.config.json first"]);
   if (change.kind === "agents" && !live.profiles) throw new ConfigWriteError(["agents cannot change: this process holds no live agent list"]);
   if (change.kind === "mcpServers" && !live.mcpServers) throw new ConfigWriteError(["MCP servers cannot change: this process holds no live registry"]);
+  if (change.kind === "mcpNativeReadOnlyProfiles" && (!live.mcpServers || !live.profiles)) throw new ConfigWriteError(["native MCP curation requires a live MCP registry and effective agent profiles"]);
   const raw = readRaw(path);
   if (change.kind === "agents") {
     if (!change.value || typeof change.value !== "object" || Array.isArray(change.value)) throw new ConfigWriteError(["an agent is an object"]);
     const agents = Array.isArray(raw["agents"]) ? [...(raw["agents"] as unknown[])] : [];
-    const entry = { ...(change.value as Record<string, unknown>), id: change.id };
+    const entry: Record<string, unknown> = { ...(change.value as Record<string, unknown>), id: change.id };
     const at = agents.findIndex((a) => (a as { id?: unknown })?.id === change.id);
     if (at >= 0) agents[at] = entry;
     else agents.push(entry);
@@ -91,17 +93,60 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
   } else if (change.kind === "roles") {
     if (!(SYSTEM_ROLES as readonly string[]).includes(change.id)) throw new ConfigWriteError([`unknown role ${change.id}`]);
     raw["roles"] = { ...live.roles, [change.id]: change.value };
-  } else {
+  } else if (change.kind === "mcpServers") {
     if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(change.id)) throw new ConfigWriteError(["MCP server id is invalid"]);
     if (!change.value || typeof change.value !== "object" || Array.isArray(change.value)) throw new ConfigWriteError(["an MCP server registration is an object"]);
     const servers = Array.isArray(raw["mcpServers"]) ? [...(raw["mcpServers"] as unknown[])] : [];
-    const entry = { ...(change.value as Record<string, unknown>), id: change.id };
+    const entry: Record<string, unknown> = { ...(change.value as Record<string, unknown>), id: change.id };
     const at = servers.findIndex((server) => (server as { id?: unknown })?.id === change.id);
+    // The general registration editor intentionally does not own this separate native-worker grant.
+    // Existing grants are preserved regardless of the full-record payload; new grants must use the dedicated path.
+    if (at < 0 && Object.hasOwn(entry, "nativeReadOnlyProfiles")) {
+      throw new ConfigWriteError(["nativeReadOnlyProfiles can only be changed through dedicated native MCP curation"]);
+    }
+    if (at >= 0) {
+      const old = servers[at] as Record<string, unknown>;
+      if (Object.hasOwn(old, "nativeReadOnlyProfiles")) entry["nativeReadOnlyProfiles"] = old["nativeReadOnlyProfiles"];
+      else delete entry["nativeReadOnlyProfiles"];
+    }
     if (at >= 0) servers[at] = entry;
     else servers.push(entry);
     raw["mcpServers"] = servers;
+  } else {
+    if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(change.id)) throw new ConfigWriteError(["MCP server id is invalid"]);
+    const current = live.mcpServers!.find((server) => server.id === change.id);
+    if (!current) throw new ConfigWriteError([`unknown MCP server ${change.id}`]);
+    if (!current.enabled) throw new ConfigWriteError([`MCP server ${change.id} is disabled`]);
+    if (!current.artifact) throw new ConfigWriteError([`MCP server ${change.id} has no pinned artifact`]);
+    if (!change.value || typeof change.value !== "object" || Array.isArray(change.value) || Object.getPrototypeOf(change.value) !== Object.prototype) {
+      throw new ConfigWriteError(["native MCP curation must be an object mapping profile ids to tool-name arrays"]);
+    }
+    const eligible = new Set(nativeWorkerProfileIds(live.profiles!));
+    const map = change.value as Record<string, unknown>;
+    const problems: string[] = [];
+    for (const [profile, tools] of Object.entries(map)) {
+      if (!eligible.has(profile)) problems.push(`profile ${profile} is not an enabled native writer worker`);
+      if (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string")) {
+        problems.push(`profiles.${profile} must be a list of tool names`);
+        continue;
+      }
+      const allowlist = current.profiles[profile] ?? [];
+      for (const tool of tools as string[]) if (!allowlist.includes(tool)) problems.push(`profiles.${profile}.${tool} is not in the general MCP allowlist`);
+    }
+    if (problems.length) throw new ConfigWriteError(problems);
+    const servers = Array.isArray(raw["mcpServers"]) ? [...(raw["mcpServers"] as unknown[])] : [];
+    const at = servers.findIndex((server) => (server as { id?: unknown })?.id === change.id);
+    if (at < 0) throw new ConfigWriteError([`MCP server ${change.id} is missing from the operator file`]);
+    const entry = servers[at] as Record<string, unknown>;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new ConfigWriteError([`MCP server ${change.id} entry is invalid`]);
+    if (entry["enabled"] !== true) throw new ConfigWriteError([`MCP server ${change.id} is disabled in the operator file`]);
+    if (!entry["artifact"]) throw new ConfigWriteError([`MCP server ${change.id} has no pinned artifact in the operator file`]);
+    if (Object.keys(map).length === 0) delete entry["nativeReadOnlyProfiles"];
+    else entry["nativeReadOnlyProfiles"] = map;
+    servers[at] = entry;
+    raw["mcpServers"] = servers;
   }
-  commit(live, path, raw, change.kind === "agents", change.kind === "mcpServers");
+  commit(live, path, raw, change.kind === "agents", change.kind === "mcpServers" || change.kind === "mcpNativeReadOnlyProfiles");
 }
 
 /**

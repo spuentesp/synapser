@@ -10,7 +10,7 @@ import type { Role } from "../model/types.ts";
 import type { PoolSpec } from "../orchestration/pools.ts";
 import { DEFAULT_POLICY, type Policy, validatePolicy } from "../effects/policy.ts";
 import type { AllowedCommand } from "../validation/runner.ts";
-import { validateMcpServerRegistry, type McpServerRegistration } from "../mcp/registry.ts";
+import { nativeWorkerProfileIds, validateMcpServerRegistry, type McpServerRegistration } from "../mcp/registry.ts";
 
 export interface SynapserConfig {
   workspace: string;
@@ -200,7 +200,7 @@ export function loadConfig(o: { path?: string; cwd?: string } = {}): SynapserCon
   // including operator-defined profiles; merely registering a process does not isolate it or authorize its tools.
   let mcpServers: McpServerRegistration[] = [];
   if (raw["mcpServers"] !== undefined) {
-    const result = validateMcpServerRegistry(raw["mcpServers"], profiles.map((profile) => profile.id));
+    const result = validateMcpServerRegistry(raw["mcpServers"], profiles.map((profile) => profile.id), nativeWorkerProfileIds(profiles));
     if (result.ok) mcpServers = result.servers;
     else errors.push(...result.errors);
   }

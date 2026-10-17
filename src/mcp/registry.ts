@@ -1,4 +1,6 @@
 import { isAbsolute } from "node:path";
+import { adapterOf } from "../agents/profile.ts";
+import type { AgentProfile } from "../agents/profile-types.ts";
 
 /** An operator-owned external MCP process. `command` is trusted executable code, not sandboxed by registration. */
 export interface McpServerRegistration {
@@ -26,6 +28,12 @@ const SECRET_MARKER = /(?:api[-_]?key|access[-_]?token|token|authorization|beare
 const FLOATING_VERSION = /^(?:latest|current|stable|main|master|\*)$/i;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 
+/** Effective profiles allowed to receive explicitly curated native MCP tools. This is an authorization
+ * boundary, not proof that any declared MCP tool is semantically read-only. */
+export function nativeWorkerProfileIds(profiles: readonly AgentProfile[]): string[] {
+  return profiles.filter((profile) => profile.enabled && adapterOf(profile) === "native" && profile.role === "writer" && profile.nativeRole === "worker").map((profile) => profile.id);
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -49,10 +57,11 @@ function validOrigin(value: unknown): value is string {
 }
 
 /** Validate strict operator config and bind every profile allowlist to a known profile. */
-export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly string[]): { ok: true; servers: McpServerRegistration[] } | { ok: false; errors: string[] } {
+export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly string[], eligibleNativeProfiles: readonly string[] = []): { ok: true; servers: McpServerRegistration[] } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!Array.isArray(raw)) return { ok: false, errors: ["mcpServers must be an array"] };
   const known = new Set(knownProfiles);
+  const eligibleNative = new Set(eligibleNativeProfiles);
   const seenIds = new Set<string>();
   const servers: McpServerRegistration[] = [];
 
@@ -140,6 +149,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
         for (const [profile, tools] of Object.entries(rawNativeReadOnly)) {
           if (!PROFILE_ID.test(profile)) errors.push(`${at}.nativeReadOnlyProfiles key "${profile}" is not a profile id`);
           else if (!known.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles references unknown profile "${profile}"`);
+          else if (!eligibleNative.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles profile "${profile}" is not an enabled native writer worker`);
           if (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string" || !TOOL_NAME.test(tool))) {
             errors.push(`${at}.nativeReadOnlyProfiles.${profile} must be an array of valid tool names`);
             continue;

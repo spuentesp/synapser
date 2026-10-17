@@ -58,7 +58,7 @@ test("native worker calls only operator-declared read-only tools from its workfl
     expectedServer: { name: "native-readonly-fixture", version: "1" },
     profiles: { "nemotron-worker": ["inspect", "mutate"] },
     nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] },
-  }], ["nemotron-worker"]);
+  }], ["nemotron-worker"], ["nemotron-worker"]);
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
 
   const registrations = parsed.servers;
@@ -179,7 +179,7 @@ test("native MCP schema validation fails closed on an unsupported schema from a 
     expectedServer: { name: "invalid-schema-fixture", version: "1" },
     profiles: { "nemotron-worker": ["inspect"] },
     nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] },
-  }], ["nemotron-worker"]);
+  }], ["nemotron-worker"], ["nemotron-worker"]);
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
   const run = new NativeMcpRunRegistry(parsed.servers, artifactStoreRoot, testEnv.journal, RUN);
   await assert.rejects(run.open("nemotron-worker", "invalid-schema-task"), /invalid advertised tool/);
@@ -214,7 +214,7 @@ test("native MCP removes scratch directories when connection fails after confirm
     expectedServer: { name: "wrong-identity", version: "1" },
     profiles: { "nemotron-worker": ["inspect"] },
     nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] },
-  }], ["nemotron-worker"]);
+  }], ["nemotron-worker"], ["nemotron-worker"]);
   if (!parsed.ok) throw new Error(parsed.errors.join("; "));
   const registry = new NativeMcpRunRegistry(parsed.servers, artifactStoreRoot, testEnv.journal, RUN);
   await assert.rejects(registry.open("nemotron-worker", "identity-mismatch-task"), /identity did not match/);

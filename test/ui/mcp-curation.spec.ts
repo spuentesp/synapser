@@ -38,13 +38,45 @@ test("MCP curation discovers only the profile allowlist without exposing process
   await editor.locator('input[type="checkbox"]').check();
   await editor.getByRole("button", { name: "Save registration" }).click();
   await expect(server.getByRole("button", { name: "Discover tools" })).toBeEnabled();
+
+  const nativeAccess = server.getByTestId("mcp-native-access-ui-review-tools");
+  await expect(nativeAccess).toBeVisible();
+  const nativeProfile = nativeAccess.getByLabel("Native writer profile ui-review-tools");
+  await expect(nativeProfile.locator("option")).toHaveCount(1);
+  await expect(nativeProfile.locator("option").first()).toHaveValue("nemotron-worker");
+  await nativeAccess.getByRole("button", { name: "Discover native tools" }).click();
+  await expect(nativeAccess.getByLabel("inspect")).toBeVisible();
+  await nativeAccess.getByLabel("inspect").check();
+  await nativeAccess.getByRole("button", { name: "Save selection" }).click();
+  await expect(nativeAccess.getByRole("status")).toContainText("Configuration saved.");
+  const nativeRegistration = await page.evaluate(async () => {
+    const response = await fetch("/api/config/mcpServers");
+    const body = await response.json() as { servers: { nativeReadOnlyProfiles?: Record<string, string[]> }[] };
+    return body.servers[0];
+  });
+  expect(nativeRegistration?.nativeReadOnlyProfiles).toEqual({ "nemotron-worker": ["inspect"] });
+
+  // The legacy full-entry editor must preserve an opt-in it was not loaded with.
+  await editor.locator('input[type="checkbox"]').uncheck();
+  await editor.getByRole("button", { name: "Save registration" }).click();
+  await expect(editor.getByRole("status")).toContainText("Configuration saved.");
+  await editor.locator('input[type="checkbox"]').check();
+  await editor.getByRole("button", { name: "Save registration" }).click();
+  await expect(server.getByRole("button", { name: "Discover tools" })).toBeEnabled();
+  const preserved = await page.evaluate(async () => {
+    const response = await fetch("/api/config/mcpServers");
+    const body = await response.json() as { servers: { nativeReadOnlyProfiles?: Record<string, string[]> }[] };
+    return body.servers[0];
+  });
+  expect(preserved?.nativeReadOnlyProfiles).toEqual({ "nemotron-worker": ["inspect"] });
+
   await page.getByRole("button", { name: "Discover tools" }).click();
   const discovery = page.getByTestId("mcp-discovery-ui-review-tools");
   await expect(discovery).toContainText("ui-review-tools-fixture 1");
   await expect(discovery).toContainText("inspect");
   await expect(discovery).toContainText("Read-only review helper");
   await expect(discovery).not.toContainText("write");
-  await expect(page.getByTestId("mcp-curation")).toContainText("Does not install or enable agents");
+  await expect(page.getByTestId("mcp-curation")).toContainText("agent access is configured separately");
   await discovery.getByText("inspect", { exact: true }).click();
   const args = discovery.getByLabel("Test JSON arguments inspect");
   await args.fill('{"path":"src/example.ts"}');
@@ -54,5 +86,5 @@ test("MCP curation discovers only the profile allowlist without exposing process
   page.once("dialog", (dialog) => dialog.accept());
   await discovery.getByRole("button", { name: "Test call" }).click();
   await expect(discovery.getByRole("status")).toContainText("inspected:src/example.ts");
-  await expect(discovery).toContainText("does not enable tools for agents");
+  await expect(discovery).toContainText("does not itself enable agent access");
 });

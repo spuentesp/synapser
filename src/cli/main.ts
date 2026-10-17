@@ -159,7 +159,7 @@ async function main(): Promise<void> {
           ...(operatorToken ? { token: operatorToken } : {}),
           stateDir: cfg.stateDir,
           trustMode: cfg.trustMode,
-          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), mcpServers: () => cfg.mcpServers, mcpDiscover: async (serverId, profileId) => {
+          control: { manager: rt.manager, chat: rt.chat, library: rt.library, trialAgent: rt.trialAgent, configWrite: (change) => writeLiveConfig(cfg, change), libraryPolicy: () => libraryPolicyOf(cfg), catalog: () => rt.catalog(), profiles: () => cfg.profiles, mcpServers: () => cfg.mcpServers, mcpDiscover: async (serverId, profileId) => {
             const registration = cfg.mcpServers.find((server) => server.id === serverId);
             if (!registration) throw new Error("unknown registered MCP server");
             return discoverRegisteredMcpServer(registration, profileId, join(cfg.stateDir, "mcp-artifacts"));

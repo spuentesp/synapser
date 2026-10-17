@@ -60,7 +60,8 @@ console.error(process.env.TEST_PROVIDER_KEY);
           if (commandLine.includes(Buffer.from("synapser-env-launcher"))) sawEnvLauncher = true;
           assert.equal(commandLine.includes(Buffer.from(secret)), false, "provider key must never appear in host-visible process arguments");
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT" && (error as NodeJS.ErrnoException).code !== "EACCES") throw error;
+          // A process may exit between enumerating /proc and opening cmdline.
+          if (!["ENOENT", "EACCES", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 20));

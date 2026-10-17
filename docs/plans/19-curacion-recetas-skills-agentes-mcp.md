@@ -170,6 +170,12 @@ artefacto/origen, allowlist efectiva, identidad esperada, inyección por perfil 
 estén conectados y verificados, no se habilitan llamadas MCP desde agentes ni se inyectan secretos o
 herramientas de efecto. El transporte HTTP queda fuera de este incremento.
 
+El límite de 4 GiB está aplicado y verificado por proceso MCP, pero todavía no es una cuota agregada
+compartida por todas las conexiones MCP concurrentes de una corrida/workflow. No se debe presentar
+como satisfecha la decisión de 4 GiB agregados por corrida ni habilitar concurrencia MCP que requiera
+ese límite hasta que un scope/cuota común cubra todos los procesos y tenga un verificador de carga
+concurrente.
+
 #### P19.5 — RCP6b: frontera local del proceso MCP
 
 Un proceso stdio conectado por Synapser solo se considera contenido cuando se verificaron antes del
@@ -200,8 +206,13 @@ no prueba criptográfica. El importador no ejecuta el paquete y no acepta variab
 filtro de marcadores comunes en `args` es solo higiene y no detecta todos los secretos; no se debe
 tratar como control de divulgación. El panel operador permite crear/reemplazar registros completos
 y deshabilitarlos; el GET que recupera runtime/argv está protegido por misma-origin y sesión/token.
-No hay importación por HTTP, llamada de prueba de herramientas ni integración con agentes/recetas;
-hasta conectar el broker, los agentes no reciben herramientas MCP.
+El test-call es explícito, autenticado, sin secretos y confinado; su respuesta no se entrega al agente.
+La integración inicial con agentes queda limitada a `nativeReadOnlyProfiles`: un permiso separado,
+curado por tools descubiertas, asignable desde el panel solo a perfiles efectivos native/writer/worker.
+La ruta dedicada valida el mismo filtro en servidor y conserva intacto el resto del registro; el PUT
+general no puede crear ni modificar el permiso. Esto es una atestación del operador, no una prueba de
+que el servidor MCP sea realmente read-only. No hay selección desde recetas/tareas ni inyección a CLIs;
+no se habilitan advisor/repair, secretos ni tools con efectos, y el broker de efectos sigue pendiente.
 
 **RCP6d — Integridad del paquete MCP ejecutado**: un proceso registrado solo puede arrancar desde
 una copia aislada cuyo árbol completo coincide con el digest SHA-256 fijado; la configuración legacy
@@ -337,6 +348,18 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   de discovery se deshabilita mientras el registro está apagado. *Falsación:*
   escritura no autenticada, configuración parcial o inválida aplicada, pérdida entre archivo y live,
   o revocación que elimina un pin compartido.
+- **RCP6f — Concesión nativa separada**: el permiso `nativeReadOnlyProfiles` solo puede asignarse
+  bajo sesión operator y a perfiles efectivos habilitados con `adapter=native`, `role=writer` y
+  `nativeRole=worker`; cada tool debe existir también en la allowlist general del servidor. La UI
+  obtiene candidatos del servidor y selecciona tools descubiertas; no escribe el registro general.
+  La actualización dedicada conserva todos los demás campos, y el PUT general conserva o rechaza la
+  concesión en vez de borrarla/cambiarla. El opt-in empty revoca. *Verificador:* pruebas HTTP y de
+  configuración rechazan advisor, repair, CLI, perfil deshabilitado, herramienta no allowlisted y
+  servidor apagado/sin pin; Chromium selecciona una tool para native worker, confirma exclusión de
+  perfiles no elegibles y que una edición del registro general conserva el permiso. *Falsación:*
+  permiso para perfil no nativo o no worker, tool fuera de allowlist, escritura sin autenticación,
+  pérdida/modificación del permiso por PUT general o un perfil no elegible mostrado como candidato.
+  “Read-only” es una declaración del operador y no acredita semántica ni neutraliza efectos.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación
   determinista. Las condiciones requeridas deben tener checker determinista, aprobación humana o una
   aceptación explícita auditada de evidencia secundaria. Falsación: solo un `PASS` textual marca DONE.

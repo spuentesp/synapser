@@ -69,7 +69,8 @@ console.log(JSON.stringify({ role: "assistant", content: "credential transport p
           if (commandLine.includes(Buffer.from("synapser-env-launcher"))) sawStdinLauncher = true;
           assert.equal(commandLine.includes(Buffer.from(key)), false, "dummy key must not appear in host-visible process arguments");
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT" && (error as NodeJS.ErrnoException).code !== "EACCES") throw error;
+          // A process may exit between enumerating /proc and opening cmdline.
+          if (!["ENOENT", "EACCES", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 20));

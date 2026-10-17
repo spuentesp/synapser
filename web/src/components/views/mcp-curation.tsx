@@ -23,9 +23,11 @@ type McpRegistration = {
   artifact?: { digest: string; entrypoint: string }
   expectedServer: { name: string; version: string }
   profiles: Record<string, string[]>
+  nativeReadOnlyProfiles?: Record<string, string[]>
 }
 type McpTool = { name: string; description?: string; inputSchema: unknown }
 type Discovery = { serverInfo: { name: string; version: string }; tools: McpTool[] }
+type NativeProfile = { id: string; label?: string }
 
 const emptyRegistration = (): McpRegistration => ({
   id: '', enabled: false, origin: '', version: '', command: '', args: [], artifact: undefined,
@@ -53,6 +55,11 @@ export function McpCuration({ session }: { session: boolean }) {
   const [servers, setServers] = useState<McpServer[]>([])
   const [loaded, setLoaded] = useState(false)
   const [profileIds, setProfileIds] = useState<Record<string, string>>({})
+  const [nativeProfiles, setNativeProfiles] = useState<Record<string, NativeProfile[]>>({})
+  const [nativeProfileIds, setNativeProfileIds] = useState<Record<string, string>>({})
+  const [nativeAllowlists, setNativeAllowlists] = useState<Record<string, Record<string, string[]>>>({})
+  const [nativeSelections, setNativeSelections] = useState<Record<string, string[]>>({})
+  const [discoveryProfiles, setDiscoveryProfiles] = useState<Record<string, string>>({})
   const [discoveries, setDiscoveries] = useState<Record<string, Discovery>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [testBusy, setTestBusy] = useState<string | null>(null)
@@ -79,9 +86,11 @@ export function McpCuration({ session }: { session: boolean }) {
     void api<{ servers: McpServer[] }>('/api/mcp').then(({ servers: rows }) => {
       setServers(rows)
       setProfileIds(Object.fromEntries(rows.map((server) => [server.id, Object.keys(server.profiles)[0] ?? ''])))
+      if (session) rows.filter((server) => server.enabled && server.artifactPinned).forEach((server) => void loadNativeProfiles(server.id))
     }).catch((error: unknown) => setFailure(error instanceof ApiError ? error.code : (error as Error).message)).finally(() => setLoaded(true))
     if (session) void api<{ servers: McpRegistration[] }>('/api/config/mcpServers').then(({ servers: rows }) => {
       setRegistrations(rows)
+      setNativeAllowlists(Object.fromEntries(rows.map((registration) => [registration.id, registration.nativeReadOnlyProfiles ?? {}])))
       if (rows[0]) selectRegistration(rows[0])
     }).catch((error: unknown) => setFailure(error instanceof ApiError ? error.code : (error as Error).message))
   }, [session, selectRegistration])
@@ -124,8 +133,8 @@ export function McpCuration({ session }: { session: boolean }) {
     }
   }
 
-  const discover = async (server: McpServer) => {
-    const profileId = profileIds[server.id] ?? ''
+  const discover = async (server: McpServer, requestedProfileId?: string) => {
+    const profileId = requestedProfileId ?? profileIds[server.id] ?? ''
     if (!profileId) return
     setBusy(server.id)
     setFailure('')
@@ -134,6 +143,7 @@ export function McpCuration({ session }: { session: boolean }) {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId }),
       })
       setDiscoveries((current) => ({ ...current, [server.id]: result }))
+      setDiscoveryProfiles((current) => ({ ...current, [server.id]: profileId }))
     } catch (error) {
       setFailure(error instanceof ApiError ? error.code : (error as Error).message)
     } finally {
@@ -141,8 +151,46 @@ export function McpCuration({ session }: { session: boolean }) {
     }
   }
 
-  const testCall = async (server: McpServer, tool: McpTool) => {
-    const profileId = profileIds[server.id] ?? ''
+  const loadNativeProfiles = async (serverId: string) => {
+    try {
+      const result = await api<{ profiles: NativeProfile[] }>(`/api/mcp/${encodeURIComponent(serverId)}/native-profiles`)
+      setNativeProfiles((current) => ({ ...current, [serverId]: result.profiles }))
+      setNativeProfileIds((current) => ({ ...current, [serverId]: current[serverId] ?? result.profiles[0]?.id ?? '' }))
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.code : (error as Error).message)
+    }
+  }
+
+  const selectNativeProfile = (serverId: string, profileId: string) => {
+    setNativeProfileIds((current) => ({ ...current, [serverId]: profileId }))
+    setNativeSelections((current) => ({ ...current, [`${serverId}:${profileId}`]: [...(nativeAllowlists[serverId]?.[profileId] ?? [])] }))
+  }
+
+  const saveNativeTools = async (serverId: string) => {
+    const profileId = nativeProfileIds[serverId] ?? ''
+    if (!profileId) return
+    setSaving(true)
+    setFailure('')
+    setSaved(false)
+    try {
+      const next = { ...(nativeAllowlists[serverId] ?? {}) }
+      const selected = nativeSelections[`${serverId}:${profileId}`] ?? nativeAllowlists[serverId]?.[profileId] ?? []
+      if (selected.length) next[profileId] = [...selected]
+      else delete next[profileId]
+      await api(`/api/mcp/${encodeURIComponent(serverId)}/native-read-only`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profiles: next }),
+      })
+      setNativeAllowlists((current) => ({ ...current, [serverId]: next }))
+      setSaved(true)
+    } catch (error) {
+      setFailure(error instanceof ApiError ? error.code : (error as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const testCall = async (server: McpServer, tool: McpTool, requestedProfileId?: string) => {
+    const profileId = requestedProfileId ?? profileIds[server.id] ?? ''
     const key = `${server.id}:${tool.name}`
     if (!profileId || !window.confirm(t('mcpTestConfirm'))) return
     setTestBusy(key)
@@ -161,6 +209,15 @@ export function McpCuration({ session }: { session: boolean }) {
     } finally {
       setTestBusy(null)
     }
+  }
+
+  const toggleNativeTool = (serverId: string, profileId: string, toolName: string, enabled: boolean) => {
+    const key = `${serverId}:${profileId}`
+    setNativeSelections((current) => {
+      const selected = current[key] ?? nativeAllowlists[serverId]?.[profileId] ?? []
+      const next = enabled ? [...new Set([...selected, toolName])] : selected.filter((name) => name !== toolName)
+      return { ...current, [key]: next }
+    })
   }
 
   return (
@@ -203,6 +260,10 @@ export function McpCuration({ session }: { session: boolean }) {
         {servers.map((server) => {
           const profiles = Object.keys(server.profiles)
           const discovery = discoveries[server.id]
+          const eligibleNativeProfiles = nativeProfiles[server.id] ?? []
+          const nativeProfileId = nativeProfileIds[server.id] ?? ''
+          const nativeDiscovery = discoveryProfiles[server.id] === nativeProfileId ? discovery : undefined
+          const nativeSelected = nativeSelections[`${server.id}:${nativeProfileId}`] ?? nativeAllowlists[server.id]?.[nativeProfileId] ?? []
           return (
             <section key={server.id} className="grid gap-3 rounded-md border p-4" data-testid={`mcp-server-${server.id}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -222,6 +283,28 @@ export function McpCuration({ session }: { session: boolean }) {
                   </Button>
                 </div>
               </div>
+              {session && server.enabled && server.artifactPinned && eligibleNativeProfiles.length > 0 ? <section className="grid gap-3 border-t pt-3" data-testid={`mcp-native-access-${server.id}`}>
+                <h4 className="text-sm font-medium">{t('mcpNativeAccess')}</h4>
+                <p className="text-xs text-muted-foreground">{t('mcpNativeAccessNote')}</p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="grid gap-1 text-sm">{t('mcpNativeProfile')}
+                    <select aria-label={`${t('mcpNativeProfile')} ${server.id}`} className="h-9 rounded-md border bg-background px-3" value={nativeProfileId} onChange={(event) => selectNativeProfile(server.id, event.target.value)}>
+                      {eligibleNativeProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label ?? profile.id}</option>)}
+                    </select>
+                  </label>
+                  <Button type="button" size="sm" variant="outline" disabled={!nativeProfileId || busy !== null} onClick={() => void discover(server, nativeProfileId)}>
+                    {busy === server.id ? t('mcpDiscovering') : t('mcpDiscoverNativeTools')}
+                  </Button>
+                </div>
+                {nativeDiscovery ? <fieldset className="grid gap-2 rounded border p-3">
+                  <legend className="px-1 text-sm">{t('mcpNativeTools')}</legend>
+                  {nativeDiscovery.tools.length === 0 ? <p className="text-sm text-muted-foreground">{t('mcpNoTools')}</p> : nativeDiscovery.tools.map((tool) => <label key={tool.name} className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" checked={nativeSelected.includes(tool.name)} onChange={(event) => toggleNativeTool(server.id, nativeProfileId, tool.name, event.target.checked)} />
+                    <span><span className="font-medium">{tool.name}</span>{tool.description ? <span className="block text-xs text-muted-foreground">{tool.description}</span> : null}</span>
+                  </label>)}
+                </fieldset> : <p className="text-xs text-muted-foreground">{t('mcpDiscoverNativeHint')}</p>}
+                <div className="flex items-center gap-3"><Button type="button" size="sm" disabled={!nativeDiscovery || saving} onClick={() => void saveNativeTools(server.id)}>{saving ? t('mcpSaving') : t('mcpSaveNativeTools')}</Button>{saved ? <span role="status" className="text-sm text-muted-foreground">{t('mcpRegistrationSaved')}</span> : null}</div>
+              </section> : null}
               {discovery ? <div className="grid gap-2 border-t pt-3" data-testid={`mcp-discovery-${server.id}`}>
                 <p className="text-sm">{t('mcpObservedIdentity')}: {discovery.serverInfo.name} {discovery.serverInfo.version}</p>
                 {discovery.tools.length === 0 ? <p className="text-sm text-muted-foreground">{t('mcpNoTools')}</p> : discovery.tools.map((tool) => <details key={tool.name} className="rounded border p-3">
@@ -233,7 +316,7 @@ export function McpCuration({ session }: { session: boolean }) {
                       <textarea aria-label={`${t('mcpTestArguments')} ${tool.name}`} className="min-h-16 rounded-md border bg-background p-2 font-mono text-xs" value={testArguments[`${server.id}:${tool.name}`] ?? '{}'} onChange={(event) => setTestArguments((current) => ({ ...current, [`${server.id}:${tool.name}`]: event.target.value }))} />
                     </label>
                     <div className="flex flex-wrap items-center gap-3">
-                      <Button type="button" size="sm" variant="outline" disabled={!server.enabled || !server.artifactPinned || busy !== null || testBusy !== null} onClick={() => void testCall(server, tool)}>
+                      <Button type="button" size="sm" variant="outline" disabled={!server.enabled || !server.artifactPinned || busy !== null || testBusy !== null} onClick={() => void testCall(server, tool, discoveryProfiles[server.id])}>
                         {testBusy === `${server.id}:${tool.name}` ? t('mcpTestRunning') : t('mcpTestCall')}
                       </Button>
                       {testResults[`${server.id}:${tool.name}`] ? <pre role="status" className="max-h-48 overflow-auto rounded bg-muted p-2 text-xs">{testResults[`${server.id}:${tool.name}`]}</pre> : null}

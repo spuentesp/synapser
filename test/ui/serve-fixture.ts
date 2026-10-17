@@ -29,7 +29,7 @@ writeFileSync(join(dir, "synapser.config.json"), JSON.stringify({
     args: [],
     artifact: { digest: artifact.digest, entrypoint: "server.cjs" },
     expectedServer: { name: "ui-review-tools-fixture", version: "1" },
-    profiles: { "claude-opus-advisor": ["inspect"] },
+    profiles: { "claude-opus-advisor": ["inspect"], "nemotron-worker": ["inspect"] },
   }],
   commands: [{ id: "unit-check", argv: [process.execPath, "-e", "process.exit(0)"] }],
   agentSkills: { "q33-inspect-agent": ["fixture-skill"] },

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { type ApiServer, createApi } from "../../src/api/server.ts";
 import { ConfigWriteError, type LiveConfig, writeLiveConfig } from "../../src/config/write.ts";
+import { loadConfig } from "../../src/config/load.ts";
 import { defaultModelConfig, type ProviderConfig, type RoleConfig } from "../../src/model/config.ts";
 import { Journal } from "../../src/journal/journal.ts";
 import { LibraryStore } from "../../src/library/store.ts";
@@ -139,12 +140,13 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
   let live: LiveConfig;
   beforeEach(async () => {
     ({ dir, live } = setup(true));
+    live.profiles = loadConfig({ path: join(dir, "synapser.config.json") }).profiles;
     state = mkdtempSync(join(tmpdir(), "hot-api-state-"));
     ws = mkdtempSync(join(tmpdir(), "hot-api-ws-"));
     sj = Journal.open(state, "_server");
     const lib = new LibraryStore(state, sj);
     mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
-    api = createApi({ stateDir: state, ssePollMs: 20, token: OPERATOR, control: { manager: mgr, library: lib, config: () => ({ ok: true }), mcpServers: () => live.mcpServers ?? [], libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [], bases: [] }), configWrite: (change) => writeLiveConfig(live, change) } });
+    api = createApi({ stateDir: state, ssePollMs: 20, token: OPERATOR, control: { manager: mgr, library: lib, config: () => ({ ok: true }), profiles: () => live.profiles ?? [], mcpServers: () => live.mcpServers ?? [], libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [], bases: [] }), configWrite: (change) => writeLiveConfig(live, change) } });
     base = `http://127.0.0.1:${await api.listen(0)}`;
   });
   afterEach(async () => {
@@ -204,6 +206,79 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
     const authenticated = await fetch(`${base}/api/config/mcpServers`, { headers: { origin: base, "x-synapser-token": OPERATOR } });
     assert.equal(authenticated.status, 200);
     assert.deepEqual(await authenticated.json(), { servers: [] });
+  });
+
+  test("dedicated native curation exposes only eligible profiles and preserves the rest of the registration", async () => {
+    const server: McpServerRegistration = {
+      id: "review-tools", enabled: true, origin: "file:///opt/synapser/review-tools", version: "1.0.0",
+      command: "/usr/bin/node", args: ["--stdio"], artifact: { digest: `sha256:${"a".repeat(64)}`, entrypoint: "bin/server.js" },
+      expectedServer: { name: "review-tools", version: "1.0.0" }, profiles: { "nemotron-worker": ["inspect"], "codex-writer": ["inspect"] },
+    };
+    const register = await put("/api/config/mcpServers/review-tools", server, ok());
+    assert.equal(register.status, 200);
+
+    const unauthorized = await fetch(`${base}/api/mcp/review-tools/native-profiles`, { headers: { origin: base } });
+    assert.equal(unauthorized.status, 401);
+    const candidates = await fetch(`${base}/api/mcp/review-tools/native-profiles`, { headers: ok() });
+    assert.equal(candidates.status, 200);
+    const candidateBody = await candidates.json() as { profiles: { id: string }[] };
+    assert.deepEqual(candidateBody.profiles.map(({ id }) => id), ["nemotron-worker"]);
+
+    const write = await put("/api/mcp/review-tools/native-read-only", { profiles: { "nemotron-worker": ["inspect"] } }, ok());
+    assert.equal(write.status, 200);
+    const stored = JSON.parse(readFileSync(join(dir, "synapser.config.json"), "utf8")) as { mcpServers: Record<string, unknown>[]; workspace: string };
+    assert.deepEqual(stored.mcpServers[0], { ...server, nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] } });
+    assert.equal(stored.workspace, dir);
+    assert.deepEqual(live.mcpServers?.[0]?.nativeReadOnlyProfiles, { "nemotron-worker": ["inspect"] });
+    assert.deepEqual(loadConfig({ path: join(dir, "synapser.config.json") }).mcpServers[0]?.nativeReadOnlyProfiles, { "nemotron-worker": ["inspect"] }, "the atomically persisted grant survives config reload");
+
+    // The ordinary full-registration form does not own native curation; omitting the property preserves it.
+    const normalUpdate = await put("/api/config/mcpServers/review-tools", { ...server, version: "1.0.1" }, ok());
+    assert.equal(normalUpdate.status, 200);
+    assert.deepEqual(live.mcpServers?.[0]?.nativeReadOnlyProfiles, { "nemotron-worker": ["inspect"] });
+    assert.equal(live.mcpServers?.[0]?.version, "1.0.1");
+    const wrongWriter = await put("/api/config/mcpServers/review-tools", { ...server, nativeReadOnlyProfiles: {} }, ok());
+    assert.equal(wrongWriter.status, 200);
+    assert.deepEqual(live.mcpServers?.[0]?.nativeReadOnlyProfiles, { "nemotron-worker": ["inspect"] }, "full-registration writes cannot change native grants");
+
+    const clear = await put("/api/mcp/review-tools/native-read-only", { profiles: {} }, ok());
+    assert.equal(clear.status, 200);
+    assert.equal(Object.hasOwn(live.mcpServers?.[0] ?? {}, "nativeReadOnlyProfiles"), false);
+    assert.equal(Object.hasOwn(loadConfig({ path: join(dir, "synapser.config.json") }).mcpServers[0] ?? {}, "nativeReadOnlyProfiles"), false, "empty curation revokes the grant in the persisted config");
+  });
+
+  test("dedicated native curation rejects ineligible profiles and tools outside the general allowlist", async () => {
+    const server: McpServerRegistration = {
+      id: "review-tools", enabled: true, origin: "file:///opt/synapser/review-tools", version: "1.0.0",
+      command: "/usr/bin/node", args: [], artifact: { digest: `sha256:${"b".repeat(64)}`, entrypoint: "bin/server.js" },
+      expectedServer: { name: "review-tools", version: "1.0.0" }, profiles: { "nemotron-worker": ["inspect"] },
+    };
+    assert.equal((await put("/api/config/mcpServers/review-tools", server, ok())).status, 200);
+    for (const profiles of [
+      { "nemotron-repair": ["inspect"] },
+      { "claude-opus-advisor": ["inspect"] },
+      { "codex-writer": ["inspect"] },
+      { "nemotron-worker": ["mutate"] },
+    ]) {
+      const response = await put("/api/mcp/review-tools/native-read-only", { profiles }, ok());
+      assert.equal(response.status, 400);
+      assert.deepEqual(live.mcpServers?.[0]?.nativeReadOnlyProfiles, undefined);
+    }
+  });
+
+  test("dedicated native curation refuses disabled or unpinned servers", async () => {
+    const server: McpServerRegistration = {
+      id: "review-tools", enabled: true, origin: "file:///opt/synapser/review-tools", version: "1.0.0",
+      command: "/usr/bin/node", args: [], artifact: { digest: `sha256:${"c".repeat(64)}`, entrypoint: "bin/server.js" },
+      expectedServer: { name: "review-tools", version: "1.0.0" }, profiles: { "nemotron-worker": ["inspect"] },
+    };
+    assert.equal((await put("/api/config/mcpServers/review-tools", server, ok())).status, 200);
+    assert.equal((await put("/api/config/mcpServers/review-tools", { ...server, enabled: false }, ok())).status, 200);
+    assert.equal((await fetch(`${base}/api/mcp/review-tools/native-profiles`, { headers: ok() })).status, 409);
+    assert.equal((await put("/api/mcp/review-tools/native-read-only", { profiles: { "nemotron-worker": ["inspect"] } }, ok())).status, 409);
+    assert.equal((await put("/api/config/mcpServers/review-tools", { ...server, artifact: undefined }, ok())).status, 200);
+    assert.equal((await fetch(`${base}/api/mcp/review-tools/native-profiles`, { headers: ok() })).status, 409);
+    assert.equal((await put("/api/mcp/review-tools/native-read-only", { profiles: { "nemotron-worker": ["inspect"] } }, ok())).status, 409);
   });
 });
 

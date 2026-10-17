@@ -51,6 +51,16 @@ describe("operator MCP process registry", () => {
     rejects({ mcpServers: [entry({ nativeReadOnlyProfiles: { "future-agent": ["inspect"] } })] }, /unknown profile/);
   });
 
+  test("native grants exclude repair, advisor, CLI and disabled effective profiles", () => {
+    for (const profile of ["nemotron-repair", "claude-opus-advisor", "codex-writer"]) {
+      rejects({ mcpServers: [entry({ profiles: { [profile]: ["inspect"] }, nativeReadOnlyProfiles: { [profile]: ["inspect"] } })] }, /not an enabled native writer worker/);
+    }
+    rejects({
+      agents: [{ id: "disabled-native", adapter: "native", role: "writer", nativeRole: "worker", enabled: false, provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b" }],
+      mcpServers: [entry({ profiles: { "disabled-native": ["inspect"] }, nativeReadOnlyProfiles: { "disabled-native": ["inspect"] } })],
+    }, /not an enabled native writer worker/);
+  });
+
   test("accepts a normalized content-addressed artifact entrypoint and rejects malformed pins", () => {
     assert.deepEqual(load({ mcpServers: [entry()] }).mcpServers[0]?.artifact, {
       digest: `sha256:${"a".repeat(64)}`, entrypoint: "bin/review-tools",
