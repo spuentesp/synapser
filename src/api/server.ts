@@ -231,6 +231,10 @@ export function createApi(opts: ApiOptions): ApiServer {
       const servers = (c.mcpServers?.() ?? []).map(({ id, enabled, version, expectedServer, profiles, artifact }) => ({ id, enabled, version, expectedServer, profiles, artifactPinned: artifact !== undefined }));
       return json(res, 200, { servers });
     }
+    if (top === "config" && id === "mcpServers" && action === undefined && method === "GET") {
+      if (!writeAllowed(req, res)) return;
+      return json(res, 200, { servers: c.mcpServers?.() ?? [] });
+    }
     if (top === "mcp" && id && action === "discover" && method === "POST") {
       if (!c.mcpDiscover) return fail(res, 404, "MCP_DISCOVERY_UNAVAILABLE");
       const body = await readBody(req, res) as { profileId?: unknown } | undefined;

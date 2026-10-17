@@ -198,9 +198,10 @@ esos bytes: no se descarga ni valida firma upstream. El runtime configurado y la
 sistema tampoco forman parte del digest. `origin` y `version` siguen siendo procedencia declarativa,
 no prueba criptográfica. El importador no ejecuta el paquete y no acepta variables de entorno. Un
 filtro de marcadores comunes en `args` es solo higiene y no detecta todos los secretos; no se debe
-tratar como control de divulgación. No hay aún ciclo visual de registro/edición, llamada de prueba,
-revocación ni integración de las herramientas con agentes/recetas; hasta conectar el broker, los
-agentes no reciben herramientas MCP.
+tratar como control de divulgación. El panel operador permite crear/reemplazar registros completos
+y deshabilitarlos; el GET que recupera runtime/argv está protegido por misma-origin y sesión/token.
+No hay importación por HTTP, llamada de prueba de herramientas ni integración con agentes/recetas;
+hasta conectar el broker, los agentes no reciben herramientas MCP.
 
 **RCP6d — Integridad del paquete MCP ejecutado**: un proceso registrado solo puede arrancar desde
 una copia aislada cuyo árbol completo coincide con el digest SHA-256 fijado; la configuración legacy
@@ -331,8 +332,9 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   misma sesión de operador y la validación del archivo entero; el cambio se aplica al registro live
   solo después de validar y persistir. La revocación inicial es reversible (`enabled: false`) y solo
   bloquea nuevos discoveries; no borra artefactos ni afirma cancelar uno ya iniciado. *Verificador:*
-  API local acepta reemplazo autenticado, rechaza escritura sin sesión y registro con campos no
-  autorizados, persiste la desactivación y la lista live la observa sin reiniciar. *Falsación:*
+  pruebas API rechazan lectura/escritura sin sesión y escrituras cross-origin; Chromium completa un
+  reemplazo autenticado, persiste la desactivación y la lista live la observa sin reiniciar; el botón
+  de discovery se deshabilita mientras el registro está apagado. *Falsación:*
   escritura no autenticada, configuración parcial o inválida aplicada, pérdida entre archivo y live,
   o revocación que elimina un pin compartido.
 - **RCP7 — Evidencia honesta**: el juicio del modelo/revisor nunca se presenta como verificación

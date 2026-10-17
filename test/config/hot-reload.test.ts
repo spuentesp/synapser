@@ -144,7 +144,7 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
     sj = Journal.open(state, "_server");
     const lib = new LibraryStore(state, sj);
     mgr = new WorkflowManager({ stateDir: state, workspaceRoot: ws, commandIds: new Set(), profileIds: new Set(), pollMs: 20, engine: { run: async () => ({ status: "DONE", reason: null }) } });
-    api = createApi({ stateDir: state, ssePollMs: 20, token: OPERATOR, control: { manager: mgr, library: lib, config: () => ({ ok: true }), libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [], bases: [] }), configWrite: (change) => writeLiveConfig(live, change) } });
+    api = createApi({ stateDir: state, ssePollMs: 20, token: OPERATOR, control: { manager: mgr, library: lib, config: () => ({ ok: true }), mcpServers: () => live.mcpServers ?? [], libraryPolicy: () => ({ ...NO_LIBRARY_POLICY, providerKeyEnv: [], bases: [] }), configWrite: (change) => writeLiveConfig(live, change) } });
     base = `http://127.0.0.1:${await api.listen(0)}`;
   });
   afterEach(async () => {
@@ -194,6 +194,16 @@ describe("plan 17 P17.8: the API route for provider and role changes", () => {
     const revoked = await put("/api/config/mcpServers/review-tools", { ...server, enabled: false }, ok());
     assert.equal(revoked.status, 200);
     assert.equal(JSON.parse(readFileSync(join(dir, "synapser.config.json"), "utf8")).mcpServers[0].enabled, false);
+  });
+
+  test("the editable MCP registry is private to an authenticated same-origin operator", async () => {
+    const unauthenticated = await fetch(`${base}/api/config/mcpServers`, { headers: { origin: base } });
+    assert.equal(unauthenticated.status, 401);
+    const crossOrigin = await fetch(`${base}/api/config/mcpServers`, { headers: { origin: "https://attacker.invalid", "x-synapser-token": OPERATOR } });
+    assert.equal(crossOrigin.status, 403);
+    const authenticated = await fetch(`${base}/api/config/mcpServers`, { headers: { origin: base, "x-synapser-token": OPERATOR } });
+    assert.equal(authenticated.status, 200);
+    assert.deepEqual(await authenticated.json(), { servers: [] });
   });
 });
 
