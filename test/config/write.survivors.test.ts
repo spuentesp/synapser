@@ -243,6 +243,15 @@ describe("the configuration writer's operator MCP registry branches", () => {
     }
   });
 
+  test("a hand-edited operator file with a null registry entry is refused by the writer, not crashed on", () => {
+    register("alpha", pinned("alpha"));
+    const file = raw();
+    file["mcpServers"].unshift(null);
+    writeFileSync(path, JSON.stringify(file));
+    assert.throws(() => register("beta", pinned("beta")), ConfigWriteError);
+    assert.throws(() => curate("alpha", { "nemotron-worker": ["inspect"] }), ConfigWriteError);
+  });
+
   test("curation refuses an invalid id, an unknown server, and a grant that mixes a non-string into a valid list", () => {
     register("alpha", pinned("alpha"));
     for (const id of ["-x", "Bad", "abc!", "a".repeat(42)]) {
