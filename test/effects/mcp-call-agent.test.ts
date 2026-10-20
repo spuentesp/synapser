@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { runTask, type TaskSpec } from "../../src/agents/native/loop.ts";
 import { EffectBroker } from "../../src/effects/broker.ts";
 import { BUILTIN_KINDS } from "../../src/effects/kinds.ts";
-import { mcpCallKind } from "../../src/effects/mcp-call.ts";
+import { authorizeMcpCall, MCP_CALL, type McpGrant, mcpCallKind } from "../../src/effects/mcp-call.ts";
 import type { EffectPort } from "../../src/effects/port.ts";
 import type { Policy } from "../../src/effects/policy.ts";
 import type { McpServerRegistration } from "../../src/mcp/registry.ts";
@@ -36,6 +36,8 @@ describe("plan 19 RCP6h: a native worker reaches an operator effect tool only th
   let servers: McpServerRegistration[];
   let artifactStoreRoot: string;
   let broker: EffectBroker;
+  // the run's recipe selection (RCP6i); undefined is an ordinary workflow
+  let grants: readonly McpGrant[] | undefined;
 
   beforeEach(async () => {
     env = await makeEnv();
@@ -43,6 +45,7 @@ describe("plan 19 RCP6h: a native worker reaches an operator effect tool only th
     const fixture = effectFixture(dir);
     servers = fixture.servers;
     artifactStoreRoot = fixture.artifactStoreRoot;
+    grants = [{ serverId: "mail", toolName: "send_mail" }];
     broker = new EffectBroker({
       journal: env.journal,
       runId: RUN,
@@ -50,6 +53,7 @@ describe("plan 19 RCP6h: a native worker reaches an operator effect tool only th
       policy: () => POLICY,
       env: {},
       kinds: [...BUILTIN_KINDS, mcpCallKind({ registrations: () => servers, artifactStoreRoot })],
+      authorize: (r) => (r.kind === MCP_CALL ? authorizeMcpCall(grants, r) : null),
     });
   });
   afterEach(async () => {
@@ -86,10 +90,31 @@ describe("plan 19 RCP6h: a native worker reaches an operator effect tool only th
     const before = toolPayloads(model.seen[1]!);
     assert.equal(before.at(-1)?.["state"], "PENDING", "the worker is told the effect is pending, not that it ran");
     const after = toolPayloads(model.seen[2]!);
-    assert.equal(after.at(-1)?.["state"], "DONE", "the outcome is read back only after the decision");
+    assert.equal(after.at(-1)?.["state"], "DONE", `the outcome is read back only after the decision: ${String(after.at(-1)?.["reason"] ?? after.at(-1)?.["summary"])}`);
     const evidence = after.at(-1)?.["evidence"] as Record<string, unknown>;
     assert.match(String(evidence["output"]), /sent to ana@example\.com/);
     assert.equal(evidence["trust"], "UNTRUSTED_MCP_DATA", "the output reaches the worker as data");
     assert.equal(broker.records().length, 1, "exactly one effect was requested");
+  });
+
+  test("a repair task is refused even when the recipe selected the tool, and the refusal is on the ledger", async () => {
+    const port: EffectPort = { request: (r) => broker.request(r), status: (id) => broker.status(id) };
+    const model = new ScriptedModel((_m, n) => (n === 1 ? { calls: [call("request_effect", { kind: "mcp.call", params: { server: "mail", tool: "send_mail", arguments: { to: "ana@example.com" } }, why: "notify" })] } : { calls: [call("finish", { summary: "gave up" })] }));
+    await runTask({ model, executor: env.exec, journal: env.journal, runId: RUN, effects: port, role: "repair" }, TASK);
+    const [rec] = broker.records();
+    assert.equal(rec!.state, "DENIED");
+    assert.match(rec!.reason ?? "", /only be requested by a native worker/);
+    assert.equal(rec!.evidence, null, "nothing ran");
+  });
+
+  test("a tool the recipe did not select, and a run without a recipe, are refused before anything is prepared", async () => {
+    grants = [{ serverId: "mail", toolName: "other_tool" }];
+    const unselected = await broker.request({ kind: "mcp.call", requestedBy: "worker", taskId: "notify-1", role: "worker", params: { server: "mail", tool: "send_mail", arguments: {} } });
+    assert.equal(unselected.ok && unselected.state, "DENIED");
+    assert.match(broker.status(unselected.ok ? unselected.id : "")!.reason ?? "", /not selected by this run's recipe/);
+    grants = undefined;
+    const manual = await broker.request({ kind: "mcp.call", requestedBy: "worker", taskId: "notify-1", role: "worker", params: { server: "mail", tool: "send_mail", arguments: {} } });
+    assert.match(broker.status(manual.ok ? manual.id : "")!.reason ?? "", /no recipe MCP selection/);
+    assert.equal(broker.status(manual.ok ? manual.id : "")!.evidence, null, "nothing was prepared or run");
   });
 });

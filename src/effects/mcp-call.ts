@@ -42,6 +42,26 @@ function declaredEffect(options: McpCallOptions, server: string, tool: string): 
   return reg;
 }
 
+/** An exact server/tool pair the run's recipe selected (plan 19 RCP6g). */
+export interface McpGrant {
+  serverId: string;
+  toolName: string;
+}
+
+/**
+ * RCP6i: an `mcp.call` is requested by a native worker, for a pair the run's recipe selected. `undefined` grants
+ * means an ordinary workflow: no recipe, so no MCP effect. Returns the refusal reason, or null when it may proceed.
+ * The policy still decides after this; authorization only narrows who may ask.
+ */
+export function authorizeMcpCall(grants: readonly McpGrant[] | undefined, request: { params: Record<string, unknown>; role: string | null }): string | null {
+  if (request.role !== "worker") return "an MCP effect may only be requested by a native worker";
+  if (grants === undefined) return "this run has no recipe MCP selection";
+  const server = String(request.params["server"]);
+  const tool = String(request.params["tool"]);
+  if (!grants.some((g) => g.serverId === server && g.toolName === tool)) return `MCP tool ${tool} on ${server} is not selected by this run's recipe`;
+  return null;
+}
+
 export function mcpCallKind(options: McpCallOptions): EffectKind {
   return {
     kind: MCP_CALL,
