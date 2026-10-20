@@ -23,6 +23,7 @@
     "arch:check": "depcruise src web/src test --config .dependency-cruiser.cjs",
     "test:formal": "node scripts/formal-check.ts",
     "test:ui": "playwright test && playwright test --config=playwright.workflow.config.ts",
+    "test:ui:effects": "UI_EFFECTS_FIXTURE=1 playwright test --config=playwright.effects.config.ts",
     "test:mutation": "stryker run stryker.library.json && node scripts/mutation-gate.ts evidence/mutation/library.json scripts/mutation-thresholds.library.json",
     "test:mutation:diff": "node scripts/mutation-diff.ts"
   },
