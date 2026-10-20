@@ -331,6 +331,21 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   llega a `DONE` tras aprobación; una reparación, un par no seleccionado y una corrida sin receta quedan
   `DENIED` antes de cualquier proceso. *Falsación:* un par no seleccionado, un rol no worker, o una
   corrida manual que ejecuta `mcp.call`, ejecutan el efecto.
+- **RCP6j — MCP para CLIs mediante puente por corrida (propuesta, pendiente de aprobación)**: un CLI no
+  recibe configuración MCP en su HOME. Synapser lanza un puente stdio por corrida, supervisado por el
+  coordinador, y el CLI solo conoce esa entrada. El puente expone exactamente las herramientas que la
+  receta de la corrida seleccionó (RCP6g): las de solo lectura, desde la instantánea congelada de
+  `NativeMcpRunRegistry`; las de efecto (RCP6h), únicamente como peticiones `mcp.call` al broker, que
+  decide y aprueba como hoy. El puente no expone ninguna otra herramienta, ni siquiera de un servidor
+  declarado en el registro. Las configuraciones MCP del HOME o del workspace del CLI se desactivan
+  (RCP6). El entorno del puente no contiene secretos del broker. *Riesgo residual declarado:* el CLI
+  conserva sus propias herramientas (shell, archivos) fuera del puente; lo limitan el sandbox y la red
+  cerrada del runner, no MCP. *Alcance inicial propuesto:* `claude-code` y `mimo`, que declaran cliente
+  MCP; `codex` y `kimi` quedan sin MCP hasta que se pruebe su mecanismo. *Verificador:* un CLI real
+  instalado llama a una herramienta de solo lectura seleccionada y recibe su resultado; llama a una
+  herramienta no seleccionada y no recibe nada; una herramienta de efecto queda `PENDING` hasta
+  aprobación. *Falsación:* una herramienta no seleccionada aparece en la lista del CLI o se ejecuta, una
+  configuración MCP heredada del HOME arranca un servidor, o un efecto se ejecuta sin el broker.
 - **RCP11 — Integridad del origen de receta**: el evento de solicitud queda en la misma transacción
   del journal que la revisión inicial; un iniciador no puede cambiar una definición nacida de receta,
   especialmente sus condiciones de aceptación. Solo el operador puede emitir una revisión posterior.
