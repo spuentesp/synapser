@@ -304,6 +304,21 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
 - **RCP1 — Autoridad**: recetas, skills y documentos de biblioteca no amplían permisos del perfil,
   presupuesto, red, sandbox o herramientas. Falsación: una skill o receta cambia un flag protegido o
   un perfil no autorizado recibe una skill; debe fallar antes de crear el proceso.
+- **RCP6h — Efectos MCP mediados por el broker**: el operador declara en el registro, por servidor,
+  `effectTools`: herramientas que producen un efecto externo. Cada una debe estar en la allowlist general
+  de algún perfil y nunca en `nativeReadOnlyProfiles`. Ningún perfil recibe esas herramientas de forma
+  directa: el registro de corrida y el MCP de tareas siguen sin exponerlas. Un perfil solicita el efecto
+  con `effect_request` de tipo `mcp.call` `{server, tool, arguments}`. El broker valida que el servidor
+  esté habilitado y pinneado, que la herramienta figure en `effectTools` y que `arguments` sea un objeto
+  JSON de hasta 20 000 caracteres. Prepara el resumen y el material del efecto: servidor, digest del pin,
+  herramienta y SHA-256 de los argumentos; el texto del agente no entra en la decisión. La política
+  por defecto es `deny`; el efecto solo se ejecuta tras la decisión del canal existente de aprobación,
+  ligada a ese digest. La ejecución conecta el servidor pinneado en el sandbox de la prueba de
+  herramientas, sin secretos, llama la herramienta con los argumentos aprobados y devuelve la salida
+  como `UNTRUSTED_MCP_DATA` con tope de tamaño. *Verificador:* un servidor MCP local pinneado con una
+  herramienta de efecto recorre `effect_request → PENDING → aprobación → DONE`. *Falsación:* una herramienta
+  no declarada, un servidor deshabilitado o sin pin, un cambio de argumentos tras aprobar (`STALE`), un
+  pin distinto del aprobado, o una salida que el runtime trate como instrucción, ejecutan o concede acceso.
 - **RCP11 — Integridad del origen de receta**: el evento de solicitud queda en la misma transacción
   del journal que la revisión inicial; un iniciador no puede cambiar una definición nacida de receta,
   especialmente sus condiciones de aceptación. Solo el operador puede emitir una revisión posterior.

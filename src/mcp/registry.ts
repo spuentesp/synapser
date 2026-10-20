@@ -19,6 +19,8 @@ export interface McpServerRegistration {
   profiles: Record<string, string[]>;
   /** Explicit operator declaration that these tools are read-only and may be exposed to native workers. */
   nativeReadOnlyProfiles?: Record<string, string[]>;
+  /** Tools that produce an external effect. Never exposed directly: an agent requests them through the effect broker (plan 19 RCP6h). */
+  effectTools?: string[];
 }
 
 /** Exact tool-level subset selected by a published recipe. This never grants access by itself. */
@@ -82,7 +84,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
       errors.push(`${at} must be an object`);
       return;
     }
-    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "artifact", "expectedServer", "profiles", "nativeReadOnlyProfiles"], at, errors);
+    exactKeys(entry, ["id", "enabled", "origin", "version", "command", "args", "artifact", "expectedServer", "profiles", "nativeReadOnlyProfiles", "effectTools"], at, errors);
 
     const id = entry["id"];
     if (typeof id !== "string" || !ID.test(id)) errors.push(`${at}.id must match [a-z0-9][a-z0-9_-]*`);
@@ -174,8 +176,24 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
       }
     }
 
+    const rawEffectTools = entry["effectTools"];
+    const effectTools: string[] = [];
+    if (rawEffectTools !== undefined) {
+      if (!Array.isArray(rawEffectTools) || rawEffectTools.some((tool) => typeof tool !== "string" || !TOOL_NAME.test(tool))) {
+        errors.push(`${at}.effectTools must be an array of valid tool names`);
+      } else {
+        const duplicates = rawEffectTools.filter((tool, index) => rawEffectTools.indexOf(tool) !== index);
+        if (duplicates.length) errors.push(`${at}.effectTools has duplicate tool name(s): ${[...new Set(duplicates)].join(", ")}`);
+        for (const tool of rawEffectTools as string[]) {
+          if (!Object.values(allowlists).some((tools) => tools.includes(tool))) errors.push(`${at}.effectTools.${tool} must also be in the general allowlist of a profile`);
+          if (Object.values(nativeReadOnlyProfiles).some((tools) => tools.includes(tool))) errors.push(`${at}.effectTools.${tool} cannot also be a native read-only tool`);
+        }
+        effectTools.push(...(rawEffectTools as string[]));
+      }
+    }
+
     if (typeof id === "string" && ID.test(id) && typeof enabled === "boolean" && validOrigin(origin) && typeof version === "string" && version.trim() === version && version.length > 0 && version.length <= 128 && typeof command === "string" && isAbsolute(command) && !command.includes("\0") && Array.isArray(args) && args.every((arg) => typeof arg === "string" && !arg.includes("\0") && !SECRET_MARKER.test(arg)) && expectedServer && isObject(profiles)) {
-      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], ...(pinnedArtifact ? { artifact: pinnedArtifact } : {}), expectedServer, profiles: allowlists, ...(Object.keys(nativeReadOnlyProfiles).length ? { nativeReadOnlyProfiles } : {}) });
+      servers.push({ id, enabled, origin, version, command, args: [...args] as string[], ...(pinnedArtifact ? { artifact: pinnedArtifact } : {}), expectedServer, profiles: allowlists, ...(Object.keys(nativeReadOnlyProfiles).length ? { nativeReadOnlyProfiles } : {}), ...(effectTools.length ? { effectTools } : {}) });
     }
   });
 
