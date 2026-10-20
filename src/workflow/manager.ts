@@ -12,13 +12,14 @@ import { Journal } from "../journal/journal.ts";
 import type { FrozenLibrary, LibraryStore } from "../library/store.ts";
 import type { Advisor } from "../advisor/advisor.ts";
 import { EffectBroker } from "../effects/broker.ts";
-import type { Exec } from "../effects/kinds.ts";
+import { BUILTIN_KINDS, type Exec } from "../effects/kinds.ts";
+import { mcpCallKind } from "../effects/mcp-call.ts";
 import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
 import { discloseConditionDetail, type ReviewAudience } from "./disclosure.ts";
 import { isDigest } from "../digest/file.ts";
-import type { McpToolBinding } from "../mcp/registry.ts";
+import type { McpServerRegistration, McpToolBinding } from "../mcp/registry.ts";
 
 export interface Actor {
   id: string;
@@ -111,6 +112,9 @@ export interface ManagerOptions {
   effectEnv?: NodeJS.ProcessEnv;
   effectIdentity?: { name: string; email: string };
   effectFetch?: typeof fetch;
+  /** The live MCP registrations and their pinned artifacts: enables the operator-declared `mcp.call` effect (plan 19 RCP6h). */
+  mcpServers?: () => readonly McpServerRegistration[];
+  mcpArtifactRoot?: string;
   /** Builds the advisor of a workflow (model-only is enough to consult). Absent ⇒ advice is unavailable. */
   advisor?: (journal: Journal, workflowId: string, workflow: () => Workflow) => Advisor;
   /** Period of the effect ticker, ms (0 disables it; `settleEffects` still works). */
@@ -158,6 +162,7 @@ export class WorkflowManager {
       journal: j, runId: id, repoRoot: this.#o.workspaceRoot, policy: this.#o.policy ?? (() => DEFAULT_POLICY),
       ...(this.#o.effectExec ? { exec: this.#o.effectExec } : {}), ...(this.#o.effectEnv ? { env: this.#o.effectEnv } : {}),
       ...(this.#o.effectIdentity ? { identity: this.#o.effectIdentity } : {}), ...(this.#o.effectFetch ? { fetch: this.#o.effectFetch } : {}),
+      ...(this.#o.mcpServers && this.#o.mcpArtifactRoot ? { kinds: [...BUILTIN_KINDS, mcpCallKind({ registrations: this.#o.mcpServers, artifactStoreRoot: this.#o.mcpArtifactRoot })] } : {}),
     });
     this.#brokers.set(id, b);
     return b;

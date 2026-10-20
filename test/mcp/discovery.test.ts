@@ -185,6 +185,16 @@ test("operator test-call invokes only a selected allowlisted tool through the re
   assert.equal(disallowed.status, 403);
   assert.deepEqual(await disallowed.json(), { error: "MCP_TOOL_NOT_ALLOWLISTED" });
   assert.equal(invocationCalls, 0, "unauthenticated and unallowlisted requests must not spawn a server");
+  // an operator-declared effect tool is allowlisted, yet the console may not run it: only the broker's mcp.call may (RCP6h)
+  registration.effectTools = ["inspect"];
+  const effect = await fetch(`${base}/api/mcp/local-call/test-call`, {
+    method: "POST", headers,
+    body: JSON.stringify({ profileId: "worker", toolName: "inspect", arguments: { value: "hello" } }),
+  });
+  assert.equal(effect.status, 403);
+  assert.deepEqual(await effect.json(), { error: "MCP_EFFECT_TOOL_MEDIATED" });
+  assert.equal(invocationCalls, 0, "an effect tool run from the console would bypass the broker");
+  delete registration.effectTools;
   registration.enabled = false;
   const disabled = await fetch(`${base}/api/mcp/local-call/test-call`, {
     method: "POST", headers,

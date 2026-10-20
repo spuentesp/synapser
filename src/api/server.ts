@@ -299,6 +299,8 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (!registration) return fail(res, 404, "UNKNOWN_MCP_SERVER");
       if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
       if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
+      // an effect tool run from here would be an unbrokered side effect: only the broker's mcp.call may run it (RCP6h)
+      if (registration.effectTools?.includes(body.toolName)) return fail(res, 403, "MCP_EFFECT_TOOL_MEDIATED");
       const allowlist = registration.profiles[body.profileId];
       if (!allowlist) return fail(res, 403, "MCP_PROFILE_NOT_CONFIGURED");
       if (!allowlist.includes(body.toolName)) return fail(res, 403, "MCP_TOOL_NOT_ALLOWLISTED");

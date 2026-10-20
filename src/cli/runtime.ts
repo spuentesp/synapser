@@ -1,5 +1,6 @@
 // Wiring shared by the CLI and the MCP process: config → manager (with the production engine).
 
+import { join } from "node:path";
 import { Advisor } from "../advisor/advisor.ts";
 import { ChatService } from "../chat/chat.ts";
 import { Journal } from "../journal/journal.ts";
@@ -68,6 +69,9 @@ export function createRuntime(cfg: SynapserConfig): Runtime {
       : {}),
     policy: () => cfg.policy,
     effectIdentity: cfg.identity,
+    // the live list: hot-reloaded registrations are seen by the next request and by the re-check at execution
+    mcpServers: () => cfg.mcpServers,
+    mcpArtifactRoot: join(cfg.stateDir, "mcp-artifacts"),
   });
   const chat = new ChatService({
     model: new OpenAICompatibleProvider({ config: systemModels, onCall: journalRecorder(serverJournal, systemPrice) }),
