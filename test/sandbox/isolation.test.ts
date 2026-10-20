@@ -78,7 +78,7 @@ describe("H6.4 a process storm is constrained by a per-run task limit", { skip: 
   const ws = mkdtempSync(join(tmpdir(), "sbx-process-ws-"));
   test("the kernel refuses forks after the configured task cap", () => {
     const r = runSandboxed({ workspace: ws, processLimit: 24, timeoutMs: 10_000 }, [
-      "node", "-e", `const { spawn } = require('node:child_process'); const children = []; let rejected = false; for (let i = 0; i < 128; i++) { const child = spawn('/bin/sleep', ['10'], { stdio: 'ignore' }); children.push(child); child.on('error', (error) => { if (error.code === 'EAGAIN' && !rejected) { rejected = true; process.stderr.write('task-limit-hit\\n'); for (const running of children) running.kill('SIGKILL'); process.exitCode = 42; } }); } setTimeout(() => { if (!rejected) process.exitCode = 0; }, 100);`,
+      "node", "-e", `const { spawn } = require('node:child_process'); const children = []; let rejected = false; for (let i = 0; i < 128; i++) { const child = spawn('/bin/sleep', ['10'], { stdio: 'ignore' }); children.push(child); child.on('error', (error) => { if (error.code === 'EAGAIN' && !rejected) { rejected = true; process.stderr.write('task-limit-hit\\n'); for (const running of children) if (running.pid) running.kill('SIGKILL'); process.exitCode = 42; } }); } setTimeout(() => { if (!rejected) process.exitCode = 0; }, 100);`,
     ]);
     assert.equal(r.timedOut, false, r.stderr);
     assert.equal(r.status, 42, r.stderr);
