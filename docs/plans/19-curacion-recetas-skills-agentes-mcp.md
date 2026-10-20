@@ -331,7 +331,7 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   llega a `DONE` tras aprobación; una reparación, un par no seleccionado y una corrida sin receta quedan
   `DENIED` antes de cualquier proceso. *Falsación:* un par no seleccionado, un rol no worker, o una
   corrida manual que ejecuta `mcp.call`, ejecutan el efecto.
-- **RCP6j — MCP para CLIs mediante puente por corrida (propuesta, pendiente de aprobación)**: un CLI no
+- **RCP6j — MCP para CLIs mediante puente por corrida (aprobada; núcleo implementado en `src/mcp/cli-bridge.ts`, sin conectar a ninguna corrida)**: un CLI no
   recibe configuración MCP en su HOME. Synapser lanza un puente stdio por corrida, supervisado por el
   coordinador, y el CLI solo conoce esa entrada. El puente expone exactamente las herramientas que la
   receta de la corrida seleccionó (RCP6g): las de solo lectura, desde la instantánea congelada de
@@ -346,6 +346,12 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   herramienta no seleccionada y no recibe nada; una herramienta de efecto queda `PENDING` hasta
   aprobación. *Falsación:* una herramienta no seleccionada aparece en la lista del CLI o se ejecuta, una
   configuración MCP heredada del HOME arranca un servidor, o un efecto se ejecuta sin el broker.
+  *Estado de implementación:* el núcleo JSON-RPC del puente está hecho y probado (`test/mcp/cli-bridge.test.ts`):
+  solo lista y ejecuta lo seleccionado, las de efecto llegan al broker con rol `cli-worker`, y el autorizador
+  las acepta solo con la concesión de la receta. Pendiente, en este orden: (1) transporte stdio por corrida
+  y su autenticación ante el coordinador; (2) inyección de la entrada del puente solo en `claude-code`;
+  (3) decisión explícita sobre la elegibilidad de solo lectura para CLIs, porque el cargador restringe
+  `nativeReadOnlyProfiles` a workers nativos y un CLI no lo es; (4) verificación con el CLI real instalado.
 - **RCP11 — Integridad del origen de receta**: el evento de solicitud queda en la misma transacción
   del journal que la revisión inicial; un iniciador no puede cambiar una definición nacida de receta,
   especialmente sus condiciones de aceptación. Solo el operador puede emitir una revisión posterior.
