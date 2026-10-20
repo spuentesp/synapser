@@ -321,6 +321,16 @@ histórico de skill con motivo, validado de nuevo bajo la política vigente y au
   herramienta de efecto recorre `effect_request → PENDING → aprobación → DONE`. *Falsación:* una herramienta
   no declarada, un servidor deshabilitado o sin pin, un cambio del registro (comando, argumentos o pin)
   tras aprobar (`STALE`), o una salida que el runtime trate como instrucción, ejecutan o conceden acceso.
+- **RCP6i — Efectos MCP de receta sin ampliación de permisos**: una herramienta de efecto solo se pide
+  como `mcp.call` si la receta de la corrida la seleccionó como par exacto servidor/herramienta. La
+  concesión es la selección inmutable de la corrida, no un permiso nuevo: el broker la consulta antes de
+  la política, y la política sigue decidiendo (`ask` por defecto de la receta). Solo un worker nativo
+  pide efectos MCP; una reparación, un asesor, un CLI o una petición del MCP de Synapser (sin rol de
+  worker) queda denegada aunque la corrida tenga selección. Sin selección, la herramienta no se pide.
+  La denegación queda en el ledger con su motivo. *Verificador:* un worker con el par seleccionado
+  llega a `DONE` tras aprobación; una reparación, un par no seleccionado y una corrida sin receta quedan
+  `DENIED` antes de cualquier proceso. *Falsación:* un par no seleccionado, un rol no worker, o una
+  corrida manual que ejecuta `mcp.call`, ejecutan el efecto.
 - **RCP11 — Integridad del origen de receta**: el evento de solicitud queda en la misma transacción
   del journal que la revisión inicial; un iniciador no puede cambiar una definición nacida de receta,
   especialmente sus condiciones de aceptación. Solo el operador puede emitir una revisión posterior.

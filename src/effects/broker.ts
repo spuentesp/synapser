@@ -49,6 +49,8 @@ export interface BrokerOptions {
   identity?: { name: string; email: string };
   fetch?: typeof fetch;
   now?: () => number;
+  /** Who may ask for what, decided before the policy (plan 19 RCP6i). A string refuses the request with that reason. */
+  authorize?: (r: { kind: string; params: Record<string, unknown>; role: string | null; taskId: string | null; requestedBy: string }) => string | null;
 }
 
 const key = (id: string): string => `effect:${id}`;
@@ -90,7 +92,7 @@ export class EffectBroker {
     return h;
   }
 
-  async request(r: { kind: string; params: unknown; requestedBy: string; taskId?: string | null }): Promise<RequestResult> {
+  async request(r: { kind: string; params: unknown; requestedBy: string; taskId?: string | null; role?: string | null }): Promise<RequestResult> {
     const impl = this.#kinds.get(r.kind);
     if (!impl) {
       // an unknown kind is DENIED by policy default: record it, do not even prepare it
@@ -101,6 +103,14 @@ export class EffectBroker {
     }
     const v = impl.validate(r.params);
     if (!v.ok) return { ok: false, code: "INVALID_PARAMS", errors: v.errors };
+    const refusal = this.#o.authorize?.({ kind: r.kind, params: v.params, role: r.role ?? null, taskId: r.taskId ?? null, requestedBy: r.requestedBy });
+    if (refusal) {
+      // refused before the policy: recorded like any denial, with the reason, and nothing is prepared or run
+      const id = `ef-${++this.#n}`;
+      const h = this.#recordPolicy();
+      this.#o.journal.tx((t) => t.event(this.#o.runId, "effect", id, null, "DENIED", { kind: r.kind, requested_by: r.requestedBy, task_id: r.taskId ?? null, policy_hash: h, rule: null, decision: "deny", reason: refusal, params: v.params, summary: "", digest: "" }));
+      return { ok: true, id, state: "DENIED", decision: "deny", summary: "", rule: null };
+    }
     const id = `ef-${++this.#n}`;
     const h = this.#recordPolicy();
     const ev = evaluate(this.#o.policy(), r.kind, v.params);

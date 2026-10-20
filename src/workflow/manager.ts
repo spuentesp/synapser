@@ -13,7 +13,7 @@ import type { FrozenLibrary, LibraryStore } from "../library/store.ts";
 import type { Advisor } from "../advisor/advisor.ts";
 import { EffectBroker } from "../effects/broker.ts";
 import { BUILTIN_KINDS, type Exec } from "../effects/kinds.ts";
-import { mcpCallKind } from "../effects/mcp-call.ts";
+import { authorizeMcpCall, type McpGrant, MCP_CALL, mcpCallKind } from "../effects/mcp-call.ts";
 import { DEFAULT_POLICY, type Policy } from "../effects/policy.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { validateWorkflow, type Workflow, type WorkflowState } from "./model.ts";
@@ -140,6 +140,8 @@ export class WorkflowManager {
   readonly #running = new Map<string, { abort: AbortController; done: Promise<void> }>();
   readonly #queue: string[] = [];
   readonly #brokers = new Map<string, EffectBroker>();
+  /** Each run's recipe MCP selection, read at request time by its broker (plan 19 RCP6i). */
+  readonly #mcpGrants = new Map<string, readonly McpGrant[]>();
   #ticker: ReturnType<typeof setInterval> | null = null;
   #closed = false;
 
@@ -163,6 +165,7 @@ export class WorkflowManager {
       ...(this.#o.effectExec ? { exec: this.#o.effectExec } : {}), ...(this.#o.effectEnv ? { env: this.#o.effectEnv } : {}),
       ...(this.#o.effectIdentity ? { identity: this.#o.effectIdentity } : {}), ...(this.#o.effectFetch ? { fetch: this.#o.effectFetch } : {}),
       ...(this.#o.mcpServers && this.#o.mcpArtifactRoot ? { kinds: [...BUILTIN_KINDS, mcpCallKind({ registrations: this.#o.mcpServers, artifactStoreRoot: this.#o.mcpArtifactRoot })] } : {}),
+      authorize: (r) => (r.kind === MCP_CALL ? authorizeMcpCall(this.#mcpGrants.get(id), r) : null),
     });
     this.#brokers.set(id, b);
     return b;
@@ -379,6 +382,7 @@ export class WorkflowManager {
               })
             : []
           : undefined;
+        if (recipeMcpTools !== undefined) this.#mcpGrants.set(id, recipeMcpTools);
         const recipeSkills: RecipeSkillBinding[] | undefined = recipeRequest
           ? Array.isArray(recipeData?.required_skills)
             ? (recipeData.required_skills as unknown[]).map((item) => {

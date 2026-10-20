@@ -564,7 +564,7 @@ export async function runTask(deps: LoopDeps, task: TaskSpec): Promise<TaskRunRe
 
       case "request_effect": {
         if (!deps.effects) return { ok: false, payload: { error: "DISABLED", detail: "side effects are not available in this run" }, detail: "effects disabled", noProgressKey: "effect:DISABLED" };
-        const r = await deps.effects.request({ kind: String(args["kind"]), params: args["params"], requestedBy: `${deps.runId}:${task.taskId}`, taskId: task.taskId });
+        const r = await deps.effects.request({ kind: String(args["kind"]), params: args["params"], requestedBy: `${deps.runId}:${task.taskId}`, taskId: task.taskId, role: deps.role ?? "worker" });
         if (!r.ok) return { ok: false, payload: { error: r.code, ...(r.errors ? { errors: r.errors } : {}) }, detail: `effect ${r.code}`, noProgressKey: `effect:${r.code}` };
         return {
           ok: r.state !== "DENIED" && r.state !== "FAILED",
