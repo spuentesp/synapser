@@ -102,3 +102,29 @@ describe("operator MCP process registry", () => {
     rejects({ mcpServers: [entry({ expectedServer: { name: "review-tools", version: "1.4.2", secret: "x" } })] }, /expectedServer.secret is not allowed/);
   });
 });
+
+describe("plan 19 RCP6h: operator-declared effect tools", () => {
+  test("accepts effect tools that a profile allowlists, and keeps them on the registration", () => {
+    const server = entry({ effectTools: ["read_file"] });
+    assert.deepEqual(load({ mcpServers: [server] }).mcpServers, [server]);
+  });
+
+  test("rejects an effect tool that no profile allowlists", () => {
+    rejects({ mcpServers: [entry({ effectTools: ["delete_everything"] })] }, /effectTools.delete_everything must also be in the general allowlist/);
+  });
+
+  test("rejects an effect tool that is also declared native read-only", () => {
+    const overlap = entry({
+      profiles: { "nemotron-worker": ["inspect", "write"] },
+      nativeReadOnlyProfiles: { "nemotron-worker": ["inspect"] },
+      effectTools: ["inspect"],
+    });
+    rejects({ mcpServers: [overlap] }, /effectTools.inspect cannot also be a native read-only tool/);
+  });
+
+  test("rejects malformed and duplicate effect tool names", () => {
+    rejects({ mcpServers: [entry({ effectTools: "read_file" })] }, /effectTools must be an array of valid tool names/);
+    rejects({ mcpServers: [entry({ effectTools: ["bad name"] })] }, /effectTools must be an array of valid tool names/);
+    rejects({ mcpServers: [entry({ effectTools: ["read_file", "read_file"] })] }, /effectTools has duplicate tool name\(s\): read_file/);
+  });
+});

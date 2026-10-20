@@ -166,6 +166,7 @@ async function main(): Promise<void> {
           }, mcpTestCall: async (serverId, profileId, toolName, arguments_) => {
             const registration = cfg.mcpServers.find((server) => server.id === serverId);
             if (!registration) throw new Error("unknown registered MCP server");
+            if (registration.effectTools?.includes(toolName)) throw new Error("MCP_EFFECT_TOOL_MEDIATED: effect tools run only through the broker");
             return testRegisteredMcpTool(registration, profileId, toolName, arguments_, join(cfg.stateDir, "mcp-artifacts"));
           }, config: () => ({ workspace: cfg.workspace, commands: cfg.commands.map((c) => c.id), profiles: cfg.profiles.map((p) => ({ id: p.id, tier: p.tier ?? "standard", role: p.role, enabled: p.enabled, pool: p.pool ?? null })), pools: cfg.pools, agentSkills: cfg.agentSkills, policy: cfg.policy, startRequiresApproval: cfg.startRequiresApproval, advisor: cfg.advisor, providers: cfg.providers, roles: cfg.roles }) },
         });
