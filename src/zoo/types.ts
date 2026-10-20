@@ -1,5 +1,5 @@
 // Types for the Zoanthrope adapter (design §13). Shapes were captured from the
-// real 0.1.3 binary, not from the README: see test/zoo/g1-adapter.test.ts.
+// real 0.1.6 binary, not from the README: see test/zoo/g1-adapter.test.ts.
 
 import type { WorkspacePath } from "../workspace/paths.ts";
 
