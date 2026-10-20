@@ -31,7 +31,7 @@ import { type LibraryPolicy, NO_LIBRARY_POLICY } from "../library/validate.ts";
 import type { WorkflowManager } from "../workflow/manager.ts";
 import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
 import type { McpServerRegistration } from "../mcp/registry.ts";
-import { nativeWorkerProfileIds } from "../mcp/registry.ts";
+import { readOnlyGrantProfileIds } from "../mcp/registry.ts";
 import type { AgentProfile } from "../agents/profile-types.ts";
 import type { McpServerDiscovery } from "../mcp/discovery.ts";
 import type { McpJsonObject, OutboundMcpToolResult } from "../mcp/outbound-stdio-client.ts";
@@ -245,7 +245,7 @@ export function createApi(opts: ApiOptions): ApiServer {
       if (!registration.enabled) return fail(res, 409, "MCP_SERVER_DISABLED");
       if (!registration.artifact) return fail(res, 409, "MCP_ARTIFACT_UNPINNED");
       const profiles = c.profiles?.() ?? [];
-      const eligible = new Set(nativeWorkerProfileIds(profiles));
+      const eligible = new Set(readOnlyGrantProfileIds(profiles));
       return json(res, 200, { profiles: profiles.filter((profile) => eligible.has(profile.id) && (registration.profiles[profile.id]?.length ?? 0) > 0).map(({ id }) => ({ id })) });
     }
     if (top === "mcp" && id && action === "native-read-only" && method === "PUT") {

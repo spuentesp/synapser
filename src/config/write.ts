@@ -11,7 +11,7 @@ import type { AgentProfile } from "../agents/profile.ts";
 import { type ProviderConfig, type RoleConfig, SYSTEM_ROLES } from "../model/config.ts";
 import type { Role } from "../model/types.ts";
 import { ConfigError, loadConfig } from "./load.ts";
-import { nativeWorkerProfileIds, type McpServerRegistration } from "../mcp/registry.ts";
+import { readOnlyGrantProfileIds, type McpServerRegistration } from "../mcp/registry.ts";
 
 export class ConfigWriteError extends Error {
   readonly errors: string[];
@@ -121,11 +121,11 @@ function applyChange(live: LiveConfig, change: ConfigChange): void {
     if (!change.value || typeof change.value !== "object" || Array.isArray(change.value) || Object.getPrototypeOf(change.value) !== Object.prototype) {
       throw new ConfigWriteError(["native MCP curation must be an object mapping profile ids to tool-name arrays"]);
     }
-    const eligible = new Set(nativeWorkerProfileIds(live.profiles!));
+    const eligible = new Set(readOnlyGrantProfileIds(live.profiles!));
     const map = change.value as Record<string, unknown>;
     const problems: string[] = [];
     for (const [profile, tools] of Object.entries(map)) {
-      if (!eligible.has(profile)) problems.push(`profile ${profile} is not an enabled native writer worker`);
+      if (!eligible.has(profile)) problems.push(`profile ${profile} is not eligible for read-only grants`);
       if (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string")) {
         problems.push(`profiles.${profile} must be a list of tool names`);
         continue;

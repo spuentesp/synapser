@@ -221,8 +221,10 @@ La integración inicial con agentes queda limitada a `nativeReadOnlyProfiles`: u
 curado por tools descubiertas, asignable desde el panel solo a perfiles efectivos native/writer/worker.
 La ruta dedicada valida el mismo filtro en servidor y conserva intacto el resto del registro; el PUT
 general no puede crear ni modificar el permiso. Esto es una atestación del operador, no una prueba de
-que el servidor MCP sea realmente read-only. No hay selección desde recetas/tareas ni inyección a CLIs;
-no se habilitan advisor/repair, secretos ni tools con efectos, y el broker de efectos sigue pendiente.
+que el servidor MCP sea realmente read-only. Las recetas seleccionan herramientas de solo lectura (RCP6g) y las de efecto
+solo se ejecutan por el broker (`mcp.call`, RCP6h, RCP6i). Los CLIs `claude-code` y `mimo` pueden recibir una
+concesión de solo lectura (RCP6j), pero el puente aún no está conectado a ninguna corrida. No se habilitan
+advisor/repair ni secretos.
 
 **RCP6d — Integridad del paquete MCP ejecutado**: un proceso registrado solo puede arrancar desde
 una copia aislada cuyo árbol completo coincide con el digest SHA-256 fijado; la configuración legacy
