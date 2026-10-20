@@ -24,5 +24,9 @@
     "high": 98,
     "low": 95,
     "break": null
-  }
+  },
+  "ignorePatterns": [
+    "evidence/**",
+    ".stryker-tmp*/**"
+  ]
 }
