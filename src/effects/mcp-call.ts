@@ -54,7 +54,8 @@ export interface McpGrant {
  * The policy still decides after this; authorization only narrows who may ask.
  */
 export function authorizeMcpCall(grants: readonly McpGrant[] | undefined, request: { params: Record<string, unknown>; role: string | null }): string | null {
-  if (request.role !== "worker") return "an MCP effect may only be requested by a native worker";
+  // `cli-worker` is the per-run MCP bridge of a CLI agent (plan 19 RCP6j); it reaches only the same recipe grants.
+  if (request.role !== "worker" && request.role !== "cli-worker") return "an MCP effect may only be requested by a worker";
   if (grants === undefined) return "this run has no recipe MCP selection";
   const server = String(request.params["server"]);
   const tool = String(request.params["tool"]);
