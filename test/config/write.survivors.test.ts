@@ -229,7 +229,7 @@ describe("the configuration writer's operator MCP registry branches", () => {
     register("alpha", pinned("alpha", { profiles: { "codex-writer": ["inspect"] } }));
     assert.throws(
       () => curate("alpha", { "codex-writer": ["write"] }),
-      (e: unknown) => e instanceof ConfigWriteError && e.errors.includes("profile codex-writer is not an enabled native writer worker") && e.errors.includes("profiles.codex-writer.write is not in the general MCP allowlist"),
+      (e: unknown) => e instanceof ConfigWriteError && e.errors.includes("profile codex-writer is not eligible for read-only grants") && e.errors.includes("profiles.codex-writer.write is not in the general MCP allowlist"),
     );
     assert.throws(() => curate("alpha", { "codex-writer": "inspect" }), refusedWith("profiles.codex-writer must be a list of tool names"));
     assert.throws(() => curate("alpha", { "codex-writer": [1] }), refusedWith("profiles.codex-writer must be a list of tool names"));

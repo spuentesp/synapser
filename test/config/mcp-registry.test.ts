@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { ConfigError, loadConfig } from "../../src/config/load.ts";
+import { readOnlyGrantProfileIds } from "../../src/mcp/registry.ts";
+import type { AgentProfile } from "../../src/agents/profile.ts";
 
 const entry = (patch: Record<string, unknown> = {}) => ({
   id: "review-tools",
@@ -51,14 +53,24 @@ describe("operator MCP process registry", () => {
     rejects({ mcpServers: [entry({ nativeReadOnlyProfiles: { "future-agent": ["inspect"] } })] }, /unknown profile/);
   });
 
+  test("CLI writers on an MCP-capable adapter may receive read-only grants; other CLIs and advisors may not (RCP6j)", () => {
+    const granted = entry({ profiles: { "claude-sonnet-writer": ["inspect"] }, nativeReadOnlyProfiles: { "claude-sonnet-writer": ["inspect"] } });
+    assert.deepEqual(load({ mcpServers: [granted] }).mcpServers, [granted]);
+    // mimo-writer ships disabled (a 402 in the spike), so its eligibility is checked on an enabled copy
+    const mimo = { id: "mimo-writer", role: "writer", adapter: "mimo", enabled: true } as unknown as AgentProfile;
+    assert.deepEqual(readOnlyGrantProfileIds([mimo]), ["mimo-writer"]);
+    assert.deepEqual(readOnlyGrantProfileIds([{ ...mimo, enabled: false }]), []);
+    rejects({ mcpServers: [entry({ profiles: { "claude-opus-advisor": ["inspect"] }, nativeReadOnlyProfiles: { "claude-opus-advisor": ["inspect"] } })] }, /is not eligible for read-only grants/);
+  });
+
   test("native grants exclude repair, advisor, CLI and disabled effective profiles", () => {
     for (const profile of ["nemotron-repair", "claude-opus-advisor", "codex-writer"]) {
-      rejects({ mcpServers: [entry({ profiles: { [profile]: ["inspect"] }, nativeReadOnlyProfiles: { [profile]: ["inspect"] } })] }, /not an enabled native writer worker/);
+      rejects({ mcpServers: [entry({ profiles: { [profile]: ["inspect"] }, nativeReadOnlyProfiles: { [profile]: ["inspect"] } })] }, /is not eligible for read-only grants/);
     }
     rejects({
       agents: [{ id: "disabled-native", adapter: "native", role: "writer", nativeRole: "worker", enabled: false, provider: "tokenfactory", model: "nvidia/nemotron-3-super-120b-a12b" }],
       mcpServers: [entry({ profiles: { "disabled-native": ["inspect"] }, nativeReadOnlyProfiles: { "disabled-native": ["inspect"] } })],
-    }, /not an enabled native writer worker/);
+    }, /is not eligible for read-only grants/);
   });
 
   test("accepts a normalized content-addressed artifact entrypoint and rejects malformed pins", () => {

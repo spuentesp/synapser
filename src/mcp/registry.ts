@@ -43,6 +43,15 @@ const SHA256 = /^sha256:[a-f0-9]{64}$/;
 
 /** Effective profiles allowed to receive explicitly curated native MCP tools. This is an authorization
  * boundary, not proof that any declared MCP tool is semantically read-only. */
+/** CLI adapters whose MCP client support is declared and verified (plan 19 RCP6j). Other CLIs get no MCP grant. */
+export const MCP_CLI_ADAPTERS: readonly string[] = ["claude-code", "mimo"];
+
+/** Profiles that may receive a read-only MCP grant: native writer workers, and enabled writers on an MCP-capable CLI. */
+export function readOnlyGrantProfileIds(profiles: readonly AgentProfile[]): string[] {
+  const cliWriters = profiles.filter((profile) => profile.enabled && profile.role === "writer" && MCP_CLI_ADAPTERS.includes(adapterOf(profile)));
+  return [...nativeWorkerProfileIds(profiles), ...cliWriters.map((profile) => profile.id)];
+}
+
 export function nativeWorkerProfileIds(profiles: readonly AgentProfile[]): string[] {
   return profiles.filter((profile) => profile.enabled && adapterOf(profile) === "native" && profile.role === "writer" && profile.nativeRole === "worker").map((profile) => profile.id);
 }
@@ -162,7 +171,7 @@ export function validateMcpServerRegistry(raw: unknown, knownProfiles: readonly 
         for (const [profile, tools] of Object.entries(rawNativeReadOnly)) {
           if (!PROFILE_ID.test(profile)) errors.push(`${at}.nativeReadOnlyProfiles key "${profile}" is not a profile id`);
           else if (!known.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles references unknown profile "${profile}"`);
-          else if (!eligibleNative.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles profile "${profile}" is not an enabled native writer worker`);
+          else if (!eligibleNative.has(profile)) errors.push(`${at}.nativeReadOnlyProfiles profile "${profile}" is not eligible for read-only grants (a native writer worker, or a writer on an MCP-capable CLI)`);
           if (!Array.isArray(tools) || tools.some((tool) => typeof tool !== "string" || !TOOL_NAME.test(tool))) {
             errors.push(`${at}.nativeReadOnlyProfiles.${profile} must be an array of valid tool names`);
             continue;
