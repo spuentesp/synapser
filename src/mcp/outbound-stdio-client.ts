@@ -588,10 +588,12 @@ class OutboundStdioMcpClient {
       this.#serverInfo = { name: info.name, version: info.version };
       this.#capabilities = cloneJson(caps as unknown as McpJsonObject);
       this.#state = "ready";
-    } catch {
+    } catch (error) {
       this.#processGroup = this.#transport.verifiedProcessGroup;
       await this.#terminate();
-      throw new Error("registered MCP server failed initialization or process-group verification");
+      // The cause is kept, bounded: an intermittent start failure must say why (the child exited, or the handshake timed out).
+      const cause = String((error as Error)?.message ?? error).slice(0, 200);
+      throw new Error(`registered MCP server failed initialization or process-group verification: ${cause}`);
     }
   }
 
