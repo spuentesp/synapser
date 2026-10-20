@@ -54,7 +54,7 @@ describe("startExecutor", () => {
     assert.equal(s.report.degraded, false);
     assert.equal(s.executor.recovered, true);
     assert.equal(s.generation, 1);
-    assert.equal(s.identity?.version, "0.1.3");
+    assert.equal(s.identity?.version, "0.1.6");
     assert.match(s.identity?.sha256 ?? "", /^[0-9a-f]{64}$/);
     const { incarnation } = s.executor.beginSession(T1);
     assert.equal((await s.executor.readFiles("t1", incarnation, ["README.md"])).kind, "ok");

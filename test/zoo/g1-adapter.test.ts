@@ -25,8 +25,8 @@ describe("G1 adapter against the real binary", () => {
   });
 
   test("handshake verified the pinned identity", () => {
-    assert.equal(zoo.serverVersion, "0.1.3");
-    assert.equal(zoo.identity?.version, "0.1.3");
+    assert.equal(zoo.serverVersion, "0.1.6");
+    assert.equal(zoo.identity?.version, "0.1.6");
     assert.match(zoo.identity?.sha256 ?? "", /^[0-9a-f]{64}$/);
   });
 

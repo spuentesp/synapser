@@ -12,7 +12,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   const m = JSON.parse(line);
   if (m.id === undefined) return;
   if (m.method === "initialize") {
-    const result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "zoanthrope", version: "0.1.3" } };
+    const result = { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "zoanthrope", version: "0.1.6" } };
     const delay = Number(process.env.FAKE_ZOO_HANDSHAKE_DELAY_MS ?? 0);
     if (delay > 0) setTimeout(() => reply(m.id, result), delay);
     else reply(m.id, result);
