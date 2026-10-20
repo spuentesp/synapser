@@ -103,7 +103,7 @@ describe("plan 19 RCP6h: a native worker reaches an operator effect tool only th
     await runTask({ model, executor: env.exec, journal: env.journal, runId: RUN, effects: port, role: "repair" }, TASK);
     const [rec] = broker.records();
     assert.equal(rec!.state, "DENIED");
-    assert.match(rec!.reason ?? "", /only be requested by a native worker/);
+    assert.match(rec!.reason ?? "", /only be requested by a worker/);
     assert.equal(rec!.evidence, null, "nothing ran");
   });
 
