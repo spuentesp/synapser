@@ -317,9 +317,9 @@ test("a server exit during an outstanding request rejects and closes the session
   assertServerStarted(pidFile);
 });
 
-test("a server exit during initialization is reported after scope teardown", async () => {
+test("a server exit during initialization is reported after scope teardown, with its cause", async () => {
   const { options, pidFile } = fixture("exit-init");
-  await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification/);
+  await assert.rejects(connectStdioMcpServer(options), /failed initialization or process-group verification: \S/);
   assertServerStarted(pidFile);
 });
 
