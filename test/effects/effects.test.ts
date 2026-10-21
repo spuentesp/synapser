@@ -180,7 +180,10 @@ describe("effect broker with real git", () => {
     const p = await broker.request({ kind: "git.push", params: { branch: "feature/m" }, requestedBy: "claude-code#s1" });
     assert.ok(p.ok);
     const rec = broker.status(p.id)!;
-    const base = { taskId: `effect:${p.id}`, planDigest: rec.digest, currentDigest: rec.digest, decision: "APPROVED" as const, actor: "claude-code#s1", channel: "mcp" as const };
+    // the requester never approves its own request, even with the code (G3); a different actor needs the code
+    const requester = { taskId: `effect:${p.id}`, planDigest: rec.digest, currentDigest: rec.digest, decision: "APPROVED" as const, actor: "claude-code#s1", channel: "mcp" as const };
+    assert.deepEqual(decideApproval(journal, R, requester), { ok: false, code: "SELF_APPROVAL" });
+    const base = { ...requester, actor: "agent-b" };
     assert.deepEqual(decideApproval(journal, R, base), { ok: false, code: "BAD_CHALLENGE" });
     assert.deepEqual(decideApproval(journal, R, { ...base, challenge: "NOPE12" }), { ok: false, code: "BAD_CHALLENGE" });
     await broker.tick();

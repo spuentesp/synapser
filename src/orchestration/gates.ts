@@ -83,25 +83,53 @@ export function readChallenge(journal: Journal, key: string, digest: string): st
   return readChallengeFile(journal)[chKey(key, digest)] ?? null;
 }
 
-export function verifyChallenge(journal: Journal, key: string, digest: string, code: string): boolean {
-  const ev = journal
+/** A code is good for this long after it was minted, and for one use only (plan 19 gate policy). */
+export const CHALLENGE_TTL_MS = 15 * 60_000;
+export type ChallengeVerdict = "OK" | "BAD_CHALLENGE" | "CHALLENGE_EXPIRED" | "CHALLENGE_USED";
+
+export function verifyChallenge(journal: Journal, key: string, digest: string, code: string, now = Date.now()): ChallengeVerdict {
+  const events = journal
     .listEvents()
-    .filter((e) => e.entity === "approval_challenge" && e.entityId === key && (e.data as { plan_digest?: string }).plan_digest === digest)
-    .at(-1);
-  if (!ev || typeof code !== "string" || code.length < 4 || code.length > 16) return false;
-  return (ev.data as { code_sha256?: string }).code_sha256 === chHash(code);
+    .filter((e) => e.entity === "approval_challenge" && e.entityId === key && (e.data as { plan_digest?: string }).plan_digest === digest);
+  const latest = events.at(-1);
+  if (!latest) return "BAD_CHALLENGE";
+  if (latest.toState === "CONSUMED") return "CHALLENGE_USED";
+  const minted = events.filter((e) => e.toState === "MINTED").at(-1);
+  if (!minted || typeof code !== "string" || code.length < 4 || code.length > 16) return "BAD_CHALLENGE";
+  if (now - minted.ts > CHALLENGE_TTL_MS) return "CHALLENGE_EXPIRED";
+  return (minted.data as { code_sha256?: string }).code_sha256 === chHash(code) ? "OK" : "BAD_CHALLENGE";
+}
+
+/**
+ * The code the operator may read now. An expired or used code is replaced by a fresh one, but only while the
+ * approval is still pending; otherwise there is nothing to show.
+ */
+export function currentChallenge(journal: Journal, runId: string, key: string, digest: string): string | null {
+  const existing = readChallenge(journal, key, digest);
+  if (existing !== null && verifyChallengeIsLive(journal, key, digest)) return existing;
+  if (approvalStatus(journal, key, digest) !== "PENDING") return null;
+  mintChallenge(journal, runId, key, digest);
+  return readChallenge(journal, key, digest);
+}
+
+function verifyChallengeIsLive(journal: Journal, key: string, digest: string): boolean {
+  const events = journal.listEvents().filter((e) => e.entity === "approval_challenge" && e.entityId === key && (e.data as { plan_digest?: string }).plan_digest === digest);
+  const latest = events.at(-1);
+  if (!latest || latest.toState === "CONSUMED") return false;
+  const minted = events.filter((e) => e.toState === "MINTED").at(-1);
+  return minted !== undefined && Date.now() - minted.ts <= CHALLENGE_TTL_MS;
 }
 
 /** Idempotent: one PENDING per (task, digest). Mints the out-of-band challenge for MCP approvals. */
-export function requestApproval(journal: Journal, runId: string, taskId: string, digest: string, why?: string): boolean {
+export function requestApproval(journal: Journal, runId: string, taskId: string, digest: string, why?: string, requestedBy?: string): boolean {
   if (approvalStatus(journal, taskId, digest) !== "NONE") return false;
-  journal.tx((t) => t.event(runId, "approval", taskId, null, "PENDING", { plan_digest: digest, ...(why ? { why } : {}) }));
+  journal.tx((t) => t.event(runId, "approval", taskId, null, "PENDING", { plan_digest: digest, ...(why ? { why } : {}), ...(requestedBy ? { requested_by: requestedBy } : {}) }));
   mintChallenge(journal, runId, taskId, digest);
   return true;
 }
 
 export type ApprovalChannel = "ui" | "cli" | "mcp";
-export type DecideResult = { ok: true } | { ok: false; code: "NOT_PENDING" | "STALE_DIGEST" | "BAD_CHALLENGE" };
+export type DecideResult = { ok: true } | { ok: false; code: "NOT_PENDING" | "STALE_DIGEST" | "BAD_CHALLENGE" | "CHALLENGE_EXPIRED" | "CHALLENGE_USED" | "SELF_APPROVAL" };
 
 export function decideApproval(
   journal: Journal,
@@ -116,10 +144,18 @@ export function decideApproval(
   if (d.planDigest !== d.currentDigest) return { ok: false, code: "STALE_DIGEST" };
   if (approvalStatus(journal, d.taskId, d.planDigest) !== "PENDING") return { ok: false, code: "NOT_PENDING" };
   const channel = d.channel ?? "ui";
-  if (channel === "mcp" && !verifyChallenge(journal, d.taskId, d.planDigest, d.challenge ?? "")) return { ok: false, code: "BAD_CHALLENGE" };
-  journal.tx((t) =>
-    t.event(runId, "approval", d.taskId, "PENDING", d.decision, { plan_digest: d.planDigest, actor: d.actor, channel, ...(d.reason ? { reason: d.reason } : {}) }),
-  );
+  // no one approves the gate they requested (plan 13 G3); the requester is recorded with the pending approval
+  const requester = journal.listEvents().filter((e) => e.entity === "approval" && e.entityId === d.taskId && e.toState === "PENDING" && (e.data as { plan_digest?: string }).plan_digest === d.planDigest).at(-1);
+  if (requester && (requester.data as { requested_by?: string }).requested_by === d.actor) return { ok: false, code: "SELF_APPROVAL" };
+  if (channel === "mcp") {
+    const verdict = verifyChallenge(journal, d.taskId, d.planDigest, d.challenge ?? "");
+    if (verdict !== "OK") return { ok: false, code: verdict as "BAD_CHALLENGE" | "CHALLENGE_EXPIRED" | "CHALLENGE_USED" };
+  }
+  journal.tx((t) => {
+    t.event(runId, "approval", d.taskId, "PENDING", d.decision, { plan_digest: d.planDigest, actor: d.actor, channel, ...(d.reason ? { reason: d.reason } : {}) });
+    // the code is spent with the decision that used it
+    if (channel === "mcp") t.event(runId, "approval_challenge", d.taskId, "MINTED", "CONSUMED", { plan_digest: d.planDigest });
+  });
   return { ok: true };
 }
 
