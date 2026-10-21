@@ -29,7 +29,7 @@ import { fail, json, OPERATOR, readBody } from "./http.ts";
 import { type LibraryStore } from "../library/store.ts";
 import { type LibraryPolicy, NO_LIBRARY_POLICY } from "../library/validate.ts";
 import type { WorkflowManager } from "../workflow/manager.ts";
-import { currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates, readChallenge } from "../orchestration/gates.ts";
+import { currentChallenge, currentPlanDigest, decideApproval, isSelfBound, pendingApprovals, pendingGates } from "../orchestration/gates.ts";
 import type { McpServerRegistration } from "../mcp/registry.ts";
 import { readOnlyGrantProfileIds } from "../mcp/registry.ts";
 import type { AgentProfile } from "../agents/profile-types.ts";
@@ -518,7 +518,7 @@ export function createApi(opts: ApiOptions): ApiServer {
         if (!tokenOk(req)) return fail(res, 401, "BAD_TOKEN");
         const key = url.searchParams.get("key") ?? "";
         const digest = currentPlanDigest(j);
-        const code = readChallenge(j, key, url.searchParams.get("digest") ?? digest);
+        const code = currentChallenge(j, runId, key, url.searchParams.get("digest") ?? digest);
         return code ? json(res, 200, { key, code }) : fail(res, 404, "NO_CHALLENGE");
       }
       case "state": {

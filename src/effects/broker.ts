@@ -12,6 +12,7 @@ import type { Journal } from "../journal/journal.ts";
 import { approvalStatus, requestApproval } from "../orchestration/gates.ts";
 import { type Channel, type Decision, evaluate, type Policy, policyHash } from "./policy.ts";
 import { BUILTIN_KINDS, effectDigest, EffectFailure, type EffectKind, type Exec, realExec } from "./kinds.ts";
+import { digestOfJson } from "../digest/canonical.ts";
 
 export type EffectState = "PENDING" | "DENIED" | "EXECUTING" | "DONE" | "FAILED" | "STALE" | "EXPIRED" | "REJECTED";
 
@@ -31,6 +32,8 @@ export interface EffectRecord {
   reason: string | null;
   evidence: Record<string, unknown> | null;
   requestedSeq: number;
+  /** The same request made twice in a run is one effect: this key identifies the request (plan 19 idempotency). */
+  idempotencyKey: string | null;
 }
 
 export type RequestResult =
@@ -111,10 +114,15 @@ export class EffectBroker {
       this.#o.journal.tx((t) => t.event(this.#o.runId, "effect", id, null, "DENIED", { kind: r.kind, requested_by: r.requestedBy, task_id: r.taskId ?? null, policy_hash: h, rule: null, decision: "deny", reason: refusal, params: v.params, summary: "", digest: "" }));
       return { ok: true, id, state: "DENIED", decision: "deny", summary: "", rule: null };
     }
+    // A repeated request returns the effect it already made, unless that effect failed, was denied, went stale or expired:
+    // only those may be requested again. A retry must never run an effect twice.
+    const idem = digestOfJson({ kind: r.kind, params: v.params, task: r.taskId ?? null, by: r.requestedBy });
+    const same = this.records().find((x) => x.idempotencyKey === idem && (x.state === "PENDING" || x.state === "EXECUTING" || x.state === "DONE"));
+    if (same) return { ok: true, id: same.id, state: same.state, decision: same.decision, summary: same.summary, rule: same.rule };
     const id = `ef-${++this.#n}`;
     const h = this.#recordPolicy();
     const ev = evaluate(this.#o.policy(), r.kind, v.params);
-    const base = { kind: r.kind, requested_by: r.requestedBy, task_id: r.taskId ?? null, policy_hash: h, rule: ev.ruleId, decision: ev.decision, channels: ev.channels, ttl_seconds: ev.ttlSeconds, params: v.params };
+    const base = { kind: r.kind, requested_by: r.requestedBy, task_id: r.taskId ?? null, policy_hash: h, rule: ev.ruleId, decision: ev.decision, channels: ev.channels, ttl_seconds: ev.ttlSeconds, params: v.params, idempotency_key: idem };
 
     if (ev.decision === "deny") {
       this.#o.journal.tx((t) => t.event(this.#o.runId, "effect", id, null, "DENIED", { ...base, reason: ev.reason ?? "denied by policy", summary: "", digest: "" }));
@@ -132,7 +140,7 @@ export class EffectBroker {
     const digest = effectDigest(r.kind, prepared);
     const state: EffectState = ev.decision === "ask" ? "PENDING" : "EXECUTING";
     this.#o.journal.tx((t) => t.event(this.#o.runId, "effect", id, null, state, { ...base, summary: prepared.summary, digest, details: prepared.details, reason: null }));
-    if (ev.decision === "ask") requestApproval(this.#o.journal, this.#o.runId, key(id), digest, prepared.summary);
+    if (ev.decision === "ask") requestApproval(this.#o.journal, this.#o.runId, key(id), digest, prepared.summary, r.requestedBy);
     else void this.#execute(id).catch(() => {});
     return { ok: true, id, state, decision: ev.decision, summary: prepared.summary, rule: ev.ruleId };
   }
@@ -149,6 +157,7 @@ export class EffectBroker {
           summary: String(d["summary"] ?? ""), digest: String(d["digest"] ?? ""), requestedBy: String(d["requested_by"]), taskId: (d["task_id"] as string | null) ?? null,
           decision: d["decision"] as Decision, rule: (d["rule"] as string | null) ?? null, policyHash: String(d["policy_hash"]),
           channels: (d["channels"] as Channel[] | undefined) ?? [], reason: (d["reason"] as string | null) ?? null, evidence: null, requestedSeq: e.seq,
+          idempotencyKey: (d["idempotency_key"] as string | undefined) ?? null,
         });
       } else {
         cur.state = e.toState as EffectState;
